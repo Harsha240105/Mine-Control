@@ -1,12 +1,44 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } from 'electron';
 import path from 'path';
-import { spawn, ChildProcess } from 'child_process';
+import net from 'net';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
-let serverProcess: ChildProcess | null = null;
 
-function createWindow() {
+function waitForPort(port: number, timeout = 15000): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    function check() {
+      const client = new net.Socket();
+      client.once('connect', () => { client.destroy(); resolve(); });
+      client.once('error', () => {
+        client.destroy();
+        if (Date.now() - start > timeout) {
+          reject(new Error(`Server did not start within ${timeout}ms`));
+        } else {
+          setTimeout(check, 200);
+        }
+      });
+      client.connect(port, '127.0.0.1');
+    }
+    check();
+  });
+}
+
+async function createWindow() {
+  const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
+
+  if (!isDev) {
+    process.env.APP_DATA_PATH = app.getPath('userData');
+    try {
+      require(path.join(__dirname, '../server/index.js'));
+      await waitForPort(3001);
+    } catch (err: any) {
+      console.error('Failed to start server:', err);
+      dialog.showErrorBox('Server Error', 'Failed to start the backend server.\n' + (err?.message || err));
+    }
+  }
+
   mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -22,17 +54,11 @@ function createWindow() {
     },
   });
 
-  // In development, load from Vite dev server
-  // In production, load the built files
-  const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
-
   if (isDev) {
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
-    // Start the backend server
-    startBackendServer();
-    mainWindow.loadFile(path.join(__dirname, '../client/index.html'));
+    mainWindow.loadURL('http://localhost:3001');
   }
 
   mainWindow.once('ready-to-show', () => {
@@ -43,7 +69,6 @@ function createWindow() {
     mainWindow = null;
   });
 
-  // Set application menu
   const menuTemplate: Electron.MenuItemConstructorOptions[] = [
     {
       label: 'MineControl OS',
@@ -116,7 +141,6 @@ function createWindow() {
   const menu = Menu.buildFromTemplate(menuTemplate);
   Menu.setApplicationMenu(menu);
 
-  // Create system tray
   createTray();
 }
 
@@ -153,32 +177,9 @@ function createTray() {
   });
 }
 
-function startBackendServer() {
-  const serverPath = path.join(__dirname, '../server/index.js');
-  serverProcess = spawn('node', [serverPath], {
-    stdio: 'pipe',
-    env: { ...process.env, PORT: '3001' },
-  });
-
-  serverProcess.stdout?.on('data', (data) => {
-    console.log(`[Server] ${data}`);
-  });
-
-  serverProcess.stderr?.on('data', (data) => {
-    console.error(`[Server Error] ${data}`);
-  });
-
-  serverProcess.on('close', (code) => {
-    console.log(`Server process exited with code ${code}`);
-  });
-}
-
 app.whenReady().then(createWindow);
 
 app.on('window-all-closed', () => {
-  if (serverProcess) {
-    serverProcess.kill();
-  }
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -193,9 +194,7 @@ app.on('activate', () => {
 });
 
 app.on('before-quit', () => {
-  if (serverProcess) {
-    serverProcess.kill();
-  }
+  // Backend server runs in-process and will be cleaned up by app quit
 });
 
 // IPC handlers

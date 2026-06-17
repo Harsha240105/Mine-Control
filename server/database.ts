@@ -3,8 +3,9 @@ import path from 'path';
 import fs from 'fs';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
+import { resolvePath } from './paths';
 
-const DB_PATH = path.join(process.cwd(), 'data', 'minecontrol.db');
+const DB_PATH = resolvePath('data', 'minecontrol.db');
 
 let db: Database.Database;
 

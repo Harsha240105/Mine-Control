@@ -4,6 +4,7 @@ import path from 'path';
 import { minecraftServer } from '../services/minecraftServer';
 import { authMiddleware, requirePermission, AuthRequest } from '../middleware/auth';
 import { getDatabase } from '../database';
+import { resolvePath } from '../paths';
 
 const router = Router();
 
@@ -35,7 +36,7 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
   // Minecraft directory size
   let mcDirSize = 0;
   try {
-    const mcDir = path.join(process.cwd(), 'minecraft');
+    const mcDir = resolvePath('minecraft');
     if (fs.existsSync(mcDir)) {
       const getSize = (dir: string): number => {
         let total = 0;

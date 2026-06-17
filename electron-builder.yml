@@ -6,12 +6,11 @@ directories:
   buildResources: build
 files:
   - dist/**/*
-  - electron/**/*
-  - server/**/*.js
-  - minecraft/**/*
-  - data/**/*
   - package.json
   - node_modules/**/*
+asarUnpack:
+  - "node_modules/better-sqlite3/**"
+  - "**/*.node"
 extraResources:
   - from: public
     to: public

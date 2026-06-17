@@ -8,10 +8,11 @@ import morgan from 'morgan';
 import path from 'path';
 import fs from 'fs';
 import cron from 'node-cron';
-import { rateLimiter } from './middleware/auth';
+import { rateLimiter, verifyToken } from './middleware/auth';
 import { getDatabase } from './database';
 import { minecraftServer } from './services/minecraftServer';
 import { backupService } from './services/backup';
+import { BASE_PATH, resolvePath } from './paths';
 
 import authRoutes from './routes/auth';
 import serverRoutes from './routes/server';
@@ -60,7 +61,7 @@ app.use('/api/backups', backupRoutes);
 const possiblePaths = [
   path.join(__dirname, '../dist/client'),
   path.join(__dirname, '../client'),
-  path.join(process.cwd(), 'dist/client'),
+  resolvePath('dist/client'),
 ];
 let clientPath = '';
 for (const p of possiblePaths) {
@@ -86,7 +87,6 @@ io.on('connection', (socket) => {
 
   socket.on('authenticate', (token: string) => {
     try {
-      const { verifyToken } = require('./middleware/auth');
       const user = verifyToken(token);
       socket.data.user = user;
       socket.emit('authenticated', { success: true });

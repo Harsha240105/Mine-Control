@@ -3,9 +3,10 @@ import fs from 'fs';
 import path from 'path';
 import { getDatabase } from '../database';
 import { authMiddleware, requirePermission, AuthRequest } from '../middleware/auth';
+import { resolvePath } from '../paths';
 
 const router = Router();
-const PLUGINS_DIR = path.join(process.cwd(), 'minecraft', 'plugins');
+const PLUGINS_DIR = resolvePath('minecraft', 'plugins');
 
 router.get('/', authMiddleware, (_req: AuthRequest, res) => {
   if (!fs.existsSync(PLUGINS_DIR)) {
