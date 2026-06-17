@@ -1,6 +1,8 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import bcrypt from 'bcryptjs';
+import { v4 as uuidv4 } from 'uuid';
 
 const DB_PATH = path.join(process.cwd(), 'data', 'minecontrol.db');
 
@@ -168,9 +170,7 @@ function initializeSchema() {
   // Seed default owner if not exists
   const existingOwner = db.prepare("SELECT id FROM users WHERE role = 'Owner'").get();
   if (!existingOwner) {
-    const bcrypt = require('bcryptjs');
     const hash = bcrypt.hashSync('minecraft', 10);
-    const { v4: uuidv4 } = require('uuid');
     db.prepare(
       'INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)'
     ).run(uuidv4(), 'owner', hash, 'Owner');

@@ -42,6 +42,12 @@ app.use(express.json({ limit: '50mb' }));
 app.use(morgan('dev'));
 app.use(rateLimiter(60000, 200));
 
+// Global error handler
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[Error]', err.message || err);
+  res.status(500).json({ error: err.message || 'Internal server error' });
+});
+
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/server', serverRoutes);
