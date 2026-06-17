@@ -1,6 +1,6 @@
 {
   "name": "minecontrol-os",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Self-hosted Minecraft Server Management Platform",
   "main": "dist/electron/main.js",
   "scripts": {
