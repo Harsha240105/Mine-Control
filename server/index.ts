@@ -114,15 +114,25 @@ minecraftServer.on('player:leave', (username: string) => {
 });
 
 minecraftServer.on('player:chat', (username: string, message: string) => {
-  io.emit('player:chat', { username, message, timestamp: new Date().toISOString() });
+  io.emit('player:chat', username, message);
 });
 
 minecraftServer.on('server:started', () => {
+  io.emit('server:started');
   io.emit('server:status', { running: true, starting: false });
 });
 
 minecraftServer.on('server:stopped', (code: number | null) => {
+  io.emit('server:stopped', code);
   io.emit('server:status', { running: false, starting: false, code });
+});
+
+minecraftServer.on('server:error', (error: string) => {
+  io.emit('server:error', error);
+});
+
+minecraftServer.on('server:crashed', (error: string) => {
+  io.emit('server:crashed', error);
 });
 
 minecraftServer.on('stats:update', (stats) => {

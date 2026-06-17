@@ -21,6 +21,7 @@ import {
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
 import NotificationPanel from './NotificationPanel';
+import UpdateBanner from './UpdateBanner';
 import toast from 'react-hot-toast';
 
 const navItems = [
@@ -65,21 +66,23 @@ export default function Layout() {
 
   const handleServerAction = async (action: 'start' | 'stop' | 'restart') => {
     try {
-      setServerStarting(true);
+      if (action === 'start' || action === 'restart') {
+        setServerStarting(true);
+      }
       if (action === 'start') {
         await api.startServer();
         toast.success('Server starting...');
       } else if (action === 'stop') {
+        setServerRunning(false);
         await api.stopServer();
-        toast.success('Server stopping...');
+        toast.success('Server stopped');
       } else {
         await api.restartServer();
         toast.success('Server restarting...');
       }
     } catch (err: any) {
       toast.error(err.message);
-    } finally {
-      setTimeout(() => setServerStarting(false), 3000);
+      setServerStarting(false);
     }
   };
 
@@ -204,6 +207,7 @@ export default function Layout() {
         <header className="h-14 border-b border-surface-800 flex items-center justify-between px-6 bg-surface-900/50 backdrop-blur-sm">
           <h1 className="text-sm font-medium text-gray-200">MineControl OS</h1>
           <div className="flex items-center gap-3">
+            <UpdateBanner />
             <NotificationPanel />
             <span className="text-xs text-gray-500">
               v1.0.0

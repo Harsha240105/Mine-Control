@@ -25,6 +25,8 @@ class MinecraftServerManager extends EventEmitter {
   private statsInterval: NodeJS.Timeout | null = null;
   private logStream: fs.WriteStream | null = null;
   private startedAt: Date | null = null;
+  private restartAttempts = 0;
+  private readonly maxRestartAttempts = 3;
 
   constructor() {
     super();
@@ -39,6 +41,17 @@ class MinecraftServerManager extends EventEmitter {
       if (!fs.existsSync(p)) {
         fs.mkdirSync(p, { recursive: true });
       }
+    }
+  }
+
+  private cleanup() {
+    if (this.statsInterval) {
+      clearInterval(this.statsInterval);
+      this.statsInterval = null;
+    }
+    if (this.logStream) {
+      this.logStream.end();
+      this.logStream = null;
     }
   }
 
@@ -118,6 +131,25 @@ class MinecraftServerManager extends EventEmitter {
       const proc = spawn(config.javaPath, javaArgs, options);
       this.process = proc;
 
+      // Wait briefly to catch immediate spawn errors (e.g., Java not found)
+      const spawnErr = await new Promise<Error | null>((resolve) => {
+        const onError = (err: Error) => resolve(err);
+        proc.once('error', onError);
+        setTimeout(() => {
+          proc.removeListener('error', onError);
+          resolve(null);
+        }, 500);
+      });
+
+      if (spawnErr) {
+        this.cleanup();
+        this.emit('server:error', spawnErr.message);
+        this.emit('server:output', `[MineControl] Spawn failed: ${spawnErr.message}\n`);
+        throw new Error(`Failed to start Java: ${spawnErr.message}. Check that Java is installed and JAVA_HOME is set.`);
+      }
+
+      this.restartAttempts = 0;
+
       proc.stdout?.on('data', (data: Buffer) => {
         const output = data.toString();
         this.handleOutput(output);
@@ -132,28 +164,22 @@ class MinecraftServerManager extends EventEmitter {
         this.running = false;
         this.starting = false;
         this.startedAt = null;
-        if (this.statsInterval) {
-          clearInterval(this.statsInterval);
-          this.statsInterval = null;
-        }
-        if (this.logStream) {
-          this.logStream.end();
-          this.logStream = null;
-        }
+        this.cleanup();
         this.emit('server:stopped', code);
         this.emit('server:output', `\n[MineControl] Server stopped with code ${code}\n`);
 
-        if (code !== 0 && this.getConfig().autoRestart) {
-          this.emit('server:output', '[MineControl] Auto-restarting in 5 seconds...\n');
+        if (code !== 0 && this.getConfig().autoRestart && this.restartAttempts < this.maxRestartAttempts) {
+          this.restartAttempts++;
+          this.emit('server:output', `[MineControl] Auto-restarting in 5 seconds (attempt ${this.restartAttempts}/${this.maxRestartAttempts})...\n`);
           setTimeout(() => this.start().catch(() => {}), 5000);
+        } else if (code !== 0 && this.restartAttempts >= this.maxRestartAttempts) {
+          this.emit('server:output', `[MineControl] Max restart attempts reached. Giving up.\n`);
         }
       });
 
       proc.on('error', (err) => {
-        this.running = false;
-        this.starting = false;
         this.emit('server:error', err.message);
-        this.emit('server:output', `[MineControl] Error: ${err.message}\n`);
+        this.emit('server:output', `[MineControl] Runtime error: ${err.message}\n`);
       });
 
       // Start monitoring

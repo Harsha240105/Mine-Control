@@ -45,4 +45,7 @@ linux:
         - x64
   category: Game
   artifactName: ${productName}-${version}-${arch}.${ext}
-publish: null
+publish:
+  provider: github
+  owner: Harsha240105
+  repo: Mine-Control

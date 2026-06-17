@@ -1,6 +1,7 @@
 import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } from 'electron';
 import path from 'path';
 import net from 'net';
+import { autoUpdater } from 'electron-updater';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -23,6 +24,36 @@ function waitForPort(port: number, timeout = 15000): Promise<void> {
     }
     check();
   });
+}
+
+function setupAutoUpdater() {
+  autoUpdater.autoDownload = false;
+
+  autoUpdater.on('checking-for-update', () => {
+    mainWindow?.webContents.send('update:checking');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    mainWindow?.webContents.send('update:available', info.version);
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    mainWindow?.webContents.send('update:not-available');
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    mainWindow?.webContents.send('update:progress', progress.percent);
+  });
+
+  autoUpdater.on('update-downloaded', () => {
+    mainWindow?.webContents.send('update:downloaded');
+  });
+
+  autoUpdater.on('error', (err) => {
+    mainWindow?.webContents.send('update:error', err.message);
+  });
+
+  autoUpdater.checkForUpdates().catch(() => {});
 }
 
 async function createWindow() {
@@ -64,6 +95,9 @@ async function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
+    if (!isDev) {
+      setupAutoUpdater();
+    }
   });
 
   mainWindow.on('closed', () => {
@@ -220,4 +254,17 @@ ipcMain.handle('select-file', async (_event, filters?: { name: string; extension
     filters,
   });
   return result.canceled ? null : result.filePaths[0];
+});
+
+// Auto-update IPC handlers
+ipcMain.handle('check-for-updates', () => {
+  autoUpdater.checkForUpdates().catch(() => {});
+});
+
+ipcMain.handle('download-update', () => {
+  autoUpdater.downloadUpdate().catch(() => {});
+});
+
+ipcMain.handle('install-update', () => {
+  autoUpdater.quitAndInstall();
 });
