@@ -1,6 +1,7 @@
 import { ChildProcess, spawn, execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
+import net from 'net';
 import { EventEmitter } from 'events';
 import { getDatabase } from '../database';
 import { resolveMinecraftDir } from '../paths';
@@ -58,6 +59,30 @@ class MinecraftServerManager extends EventEmitter {
     }
   }
 
+  private async checkPort(port: number): Promise<{ available: boolean; pid?: number }> {
+    return new Promise((resolve) => {
+      const server = net.createServer();
+      server.once('error', (err: any) => {
+        if (err.code === 'EADDRINUSE') {
+          try {
+            const out = execSync(`netstat -ano | findstr :${port}`, { encoding: 'utf-8', timeout: 5000 });
+            for (const line of out.split('\n')) {
+              if (!line.includes('LISTENING')) continue;
+              const parts = line.trim().split(/\s+/);
+              const pid = parseInt(parts[parts.length - 1]);
+              if (!isNaN(pid)) { resolve({ available: false, pid }); return; }
+            }
+          } catch {}
+          resolve({ available: false });
+        } else {
+          resolve({ available: true });
+        }
+      });
+      server.once('listening', () => { server.close(); resolve({ available: true }); });
+      server.listen(port, '0.0.0.0');
+    });
+  }
+
   get isRunning(): boolean {
     return this.running;
   }
@@ -107,6 +132,41 @@ class MinecraftServerManager extends EventEmitter {
       } catch {
         this.starting = false;
         throw new Error(`Java not found at "${config.javaPath}". Please install Java 21+ and set JAVA_HOME, or configure a custom Java path in Settings.`);
+      }
+
+      // Check if server port is available
+      const portCheck = await this.checkPort(config.port);
+      if (!portCheck.available) {
+        let processName = 'unknown';
+        if (portCheck.pid) {
+          try {
+            const taskOut = execSync(`tasklist /FI "PID eq ${portCheck.pid}" /FO CSV /NH`, { encoding: 'utf-8', timeout: 5000 });
+            const match = taskOut.match(/"([^"]+)"/);
+            processName = match ? match[1] : `PID ${portCheck.pid}`;
+          } catch {}
+        }
+        const isJava = processName.toLowerCase().includes('java');
+        if (isJava && portCheck.pid) {
+          // Auto-kill orphaned Java process holding the port
+          try {
+            execSync(`taskkill /PID ${portCheck.pid} /F`, { timeout: 5000 });
+            this.emit('server:output', `[MineControl] Killed orphaned Java process (PID: ${portCheck.pid}) that was holding port ${config.port}\n`);
+            // Wait for OS to release the port
+            await new Promise(r => setTimeout(r, 1000));
+            const recheck = await this.checkPort(config.port);
+            if (!recheck.available) {
+              this.starting = false;
+              throw new Error(`Port ${config.port} is still in use after killing Java process (PID: ${portCheck.pid}). Another application is using it.`);
+            }
+          } catch (e: any) {
+            if (e.message?.startsWith('Port')) throw e;
+            this.starting = false;
+            throw new Error(`Port ${config.port} is in use by ${processName} (PID: ${portCheck.pid}). Failed to auto-kill. Please close it manually.`);
+          }
+        } else {
+          this.starting = false;
+          throw new Error(`Port ${config.port} is in use by ${processName}${portCheck.pid ? ` (PID: ${portCheck.pid})` : ''}. Please stop that process or change the server port in Settings.`);
+        }
       }
 
       const logFileName = `server-${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
