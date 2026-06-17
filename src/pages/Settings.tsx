@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Settings as SettingsIcon, Save, Key, Shield, Server, RefreshCw,
-  Eye, EyeOff
+  Eye, EyeOff, Globe, Users, Wifi
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
@@ -10,26 +10,36 @@ import toast from 'react-hot-toast';
 export default function Settings() {
   const { user, isOwner } = useAuth();
   const [config, setConfig] = useState<any>({});
+  const [props, setProps] = useState<any>({});
   const [loading, setLoading] = useState(true);
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   useEffect(() => {
-    fetchConfig();
+    Promise.all([fetchConfig(), fetchProps()]).finally(() => setLoading(false));
   }, []);
 
   const fetchConfig = async () => {
-    try {
-      const data = await api.getServerConfig();
-      setConfig(data);
-    } catch {}
-    finally { setLoading(false); }
+    try { setConfig(await api.getServerConfig()); } catch {}
+  };
+
+  const fetchProps = async () => {
+    try { setProps(await api.getServerProperties()); } catch {}
   };
 
   const handleSave = async () => {
     try {
       await api.updateServerConfig(config);
-      toast.success('Configuration saved. Restart server for some changes to take effect.');
+      await api.updateServerProperties({
+        'online-mode': props['online-mode'],
+        'level-seed': props['level-seed'],
+        motd: props.motd || config.motd,
+        'max-players': props['max-players'] || config.maxPlayers,
+        difficulty: props.difficulty || config.difficulty,
+        'view-distance': props['view-distance'] || config.viewDistance,
+        pvp: props.pvp !== 'false' ? 'true' : 'false',
+      });
+      toast.success('Saved. Restart server for changes to take effect.');
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -61,6 +71,42 @@ export default function Settings() {
         <p className="text-sm text-gray-500 mt-0.5">Configure your Minecraft server</p>
       </div>
 
+      {/* Connection Mode */}
+      <div className="card border border-minecraft-500/20">
+        <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
+          <Wifi size={16} className="text-minecraft-500" />
+          Connection Mode
+        </h3>
+        <p className="text-xs text-gray-500 mb-4">
+          <strong className="text-yellow-400">Cracked (offline)</strong> — TLauncher &amp; any client can join without a Mojang account.
+          {' '}<strong className="text-green-400">Premium (online)</strong> — Only official Minecraft accounts can join.
+        </p>
+        <div className="flex gap-4">
+          <button
+            onClick={() => setProps({ ...props, 'online-mode': 'false' })}
+            className={`flex-1 py-3 px-4 rounded-lg text-sm font-medium transition-all ${
+              props['online-mode'] === 'false'
+                ? 'bg-yellow-500/20 border border-yellow-500/50 text-yellow-400'
+                : 'bg-surface-800 border border-surface-600 text-gray-400 hover:border-gray-500'
+            }`}
+          >
+            <span className="block text-lg mb-1">🟡</span>
+            Cracked (TLauncher)
+          </button>
+          <button
+            onClick={() => setProps({ ...props, 'online-mode': 'true' })}
+            className={`flex-1 py-3 px-4 rounded-lg text-sm font-medium transition-all ${
+              props['online-mode'] === 'true'
+                ? 'bg-green-500/20 border border-green-500/50 text-green-400'
+                : 'bg-surface-800 border border-surface-600 text-gray-400 hover:border-gray-500'
+            }`}
+          >
+            <span className="block text-lg mb-1">🟢</span>
+            Premium (Official)
+          </button>
+        </div>
+      </div>
+
       {/* Server Configuration */}
       <div className="card">
         <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
@@ -73,19 +119,31 @@ export default function Settings() {
             <label className="block text-xs font-medium text-gray-400 mb-1">Server Name (MOTD)</label>
             <input
               type="text"
-              value={config.motd || ''}
-              onChange={(e) => setConfig({ ...config, motd: e.target.value })}
+              value={props.motd || config.motd || ''}
+              onChange={(e) => setProps({ ...props, motd: e.target.value })}
               className="input"
             />
             <p className="text-xs text-gray-500 mt-1">Use § for color codes</p>
           </div>
 
           <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">World Seed</label>
+            <input
+              type="text"
+              value={props['level-seed'] || ''}
+              onChange={(e) => setProps({ ...props, 'level-seed': e.target.value })}
+              className="input"
+              placeholder="Leave empty for random"
+            />
+            <p className="text-xs text-gray-500 mt-1">Only applies to new worlds</p>
+          </div>
+
+          <div>
             <label className="block text-xs font-medium text-gray-400 mb-1">Max Players</label>
             <input
               type="number"
-              value={config.maxPlayers || 4}
-              onChange={(e) => setConfig({ ...config, maxPlayers: parseInt(e.target.value) || 4 })}
+              value={props['max-players'] || config.maxPlayers || 4}
+              onChange={(e) => setProps({ ...props, 'max-players': e.target.value })}
               className="input"
               min={1}
               max={20}
@@ -95,8 +153,8 @@ export default function Settings() {
           <div>
             <label className="block text-xs font-medium text-gray-400 mb-1">Difficulty</label>
             <select
-              value={config.difficulty || 'normal'}
-              onChange={(e) => setConfig({ ...config, difficulty: e.target.value })}
+              value={props.difficulty || config.difficulty || 'normal'}
+              onChange={(e) => setProps({ ...props, difficulty: e.target.value })}
               className="select"
             >
               <option value="peaceful">Peaceful</option>
@@ -136,8 +194,8 @@ export default function Settings() {
             <label className="block text-xs font-medium text-gray-400 mb-1">View Distance</label>
             <input
               type="number"
-              value={config.viewDistance || 10}
-              onChange={(e) => setConfig({ ...config, viewDistance: parseInt(e.target.value) || 10 })}
+              value={props['view-distance'] || config.viewDistance || 10}
+              onChange={(e) => setProps({ ...props, 'view-distance': e.target.value })}
               className="input"
               min={3}
               max={32}
@@ -172,8 +230,8 @@ export default function Settings() {
           <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
-              checked={config.pvp !== false}
-              onChange={(e) => setConfig({ ...config, pvp: e.target.checked })}
+              checked={props.pvp !== 'false'}
+              onChange={(e) => setProps({ ...props, pvp: e.target.checked ? 'true' : 'false' })}
               className="rounded bg-surface-800 border-surface-600 text-minecraft-500 focus:ring-minecraft-500"
             />
             <div>
@@ -225,14 +283,10 @@ export default function Settings() {
         <div className="mt-6 flex justify-end">
           <button onClick={handleSave} className="btn-primary flex items-center gap-2">
             <Save size={16} />
-            Save Configuration
+            Save & Restart Server
           </button>
         </div>
       </div>
-
-
-
-      {/* Security */}
       <div className="card">
         <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
           <Shield size={16} className="text-minecraft-500" />
@@ -279,7 +333,7 @@ export default function Settings() {
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <span className="text-gray-500">Version:</span>
-            <span className="ml-2 text-gray-300">MineControl OS v1.0.0</span>
+            <span className="ml-2 text-gray-300">MineControl OS v1.0.8</span>
           </div>
           <div>
             <span className="text-gray-500">User:</span>

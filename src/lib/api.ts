@@ -74,6 +74,12 @@ export const api = {
     request<any[]>(`/server/stats/history?minutes=${minutes}`),
   getAuditLog: (limit = 50) =>
     request<any[]>(`/server/audit-log?limit=${limit}`),
+  getServerProperties: () => request<any>('/server/properties'),
+  updateServerProperties: (props: any) =>
+    request<any>('/server/properties', {
+      method: 'PUT',
+      body: JSON.stringify(props),
+    }),
 
   // Players
   getPlayers: () => request<any[]>('/players'),

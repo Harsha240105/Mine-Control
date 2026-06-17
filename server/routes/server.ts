@@ -171,4 +171,42 @@ router.get('/audit-log', authMiddleware, requirePermission('server.start'), (req
   res.json(logs);
 });
 
+router.get('/properties', authMiddleware, (_req: AuthRequest, res) => {
+  const mcDir = resolveMinecraftDir();
+  const propsPath = path.join(mcDir, 'server.properties');
+  if (!fs.existsSync(propsPath)) {
+    return res.json({});
+  }
+  const content = fs.readFileSync(propsPath, 'utf-8');
+  const props: Record<string, string> = {};
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    props[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
+  }
+  res.json(props);
+});
+
+router.put('/properties', authMiddleware, requirePermission('server.start'), (req: AuthRequest, res) => {
+  const updates: Record<string, string> = req.body;
+  const mcDir = resolveMinecraftDir();
+  const propsPath = path.join(mcDir, 'server.properties');
+  if (!fs.existsSync(propsPath)) {
+    return res.status(400).json({ error: 'server.properties not found. Start the server first to generate it.' });
+  }
+  let content = fs.readFileSync(propsPath, 'utf-8');
+  for (const [key, value] of Object.entries(updates)) {
+    const regex = new RegExp(`^${key}=.*`, 'm');
+    if (regex.test(content)) {
+      content = content.replace(regex, `${key}=${value}`);
+    } else {
+      content += `\n${key}=${value}`;
+    }
+  }
+  fs.writeFileSync(propsPath, content, 'utf-8');
+  res.json({ success: true, message: 'Server properties updated. Restart server to apply changes.' });
+});
+
 export default router;

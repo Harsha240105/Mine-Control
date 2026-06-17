@@ -56,12 +56,14 @@ export default function Dashboard() {
   const [status, setStatus] = useState<StatusData | null>(null);
   const [statsHistory, setStatsHistory] = useState<StatPoint[]>([]);
   const [startError, setStartError] = useState<string | null>(null);
+  const [publicIp, setPublicIp] = useState<string>('');
   const { socket } = useSocket();
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     fetchStatus();
     fetchStats();
+    fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => setPublicIp(d.ip)).catch(() => {});
     const interval = setInterval(fetchStatus, 5000);
     const timeInterval = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => {
@@ -201,6 +203,39 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Connection Info */}
+      <div className="card border border-minecraft-500/20 bg-minecraft-500/5">
+        <div className="flex items-start gap-3">
+          <Network size={18} className="text-minecraft-500 mt-0.5 flex-shrink-0" />
+          <div className="flex-1">
+            <h3 className="text-sm font-semibold text-gray-200 mb-2">Connect to Server</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+              <div className="bg-surface-800 rounded p-2.5">
+                <span className="text-gray-500 block mb-0.5">Local Address</span>
+                <span className="text-gray-100 font-mono font-medium">localhost:25565</span>
+              </div>
+              <div className="bg-surface-800 rounded p-2.5">
+                <span className="text-gray-500 block mb-0.5">Public IP</span>
+                <span className="text-gray-100 font-mono font-medium">{publicIp || 'Fetching...'}:25565</span>
+              </div>
+              <div className="bg-surface-800 rounded p-2.5">
+                <span className="text-gray-500 block mb-0.5">Port</span>
+                <span className="text-gray-100 font-mono font-medium">25565</span>
+              </div>
+              <div className="bg-surface-800 rounded p-2.5">
+                <span className="text-gray-500 block mb-0.5">Mode</span>
+                <span className="text-yellow-400 font-mono font-medium">Cracked (offline)</span>
+              </div>
+            </div>
+            <p className="text-[11px] text-gray-500 mt-2">
+              <strong className="text-gray-400">Local:</strong> Use <code className="text-minecraft-400">localhost</code> on this PC &nbsp;·&nbsp;
+              <strong className="text-gray-400">Friends:</strong> Use the Public IP above (requires port forwarding on router) &nbsp;·&nbsp;
+              Minecraft version: <strong className="text-gray-300">1.21.1</strong>
+            </p>
+          </div>
+        </div>
+      </div>
 
       {/* Status Bar */}
       <div className="card flex items-center gap-4 py-3 px-5">
