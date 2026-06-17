@@ -1,4 +1,4 @@
-import { ChildProcess, spawn } from 'child_process';
+import { ChildProcess, spawn, execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { EventEmitter } from 'events';
@@ -95,6 +95,13 @@ class MinecraftServerManager extends EventEmitter {
         this.emit('server:output', '[MineControl] EULA accepted automatically.\n');
       }
 
+      try {
+        execSync(`"${config.javaPath}" -version 2>&1`, { stdio: 'pipe', timeout: 10000 });
+      } catch {
+        this.starting = false;
+        throw new Error(`Java not found at "${config.javaPath}". Please install Java 21+ and set JAVA_HOME, or configure a custom Java path in Settings.`);
+      }
+
       const logFileName = `server-${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
       const logPath = path.join(this.serverDir, 'logs', logFileName);
       this.logStream = fs.createWriteStream(logPath, { flags: 'a' });
@@ -178,6 +185,9 @@ class MinecraftServerManager extends EventEmitter {
       });
 
       proc.on('error', (err) => {
+        this.running = false;
+        this.starting = false;
+        this.cleanup();
         this.emit('server:error', err.message);
         this.emit('server:output', `[MineControl] Runtime error: ${err.message}\n`);
       });

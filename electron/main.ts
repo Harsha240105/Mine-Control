@@ -53,7 +53,9 @@ function setupAutoUpdater() {
     mainWindow?.webContents.send('update:error', err.message);
   });
 
-  autoUpdater.checkForUpdates().catch(() => {});
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch(() => {});
+  }, 5000);
 }
 
 async function createWindow() {
@@ -161,6 +163,16 @@ async function createWindow() {
     {
       label: 'Help',
       submenu: [
+        {
+          label: 'Check for Updates',
+          accelerator: 'CmdOrCtrl+U',
+          click: () => {
+            if (!isDev) {
+              autoUpdater.checkForUpdates().catch(() => {});
+            }
+          },
+        },
+        { type: 'separator' },
         {
           label: 'Documentation',
           click: () => require('electron').shell.openExternal('https://github.com/minecontrol-os/docs'),

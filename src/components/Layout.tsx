@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import {
@@ -40,14 +40,17 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [serverRunning, setServerRunning] = useState(false);
   const [serverStarting, setServerStarting] = useState(false);
-  const { socket } = useSocket();
+  const { socket, connected } = useSocket();
+  const lastSocketUpdate = useRef(0);
 
   useEffect(() => {
     const fetchStatus = async () => {
       try {
         const s = await api.getServerStatus();
-        setServerRunning(s.running);
-        setServerStarting(s.starting);
+        if (Date.now() - lastSocketUpdate.current > 3000) {
+          setServerRunning(s.running);
+          setServerStarting(s.starting);
+        }
       } catch {}
     };
     fetchStatus();
@@ -58,6 +61,7 @@ export default function Layout() {
   useEffect(() => {
     if (!socket) return;
     socket.on('server:status', (data: any) => {
+      lastSocketUpdate.current = Date.now();
       setServerRunning(data.running);
       setServerStarting(data.starting || false);
     });
@@ -66,10 +70,8 @@ export default function Layout() {
 
   const handleServerAction = async (action: 'start' | 'stop' | 'restart') => {
     try {
-      if (action === 'start' || action === 'restart') {
-        setServerStarting(true);
-      }
       if (action === 'start') {
+        setServerStarting(true);
         await api.startServer();
         toast.success('Server starting...');
       } else if (action === 'stop') {
@@ -82,7 +84,9 @@ export default function Layout() {
       }
     } catch (err: any) {
       toast.error(err.message);
-      setServerStarting(false);
+      if (action === 'start') {
+        setServerStarting(false);
+      }
     }
   };
 
@@ -210,7 +214,7 @@ export default function Layout() {
             <UpdateBanner />
             <NotificationPanel />
             <span className="text-xs text-gray-500">
-              v1.0.0
+              v1.0.4
             </span>
           </div>
         </header>

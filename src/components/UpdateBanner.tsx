@@ -10,7 +10,7 @@ export default function UpdateBanner() {
   const [errorMessage, setErrorMessage] = useState('');
   const [dismissed, setDismissed] = useState(false);
 
-  const api = (window as any).electronAPI;
+  const api = window.electronAPI;
 
   useEffect(() => {
     if (!api) return;
