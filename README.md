@@ -15,6 +15,7 @@
 - **Real-Time Monitoring** — CPU, RAM (MC + system), TPS, disk usage, player count
 - **Notification System** — Alerts for player joins/leaves, server events, crashes
 - **Resource Dashboard** — Charts for system resources and performance over 30 minutes
+- **3D Model Viewer** — Preview the Steve avatar with walking animation (Three.js)
 - **Electron Desktop App** — Installable native app for Windows, macOS, and Linux
 
 ## Quick Start
@@ -60,31 +61,49 @@ npm run dev
 
 ## How Players Connect
 
-### Friends with official Minecraft launcher (premium)
+### Start the server from the Dashboard
 
-1. Make sure your computer is **on the same network** as your friends, or **port-forward** port `25565` on your router
-2. Your friends open Minecraft Java Edition → **Multiplayer** → **Add Server**
-3. Enter your **local IP** (e.g., `192.168.1.100`) or **public IP** if port-forwarding
-4. They join — the server automatically whitelists them (or you pre-add them in the Players page)
+1. Open the web UI → **Dashboard**
+2. Click the **green power button** in the sidebar to start the Minecraft server
+3. Wait for the console to show `Done! For help, type "help"` — the server is ready
+
+### Friends on the same network (LAN)
+
+1. Both computers on the same WiFi or Ethernet
+2. Friend opens Minecraft → **Multiplayer** → **Add Server**
+3. Enter your **local IP** (e.g., `192.168.1.100`) (find it with `ipconfig` on Windows)
+4. Port is `25565` (default) — set in your router if changed
+
+### Friends with official Minecraft launcher (premium) — over internet
+
+1. **Port-forward** port `25565` on your router (TCP protocol)
+2. Find your **local IP** via `ipconfig` → `IPv4 Address`
+3. Log into your router admin panel (usually `http://192.168.1.1`)
+4. Port Forwarding → Add rule: External `25565` → Internal IP (your local IP) → Internal `25565` → TCP
+5. Give friends your **public IP** (search "what is my IP" on Google)
+6. They add a server in Minecraft with that IP
 
 ### Friends with TLauncher / cracked launcher
 
-1. In Settings → set **Online Mode** to `false` (this disables Mojang authentication)
-2. Restart the Minecraft server
-3. Friends connect using your IP as above
-4. **Warning:** This is less secure — anyone can join with any username
+1. In Settings → set **Online Mode** to `false`
+2. **Restart** the Minecraft server
+3. Friends connect using your local or public IP the same way
+4. **Warning:** Less secure — anyone can join with any username. Use whitelist in Settings.
 
-### Port Forwarding (for friends outside your network)
+### Stopping the server
 
-1. Find your **local IP**: run `ipconfig` (Windows) and look for `IPv4 Address`
-2. Log into your **router admin panel** (usually http://192.168.1.1)
-3. Find **Port Forwarding** section
-4. Add rule: External port `25565` → Internal IP (your local IP) → Internal port `25565` → TCP
-5. Give friends your **public IP** (search "what is my IP" on Google)
+- Click the **red power-off button** in the sidebar
+- The server sends `save-all`, then `stop`, and frees all RAM/CPU
+- The close handler properly cleans up: clears stats monitoring, closes log streams, nullifies the process
+- Force-kill fallback applies if the server doesn't stop within 15 seconds
 
 ## Desktop App (Installable)
 
-Build the native installer for your OS:
+### Download
+
+[Download Windows Installer (v1.0.0)](https://github.com/Harsha240105/Mine-Control/releases/download/v1.0.0/MineControl.OS-Setup-1.0.0-x64.exe)
+
+Or build from source:
 
 ### Windows
 

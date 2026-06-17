@@ -11,6 +11,7 @@ import Worlds from './pages/Worlds';
 import Plugins from './pages/Plugins';
 import Settings from './pages/Settings';
 import Backups from './pages/Backups';
+import Models from './pages/Models';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -61,6 +62,7 @@ export default function App() {
             <Route path="worlds" element={<Worlds />} />
             <Route path="plugins" element={<Plugins />} />
             <Route path="backups" element={<Backups />} />
+            <Route path="models" element={<Models />} />
             <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>

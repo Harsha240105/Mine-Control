@@ -2,7 +2,7 @@
   "name": "minecontrol-os",
   "version": "1.0.0",
   "description": "Self-hosted Minecraft Server Management Platform",
-  "main": "electron/main.js",
+  "main": "dist/electron/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:server": "tsx watch server/index.ts",
@@ -22,6 +22,9 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@react-three/drei": "^9.122.0",
+    "@react-three/fiber": "^8.18.0",
+    "@types/three": "^0.184.1",
     "archiver": "^6.0.1",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.0.0",
@@ -37,6 +40,7 @@
     "pidusage": "^3.0.2",
     "socket.io": "^4.7.2",
     "systeminformation": "^5.21.0",
+    "three": "^0.184.0",
     "unzipper": "^0.10.14",
     "uuid": "^9.0.0"
   },
@@ -53,6 +57,7 @@
     "@types/node-cron": "^3.0.11",
     "@types/react": "^18.2.41",
     "@types/react-dom": "^18.2.17",
+    "@types/unzipper": "^0.10.11",
     "@types/uuid": "^9.0.7",
     "@types/ws": "^8.5.10",
     "@vitejs/plugin-react": "^4.2.1",

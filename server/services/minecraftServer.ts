@@ -108,25 +108,26 @@ class MinecraftServerManager extends EventEmitter {
 
       const env = { ...process.env };
       // Set working directory
-      const options = {
+      const options: { cwd: string; env: NodeJS.ProcessEnv; stdio: ['pipe', 'pipe', 'pipe'] } = {
         cwd: this.serverDir,
         env,
-        stdio: ['pipe', 'pipe', 'pipe'] as const,
+        stdio: ['pipe', 'pipe', 'pipe'],
       };
 
-      this.process = spawn(config.javaPath, javaArgs, options);
+      const proc = spawn(config.javaPath, javaArgs, options);
+      this.process = proc;
 
-      this.process.stdout?.on('data', (data: Buffer) => {
+      proc.stdout?.on('data', (data: Buffer) => {
         const output = data.toString();
         this.handleOutput(output);
       });
 
-      this.process.stderr?.on('data', (data: Buffer) => {
+      proc.stderr?.on('data', (data: Buffer) => {
         const output = data.toString();
         this.handleOutput(`[STDERR] ${output}`);
       });
 
-      this.process.on('close', (code) => {
+      proc.on('close', (code) => {
         this.running = false;
         this.starting = false;
         this.startedAt = null;
@@ -147,7 +148,7 @@ class MinecraftServerManager extends EventEmitter {
         }
       });
 
-      this.process.on('error', (err) => {
+      proc.on('error', (err) => {
         this.running = false;
         this.starting = false;
         this.emit('server:error', err.message);
@@ -251,25 +252,45 @@ class MinecraftServerManager extends EventEmitter {
 
     this.emit('server:output', '[MineControl] Stopping server...\n');
 
-    return new Promise((resolve) => {
-      if (!this.process) {
-        this.running = false;
-        this.starting = false;
-        resolve();
-        return;
-      }
+    // Stop stats monitoring immediately
+    if (this.statsInterval) {
+      clearInterval(this.statsInterval);
+      this.statsInterval = null;
+    }
 
-      this.process.stdin?.write('say §cServer is shutting down...\n');
+    const proc = this.process;
+    if (!proc) {
+      this.running = false;
+      this.starting = false;
+      return;
+    }
+
+    return new Promise((resolve) => {
+      // Resolve as soon as the process actually exits
+      const onClose = () => {
+        proc.removeListener('close', onClose);
+        proc.removeListener('error', onClose);
+        resolve();
+      };
+      proc.on('close', onClose);
+      proc.on('error', onClose);
+
+      // Send graceful stop commands
+      proc.stdin?.write('say §cServer is shutting down...\n');
 
       setTimeout(() => {
-        this.process?.stdin?.write('save-all\n');
+        proc.stdin?.write('save-all\n');
         setTimeout(() => {
-          this.process?.stdin?.write('stop\n');
-          // Force kill after 15 seconds
+          proc.stdin?.write('stop\n');
+          // Force kill after 15 seconds if process didn't exit
           setTimeout(() => {
-            if (this.process) {
-              this.process.kill('SIGKILL');
-              this.emit('server:output', '[MineControl] Force killed server process.\n');
+            try {
+              if (this.process) {
+                this.process.kill();
+                this.emit('server:output', '[MineControl] Force killed server process.\n');
+              }
+            } catch {
+              // Process already exited
             }
             resolve();
           }, 15000);

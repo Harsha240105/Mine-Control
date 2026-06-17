@@ -19,6 +19,9 @@ minecraft/usercache.json
 minecraft/version_history.json
 minecraft/plugins/bStats/
 minecraft/plugins/spark/tmp-client/
+shared/*.js
+shared/*.d.ts
+shared/*.js.map
 .env
 *.log
 .DS_Store

@@ -16,6 +16,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Box,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
@@ -29,6 +30,7 @@ const navItems = [
   { path: '/worlds', label: 'Worlds', icon: Globe },
   { path: '/plugins', label: 'Plugins', icon: Puzzle },
   { path: '/backups', label: 'Backups', icon: HardDrive },
+  { path: '/models', label: '3D Models', icon: Box },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
