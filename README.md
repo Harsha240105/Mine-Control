@@ -101,7 +101,7 @@ npm run dev
 
 ### Download
 
-[Download Windows Installer (v1.0.0)](https://github.com/Harsha240105/Mine-Control/releases/download/v1.0.0/MineControl.OS-Setup-1.0.0-x64.exe)
+[Download Windows Installer (v1.0.0)](https://github.com/Harsha240105/Mine-Control/releases/latest)
 
 Or build from source:
 
