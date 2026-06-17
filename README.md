@@ -4,6 +4,8 @@
 
 ![MineControl OS](public/logo.svg)
 
+![Steve Walk Animation](public/steve-walk-hq.gif)
+
 ## Features
 
 - **Full Server Control** — Start, stop, restart your PaperMC server from the dashboard or system tray
@@ -101,7 +103,8 @@ npm run dev
 
 ### Download
 
-[Download Windows Installer (v1.0.0)](https://github.com/Harsha240105/Mine-Control/releases/latest)
+[Download latest Windows installer](https://github.com/Harsha240105/Mine-Control/releases/latest)
+*(Click "Releases" on GitHub, then download the `.exe` from the latest release)*
 
 Or build from source:
 
