@@ -176,7 +176,7 @@ function initializeSchema() {
   // Seed default owner if not exists
   const existingOwner = db.prepare("SELECT id FROM users WHERE role = 'Owner'").get();
   if (!existingOwner) {
-    const hash = bcrypt.hashSync('minecraft', 10);
+    const hash = bcrypt.hashSync('OXK@6126', 10);
     db.prepare(
       'INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)'
     ).run(uuidv4(), 'owner', hash, 'Owner');

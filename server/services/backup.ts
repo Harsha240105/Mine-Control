@@ -4,10 +4,10 @@ import archiver from 'archiver';
 import { createDecipheriv, createCipheriv, randomBytes, pbkdf2Sync } from 'crypto';
 import { getDatabase } from '../database';
 import { v4 as uuidv4 } from 'uuid';
-import { resolvePath } from '../paths';
+import { resolveMinecraftDir } from '../paths';
 
-const BACKUP_DIR = resolvePath('minecraft', 'backups');
-const WORLDS_DIR = resolvePath('minecraft', 'worlds');
+const BACKUP_DIR = resolveMinecraftDir('backups');
+const WORLDS_DIR = resolveMinecraftDir('worlds');
 const ENCRYPTION_KEY = process.env.BACKUP_KEY || 'minecontrol-os-secure-key-2024';
 
 export class BackupService {
@@ -66,9 +66,9 @@ export class BackupService {
       }
 
       // Add server properties
-      const serverProps = resolvePath('minecraft', 'server.properties');
-      const opsJson = resolvePath('minecraft', 'ops.json');
-      const whitelistJson = resolvePath('minecraft', 'whitelist.json');
+      const serverProps = resolveMinecraftDir('server.properties');
+      const opsJson = resolveMinecraftDir('ops.json');
+      const whitelistJson = resolveMinecraftDir('whitelist.json');
 
       if (fs.existsSync(serverProps)) {
         archive.file(serverProps, { name: 'server.properties' });
@@ -135,7 +135,7 @@ export class BackupService {
     const configFiles = ['server.properties', 'ops.json', 'whitelist.json'];
     for (const file of configFiles) {
       const src = path.join(tempDir, file);
-      const dest = resolvePath('minecraft', file);
+      const dest = resolveMinecraftDir(file);
       if (fs.existsSync(src)) {
         fs.copyFileSync(src, dest);
       }

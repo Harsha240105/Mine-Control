@@ -30,6 +30,7 @@ async function createWindow() {
 
   if (!isDev) {
     process.env.APP_DATA_PATH = app.getPath('userData');
+    process.env.MINECRAFT_DIR = path.join(app.getPath('documents'), 'MineControl OS', 'minecraft');
     try {
       require(path.join(__dirname, '../server/index.js'));
       await waitForPort(3001);

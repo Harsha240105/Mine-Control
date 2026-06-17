@@ -6,10 +6,10 @@ import unzipper from 'unzipper';
 import { getDatabase } from '../database';
 import { authMiddleware, requirePermission, AuthRequest } from '../middleware/auth';
 import { v4 as uuidv4 } from 'uuid';
-import { resolvePath } from '../paths';
+import { resolveMinecraftDir } from '../paths';
 
 const router = Router();
-const WORLDS_DIR = resolvePath('minecraft', 'worlds');
+const WORLDS_DIR = resolveMinecraftDir('worlds');
 
 router.get('/', authMiddleware, (_req: AuthRequest, res) => {
   if (!fs.existsSync(WORLDS_DIR)) {

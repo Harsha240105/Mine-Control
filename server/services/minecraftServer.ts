@@ -3,7 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { EventEmitter } from 'events';
 import { getDatabase } from '../database';
-import { resolvePath } from '../paths';
+import { resolveMinecraftDir } from '../paths';
 
 export interface MinecraftEventMap {
   'server:output': (data: string) => void;
@@ -28,7 +28,7 @@ class MinecraftServerManager extends EventEmitter {
 
   constructor() {
     super();
-    this.serverDir = resolvePath('minecraft');
+    this.serverDir = resolveMinecraftDir();
     this.ensureDirectories();
   }
 
