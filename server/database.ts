@@ -12,13 +12,18 @@ let db: Database.Database;
 export function getDatabase(): Database.Database {
   if (!db) {
     const dataDir = path.dirname(DB_PATH);
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
+    try {
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      db = new Database(DB_PATH);
+      db.pragma('journal_mode = WAL');
+      db.pragma('foreign_keys = ON');
+      initializeSchema();
+    } catch (err) {
+      console.error('[Database] Failed to initialize:', err);
+      throw new Error('Database initialization failed: ' + (err as Error).message);
     }
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-    initializeSchema();
   }
   return db;
 }

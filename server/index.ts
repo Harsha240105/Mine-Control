@@ -53,8 +53,8 @@ app.use('/api/backups', backupRoutes);
 
 // Global error handler (must be after routes)
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('[Error]', err.message || err);
-  res.status(500).json({ error: err.message || 'Internal server error' });
+  console.error('[Error]', err.stack || err.message || err);
+  res.status(500).json({ error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error' });
 });
 
 // Serve static files (works in both dev and production)

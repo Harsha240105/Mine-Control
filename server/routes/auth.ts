@@ -5,34 +5,38 @@ import { authMiddleware, generateToken, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-router.post('/login', (req, res) => {
-  const { username, password } = req.body;
+router.post('/login', (req, res, next) => {
+  try {
+    const { username, password } = req.body;
 
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password required' });
+    if (!username || !password) {
+      return res.status(400).json({ error: 'Username and password required' });
+    }
+
+    const db = getDatabase();
+    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as any;
+
+    if (!user || !bcrypt.compareSync(password, user.password_hash)) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = generateToken({ id: user.id, username: user.username, role: user.role });
+
+    // Update last login and session
+    db.prepare('UPDATE users SET last_login = ?, session_token = ? WHERE id = ?')
+      .run(new Date().toISOString(), token, user.id);
+
+    return res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role,
+      },
+    });
+  } catch (err) {
+    next(err);
   }
-
-  const db = getDatabase();
-  const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as any;
-
-  if (!user || !bcrypt.compareSync(password, user.password_hash)) {
-    return res.status(401).json({ error: 'Invalid credentials' });
-  }
-
-  const token = generateToken({ id: user.id, username: user.username, role: user.role });
-
-  // Update last login and session
-  db.prepare('UPDATE users SET last_login = ?, session_token = ? WHERE id = ?')
-    .run(new Date().toISOString(), token, user.id);
-
-  return res.json({
-    token,
-    user: {
-      id: user.id,
-      username: user.username,
-      role: user.role,
-    },
-  });
 });
 
 router.post('/logout', authMiddleware, (req: AuthRequest, res) => {
