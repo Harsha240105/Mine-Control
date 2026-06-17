@@ -24,7 +24,6 @@ win:
       arch:
         - x64
   artifactName: MineControl-OS-Setup-${version}-${arch}.${ext}
-  publisherName: MineControl OS
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
