@@ -78,12 +78,18 @@ export function useNotifications() {
       addNotification({ type: 'error', title: 'Server Crashed', message: error.slice(0, 100) });
     };
 
+    const onServerError = (error: string) => {
+      toast.error(error.length > 80 ? error.slice(0, 80) + '...' : error, { duration: 10000 });
+      addNotification({ type: 'error', title: 'Server Error', message: error.slice(0, 200) });
+    };
+
     socket.on('player:join', onPlayerJoin);
     socket.on('player:leave', onPlayerLeave);
     socket.on('player:chat', onPlayerChat);
     socket.on('server:started', onServerStarted);
     socket.on('server:stopped', onServerStopped);
     socket.on('server:crashed', onServerCrashed);
+    socket.on('server:error', onServerError);
 
     return () => {
       socket.off('player:join', onPlayerJoin);
@@ -92,6 +98,7 @@ export function useNotifications() {
       socket.off('server:started', onServerStarted);
       socket.off('server:stopped', onServerStopped);
       socket.off('server:crashed', onServerCrashed);
+      socket.off('server:error', onServerError);
     };
   }, [socket, addNotification]);
 

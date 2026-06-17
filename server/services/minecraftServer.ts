@@ -27,6 +27,8 @@ class MinecraftServerManager extends EventEmitter {
   private startedAt: Date | null = null;
   private restartAttempts = 0;
   private readonly maxRestartAttempts = 3;
+  private outputBuffer: string[] = [];
+  private startAttemptedAt: number | null = null;
 
   constructor() {
     super();
@@ -78,6 +80,8 @@ class MinecraftServerManager extends EventEmitter {
     }
 
     this.starting = true;
+    this.outputBuffer = [];
+    this.startAttemptedAt = Date.now();
     this.emit('server:output', '[MineControl] Starting Minecraft server...\n');
 
     try {
@@ -90,7 +94,8 @@ class MinecraftServerManager extends EventEmitter {
       }
 
       const eulaPath = path.join(this.serverDir, 'eula.txt');
-      if (!fs.existsSync(eulaPath)) {
+      const eulaContent = (() => { try { return fs.readFileSync(eulaPath, 'utf-8'); } catch { return ''; } })();
+      if (!eulaContent.includes('eula=true')) {
         fs.writeFileSync(eulaPath, 'eula=true\n');
         this.emit('server:output', '[MineControl] EULA accepted automatically.\n');
       }
@@ -175,6 +180,14 @@ class MinecraftServerManager extends EventEmitter {
         this.emit('server:stopped', code);
         this.emit('server:output', `\n[MineControl] Server stopped with code ${code}\n`);
 
+        // Detect server that exited before fully starting
+        if (code === 0 && this.startAttemptedAt && Date.now() - this.startAttemptedAt < 15000 && this.outputBuffer.length > 0) {
+          const lastOutput = this.outputBuffer.slice(-30).join('\n');
+          const errorMsg = `Server exited with code 0 before fully starting.\nPossible causes: invalid server.jar, wrong Java version (need 21+), or port already in use.\n\nLast output:\n${lastOutput}`;
+          this.emit('server:error', errorMsg);
+          this.emit('server:output', `[MineControl] ERROR: ${errorMsg}\n`);
+        }
+
         if (code !== 0 && this.getConfig().autoRestart && this.restartAttempts < this.maxRestartAttempts) {
           this.restartAttempts++;
           this.emit('server:output', `[MineControl] Auto-restarting in 5 seconds (attempt ${this.restartAttempts}/${this.maxRestartAttempts})...\n`);
@@ -211,6 +224,10 @@ class MinecraftServerManager extends EventEmitter {
     const lines = output.split('\n').filter(l => l.trim());
 
     for (const line of lines) {
+      this.outputBuffer.push(line);
+      if (this.outputBuffer.length > 100) {
+        this.outputBuffer.shift();
+      }
       this.emit('server:output', line + '\n');
 
       // Player join
