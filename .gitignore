@@ -22,6 +22,11 @@ minecraft/plugins/spark/tmp-client/
 shared/*.js
 shared/*.d.ts
 shared/*.js.map
+shared/
+public/logo.svg
+public/favicon.svg
+public/steve-walk-hq.gif
+scripts/
 .env
 *.log
 .DS_Store

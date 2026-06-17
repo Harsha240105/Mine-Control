@@ -1,22 +1,32 @@
 # MineControl OS
 
-> Self-hosted Minecraft server management platform with web dashboard, desktop app, and real-time monitoring.
-
-<p align="center">
-  <img src="public/logo.svg" alt="MineControl OS" width="120"/>
-</p>
-
 <p align="center">
   <a href="https://github.com/Harsha240105/Mine-Control/releases/latest">
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
-  <br/>
-  <sub>Windows 10/11 &bull; 173 MB</sub>
+  <a href="https://discord.com/invite/gKghAS2RVW">
+    <img src="https://img.shields.io/badge/Join_Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/>
+  </a>
 </p>
 
 <p align="center">
-  <img src="public/steve-walk-hq.gif" alt="Steve Walk Animation" width="180"/>
+  <a href="https://github.com/Harsha240105/Mine-Control/releases/latest">
+    <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=24&duration=3000&pause=500&color=00FF41&center=true&vCenter=true&width=500&lines=MineControl+OS;Self-hosted+Minecraft+Server+Manager;Start+%E2%80%A2+Monitor+%E2%80%A2+Manage;Download+the+desktop+app+now!" alt="Typing SVG"/>
+  </a>
 </p>
+
+> Self-hosted Minecraft server management platform with web dashboard, desktop app, and real-time monitoring.
+
+## Download
+
+| Platform | Download |
+|----------|----------|
+| Windows 10/11 | [MineControl OS-Setup-1.0.0-x64.exe](https://github.com/Harsha240105/Mine-Control/releases/latest) |
+| macOS (Intel) | [MineControl OS-1.0.0-x64.dmg](https://github.com/Harsha240105/Mine-Control/releases/latest) |
+| macOS (Apple Silicon) | [MineControl OS-1.0.0-arm64.dmg](https://github.com/Harsha240105/Mine-Control/releases/latest) |
+| Linux | [MineControl OS-1.0.0-x64.AppImage](https://github.com/Harsha240105/Mine-Control/releases/latest) |
+
+The desktop app bundles everything — no Node.js or separate backend needed. Install and run.
 
 ## Features
 
@@ -32,7 +42,7 @@
 - **3D Model Viewer** — Preview the Steve avatar with walking animation (Three.js)
 - **Electron Desktop App** — Installable native app for Windows, macOS, and Linux
 
-## Quick Start
+## Quick Start (from source)
 
 ### Prerequisites
 
@@ -40,33 +50,13 @@
 - **Node.js 18+** — [Download](https://nodejs.org/)
 - **8GB+ RAM** recommended
 
-### Download (Desktop App)
-
-| Platform | Download |
-|----------|----------|
-| Windows 10/11 | [MineControl OS-Setup-1.0.0-x64.exe](https://github.com/Harsha240105/Mine-Control/releases/latest) |
-| macOS (Intel) | [MineControl OS-1.0.0-x64.dmg](https://github.com/Harsha240105/Mine-Control/releases/latest) |
-| macOS (Apple Silicon) | [MineControl OS-1.0.0-arm64.dmg](https://github.com/Harsha240105/Mine-Control/releases/latest) |
-| Linux | [MineControl OS-1.0.0-x64.AppImage](https://github.com/Harsha240105/Mine-Control/releases/latest) |
-
-> **Note:** The EXE installer bundles everything — no Node.js or separate backend needed. Just install and run.
-
-### Build from Source
+### Build
 
 ```bash
-# 1. Clone or download
 git clone https://github.com/Harsha240105/Mine-Control.git
 cd MineControlOS
-
-# 2. Install dependencies
 npm install
-
-# 3. Download PaperMC server jar (1.21.1)
-#    Place it at: minecraft/server.jar
-#    Or run:
 curl -L -o minecraft/server.jar https://api.papermc.io/v2/projects/paper/versions/1.21.1/builds/133/downloads/paper-1.21.1-133.jar
-
-# 4. Start development
 npm run dev
 ```
 
@@ -122,14 +112,7 @@ npm run dev
 - The close handler properly cleans up: clears stats monitoring, closes log streams, nullifies the process
 - Force-kill fallback applies if the server doesn't stop within 15 seconds
 
-## Desktop App (Installable)
-
-### Download
-
-[Download latest Windows installer](https://github.com/Harsha240105/Mine-Control/releases/latest)
-*(Click "Releases" on GitHub, then download the `.exe` from the latest release)*
-
-Or build from source:
+## Desktop App (Build from source)
 
 ### Windows
 
@@ -152,7 +135,7 @@ npm run build:desktop:linux
 # Output: dist/release/MineControl OS-1.0.0-x64.AppImage
 ```
 
-### Development (Electron)
+### Development
 
 ```bash
 npm run dev:electron
@@ -182,16 +165,8 @@ MineControlOS/
 │   ├── worlds/        # World data
 │   └── backups/       # Local backups
 ├── data/              # SQLite database
-└── public/            # Static assets (logos, favicon)
+└── public/            # Static assets
 ```
-
-## Screenshots
-
-> *Coming soon — run the app and see for yourself!*
-
-| Dashboard | Console | Players |
-|-----------|---------|---------|
-| Resource metrics, charts, server status | Live command-line with search/filter | Role management, ban/kick/mute |
 
 ## Tech Stack
 
@@ -218,8 +193,6 @@ MineControlOS/
 | GET | `/api/backups` | List backups |
 | GET | `/api/plugins` | List plugins |
 | GET | `/api/worlds` | List worlds |
-
-Full API docs: [docs/API.md](docs/API.md)
 
 ## Plugins
 
@@ -277,4 +250,11 @@ MIT
 
 ---
 
-*Built with ❤️ for the Minecraft community*
+<p align="center">
+  <a href="https://discord.com/invite/gKghAS2RVW">
+    <img src="https://img.shields.io/badge/Join_our_Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/>
+  </a>
+  <a href="https://github.com/Harsha240105/Mine-Control/releases/latest">
+    <img src="https://img.shields.io/badge/Download%20from%20GitHub-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub"/>
+  </a>
+</p>

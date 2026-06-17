@@ -43,12 +43,6 @@ app.use(express.json({ limit: '50mb' }));
 app.use(morgan('dev'));
 app.use(rateLimiter(60000, 200));
 
-// Global error handler
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('[Error]', err.message || err);
-  res.status(500).json({ error: err.message || 'Internal server error' });
-});
-
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/server', serverRoutes);
@@ -56,6 +50,12 @@ app.use('/api/players', playerRoutes);
 app.use('/api/worlds', worldRoutes);
 app.use('/api/plugins', pluginRoutes);
 app.use('/api/backups', backupRoutes);
+
+// Global error handler (must be after routes)
+app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  console.error('[Error]', err.message || err);
+  res.status(500).json({ error: err.message || 'Internal server error' });
+});
 
 // Serve static files (works in both dev and production)
 const possiblePaths = [
@@ -160,6 +160,14 @@ cron.schedule('0 0 * * 0', () => {
   const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   db.prepare('DELETE FROM system_stats WHERE timestamp < ?').run(weekAgo);
   console.log('[Cron] Old stats cleaned');
+});
+
+// Catch unhandled errors
+process.on('uncaughtException', (err) => {
+  console.error('[Uncaught Exception]', err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[Unhandled Rejection]', reason);
 });
 
 // Start server
