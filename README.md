@@ -2,9 +2,21 @@
 
 > Self-hosted Minecraft server management platform with web dashboard, desktop app, and real-time monitoring.
 
-![MineControl OS](public/logo.svg)
+<p align="center">
+  <img src="public/logo.svg" alt="MineControl OS" width="120"/>
+</p>
 
-![Steve Walk Animation](public/steve-walk-hq.gif)
+<p align="center">
+  <a href="https://github.com/Harsha240105/Mine-Control/releases/latest">
+    <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
+  </a>
+  <br/>
+  <sub>Windows 10/11 &bull; 173 MB</sub>
+</p>
+
+<p align="center">
+  <img src="public/steve-walk-hq.gif" alt="Steve Walk Animation" width="180"/>
+</p>
 
 ## Features
 
@@ -28,7 +40,18 @@
 - **Node.js 18+** — [Download](https://nodejs.org/)
 - **8GB+ RAM** recommended
 
-### Installation
+### Download (Desktop App)
+
+| Platform | Download |
+|----------|----------|
+| Windows 10/11 | [MineControl OS-Setup-1.0.0-x64.exe](https://github.com/Harsha240105/Mine-Control/releases/latest) |
+| macOS (Intel) | [MineControl OS-1.0.0-x64.dmg](https://github.com/Harsha240105/Mine-Control/releases/latest) |
+| macOS (Apple Silicon) | [MineControl OS-1.0.0-arm64.dmg](https://github.com/Harsha240105/Mine-Control/releases/latest) |
+| Linux | [MineControl OS-1.0.0-x64.AppImage](https://github.com/Harsha240105/Mine-Control/releases/latest) |
+
+> **Note:** The EXE installer bundles everything — no Node.js or separate backend needed. Just install and run.
+
+### Build from Source
 
 ```bash
 # 1. Clone or download
