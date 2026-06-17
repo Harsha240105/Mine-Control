@@ -29,6 +29,7 @@ class MinecraftServerManager extends EventEmitter {
   private readonly maxRestartAttempts = 3;
   private outputBuffer: string[] = [];
   private startAttemptedAt: number | null = null;
+  private hasStartedSuccessfully = false;
 
   constructor() {
     super();
@@ -82,6 +83,7 @@ class MinecraftServerManager extends EventEmitter {
     this.starting = true;
     this.outputBuffer = [];
     this.startAttemptedAt = Date.now();
+    this.hasStartedSuccessfully = false;
     this.emit('server:output', '[MineControl] Starting Minecraft server...\n');
 
     try {
@@ -129,7 +131,7 @@ class MinecraftServerManager extends EventEmitter {
         '-jar',
         jarPath,
         '--nogui',
-        `--port=${config.port}`,
+        '--port', `${config.port}`,
       ];
 
       const env = { ...process.env };
@@ -181,7 +183,7 @@ class MinecraftServerManager extends EventEmitter {
         this.emit('server:output', `\n[MineControl] Server stopped with code ${code}\n`);
 
         // Detect server that exited before fully starting
-        if (code === 0 && this.startAttemptedAt && Date.now() - this.startAttemptedAt < 15000 && this.outputBuffer.length > 0) {
+        if (code === 0 && !this.hasStartedSuccessfully && this.startAttemptedAt && Date.now() - this.startAttemptedAt < 15000 && this.outputBuffer.length > 0) {
           const lastOutput = this.outputBuffer.slice(-30).join('\n');
           const errorMsg = `Server exited with code 0 before fully starting.\nPossible causes: invalid server.jar, wrong Java version (need 21+), or port already in use.\n\nLast output:\n${lastOutput}`;
           this.emit('server:error', errorMsg);
@@ -262,6 +264,7 @@ class MinecraftServerManager extends EventEmitter {
         this.running = true;
         this.starting = false;
         this.startedAt = new Date();
+        this.hasStartedSuccessfully = true;
         this.emit('server:started');
         continue;
       }

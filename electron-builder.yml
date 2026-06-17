@@ -23,7 +23,8 @@ win:
     - target: nsis
       arch:
         - x64
-  artifactName: ${productName}-Setup-${version}-${arch}.${ext}
+  artifactName: MineControl-OS-Setup-${version}-${arch}.${ext}
+  publisherName: MineControl OS
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

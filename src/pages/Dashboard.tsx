@@ -55,6 +55,7 @@ interface StatPoint {
 export default function Dashboard() {
   const [status, setStatus] = useState<StatusData | null>(null);
   const [statsHistory, setStatsHistory] = useState<StatPoint[]>([]);
+  const [startError, setStartError] = useState<string | null>(null);
   const { socket } = useSocket();
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -80,10 +81,21 @@ export default function Dashboard() {
     });
     socket.on('server:status', (data: any) => {
       setStatus((prev) => prev ? { ...prev, running: data.running, starting: data.starting || false } : prev);
+      if (data.starting) setStartError(null);
+    });
+    socket.on('server:error', (error: string) => {
+      if (!status?.running && !status?.starting) {
+        setStartError(error);
+      }
+    });
+    socket.on('server:started', () => {
+      setStartError(null);
     });
     return () => {
       socket.off('stats:update');
       socket.off('server:status');
+      socket.off('server:error');
+      socket.off('server:started');
     };
   }, [socket]);
 
@@ -160,6 +172,35 @@ export default function Dashboard() {
           {currentTime.toLocaleTimeString('en-US')}
         </p>
       </div>
+
+      {/* Start Error Banner */}
+      {startError && (
+        <div className="card border border-red-500/30 bg-red-500/5">
+          <div className="flex items-start gap-3">
+            <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0 mt-0.5">
+              <span className="text-white text-xs font-bold">!</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <h3 className="text-sm font-semibold text-red-400 mb-1">Server Failed to Start</h3>
+              <div className="text-xs text-red-300/80 space-y-1">
+                {startError.split('\n').map((line, i) => (
+                  <p key={i}>{line || '\u00A0'}</p>
+                ))}
+              </div>
+              <p className="text-[11px] text-gray-500 mt-2">
+                Check the <strong className="text-gray-400">Console</strong> tab for full server output.
+                {' '}Verify you have a valid PaperMC 1.21.1 server.jar in your minecraft directory and Java 21+ installed.
+              </p>
+              <button
+                onClick={() => setStartError(null)}
+                className="mt-2 text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Status Bar */}
       <div className="card flex items-center gap-4 py-3 px-5">
