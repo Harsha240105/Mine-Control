@@ -189,7 +189,7 @@ process.on('unhandledRejection', (reason) => {
 server.listen(PORT, () => {
   console.log(`
   ╔══════════════════════════════════════════╗
-  ║        MineControl OS v1.0.11           ║
+  ║        MineControl OS v1.0.12           ║
   ║     Minecraft Server Management         ║
   ║══════════════════════════════════════════║
   ║  Server:  http://localhost:${PORT}         ║
