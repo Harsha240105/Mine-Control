@@ -1,0 +1,10 @@
+[Unit]
+Description=Minecraft Server Daily Backup
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=minecraft
+Group=minecraft
+ExecStart=/opt/minecraft/scripts/backup.sh daily
+StandardOutput=journal

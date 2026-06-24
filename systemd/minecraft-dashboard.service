@@ -1,0 +1,26 @@
+[Unit]
+Description=Minecraft Dashboard Server
+After=network.target
+Wants=mysql.service minecraft.service
+
+[Service]
+Type=simple
+User=minecraft
+Group=minecraft
+WorkingDirectory=/opt/minecraft/dashboard/server
+
+Environment=NODE_ENV=production
+Environment=PORT=3001
+Environment=JWT_SECRET=change-this-in-production
+Environment=DB_PATH=/opt/minecraft/dashboard/data/dashboard.db
+Environment=MC_DIR=/opt/minecraft/server
+Environment=MC_LOG_DIR=/opt/minecraft/logs
+Environment=CORS_ORIGIN=http://localhost:5173
+
+ExecStart=/usr/bin/node index.js
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
