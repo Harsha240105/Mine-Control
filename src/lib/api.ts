@@ -81,6 +81,28 @@ export const api = {
       body: JSON.stringify(props),
     }),
 
+  // Connection Info
+  getConnectionInfo: () => request<any>('/server/connection'),
+
+  // Diagnostics
+  getDiagnostics: () => request<any[]>('/server/diagnostics'),
+  healthCheck: () => request<any>('/server/health-check'),
+
+  // Version Management
+  getAvailableVersions: () => request<any[]>('/server/versions'),
+  setServerVersion: (version: string) =>
+    request<any>('/server/version', {
+      method: 'POST',
+      body: JSON.stringify({ version }),
+    }),
+
+  // Game Mode
+  setGameMode: (mode: string) =>
+    request<any>('/server/gamemode', {
+      method: 'POST',
+      body: JSON.stringify({ mode }),
+    }),
+
   // Players
   getPlayers: () => request<any[]>('/players'),
   getPlayer: (id: string) => request<any>(`/players/${id}`),
@@ -109,6 +131,11 @@ export const api = {
     request<any>(`/players/${id}/mute`, { method: 'POST' }),
   unmutePlayer: (id: string) =>
     request<any>(`/players/${id}/unmute`, { method: 'POST' }),
+  tempBanPlayer: (id: string, duration: string, reason?: string) =>
+    request<any>(`/players/${id}/temp-ban`, {
+      method: 'POST',
+      body: JSON.stringify({ duration, reason }),
+    }),
 
   // Whitelist
   getWhitelist: () => request<any[]>('/players/whitelist/all'),
@@ -178,4 +205,37 @@ export const api = {
     }),
   deleteBackup: (id: string) =>
     request<{ success: boolean }>(`/backups/${id}`, { method: 'DELETE' }),
+
+  // Claims
+  getClaims: () => request<any[]>('/claims'),
+  createClaim: (data: any) =>
+    request<any>('/claims', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  deleteClaim: (id: string) =>
+    request<{ success: boolean }>(`/claims/${id}`, { method: 'DELETE' }),
+
+  // Build Tags
+  getBuildTags: () => request<any[]>('/builds'),
+  createBuildTag: (data: any) =>
+    request<any>('/builds', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  deleteBuildTag: (id: string) =>
+    request<{ success: boolean }>(`/builds/${id}`, { method: 'DELETE' }),
+
+  // GitHub Issues
+  submitBugReport: (data: any) =>
+    request<any>('/github/bug-report', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  submitFeatureRequest: (data: any) =>
+    request<any>('/github/feature-request', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  getGitHubIssues: () => request<any[]>('/github/issues'),
 };

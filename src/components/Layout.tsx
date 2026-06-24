@@ -16,7 +16,11 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
-  Box,
+  Wifi,
+  Map,
+  Stethoscope,
+  BookOpen,
+  Github,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
@@ -31,7 +35,11 @@ const navItems = [
   { path: '/worlds', label: 'Worlds', icon: Globe },
   { path: '/plugins', label: 'Plugins', icon: Puzzle },
   { path: '/backups', label: 'Backups', icon: HardDrive },
-  { path: '/models', label: '3D Models', icon: Box },
+  { path: '/connection', label: 'Connection', icon: Wifi },
+  { path: '/map', label: 'World Map', icon: Map },
+  { path: '/diagnostics', label: 'Diagnostics', icon: Stethoscope },
+  { path: '/guide', label: 'Guide', icon: BookOpen },
+  { path: '/github', label: 'GitHub', icon: Github },
   { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
@@ -155,7 +163,7 @@ export default function Layout() {
         )}
 
         {/* Nav Items */}
-        <nav className="flex-1 py-2">
+        <nav className="flex-1 py-2 overflow-y-auto">
           {navItems.map((item) => (
             <NavLink
               key={item.path}
@@ -214,7 +222,7 @@ export default function Layout() {
             <UpdateBanner />
             <NotificationPanel />
             <span className="text-xs text-gray-500">
-              v1.0.8
+              v1.0.13
             </span>
           </div>
         </header>

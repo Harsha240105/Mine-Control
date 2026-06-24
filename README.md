@@ -4,11 +4,8 @@
   <a href="https://github.com/Harsha240105/Mine-Control/releases/latest">
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
-  <a href="https://discord.com/invite/gKghAS2RVW">
-    <img src="https://img.shields.io/badge/Join_Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/>
-  </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.12-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.13-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -24,7 +21,7 @@
 
 ## 📥 Download
 
-Latest version: **v1.0.12** — [Auto-updates from within the app]
+Latest version: **v1.0.13** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -39,17 +36,19 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 
 ## 🚀 Features
 
-### v1.0.12 — New in this release
-- **Minecraft Version Selector** — Choose from Paper 1.20.1, 1.20.4, 1.21, 1.21.1, 1.21.5, or Latest. Auto-downloads the correct Paper jar.
-- **Playit.gg Tunnel Integration** — Bypass CGNAT and port forwarding. Generate a DNS address friends can use directly.
-- **Connection Manager** — Dedicated page showing Localhost, LAN IP, Public IP, and Playit.gg DNS with one-click Copy buttons.
-- **Real-Time Player Tracking** — See username, join time, ping, world, gamemode, health, X/Y/Z coordinates live.
-- **Live Server Events Feed** — Join, leave, death, and chat events streamed in real-time on the dashboard.
-- **Live World Map** — Embedded BlueMap/Dynmap viewer with plugin selector and port configuration.
-- **Server Diagnostics** — Firewall checks, port binding analysis, public reachability test, CGNAT detection.
-- **Localhost Binding Warning** — Alerts when server-ip is set and blocking external connections.
-- **One-Click Health Check** — Tests everything from port reachability to CGNAT status with a single button.
-- **Removed 3D Models** — Reduced RAM usage by removing Three.js dependencies (~50MB savings).
+### v1.0.13 — New in this release
+- **Beginner's Guide Tab** — Step-by-step guide explaining everything: start server, change versions, add plugins, use map, share join link, premium/cracked modes, and more.
+- **GitHub Community Hub** — Submit bug reports and feature requests directly from the app with image/video attachments up to 25MB/100MB.
+- **Land Claim System** — Track player claims and boundaries from the app with full database support.
+- **Build Tagging System** — Players can tag buildings and locations (house, base, farm, spawn, shop). View all tagged locations in the app.
+- **In-App Bug Reporting** — Attach logs, screenshots (up to 25MB), and videos (up to 100MB) to bug reports.
+- **In-App Feature Requests** — Submit and track feature requests with status tracking (open/accepted/delayed/completed).
+- **Live World Map Tab** — Embedded BlueMap/Dynmap viewer with plugin selector and port configuration.
+- **Server Diagnostics Tab** — Full configuration checks, port binding analysis, CGNAT detection, one-click health check.
+- **Connection Manager Tab** — Dedicated page with localhost, LAN, Public IP, and Playit.gg addresses with one-click copy.
+- **Game Mode Quick Switch** — One-click toggle between Survival, Creative, Adventure, and Spectator modes.
+- **Minecraft Version Selector** — Browse and switch PaperMC versions (1.20.1 through latest) with auto-download.
+- **Codebase Cleanup** — Removed stale duplicate directories (MineControlOS/, dashboard/), reduced clutter.
 
 ### Server Control
 - **Start / Stop / Restart** — One-click server control from the Dashboard
@@ -62,7 +61,7 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 ### Player Management
 - **Role-based access** — Owner / Admin / Moderator / Trusted Member / Member / Guest
 - **Player tracking** — Online/offline status, join/leave history, real-time coordinates
-- **Ban / Kick / Mute** — Full moderation toolkit
+- **Ban / Kick / Mute / Temp-Ban** — Full moderation toolkit
 - **Whitelist** — Control who can join
 - **Chat log** — Message history with search
 
@@ -164,14 +163,9 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 
 ```bash
 git clone https://github.com/Harsha240105/Mine-Control.git
-cd MineControlOS
+cd Mine-Control
 npm install
 npm run dev
-```
-
-Download PaperMC server jar (or use the version selector in the app):
-```bash
-curl -L -o minecraft/server.jar https://api.papermc.io/v2/projects/paper/versions/1.21.1/builds/133/downloads/paper-1.21.1-133.jar
 ```
 
 ### Login
@@ -201,7 +195,10 @@ MineControlOS/
 │   │   ├── players.ts # Player management, roles, whitelist
 │   │   ├── worlds.ts  # World CRUD, clone, download/upload
 │   │   ├── plugins.ts # Plugin management
-│   │   └── backup.ts  # Backup create/restore/delete
+│   │   ├── backup.ts  # Backup create/restore/delete
+│   │   ├── claims.ts  # Land claim system
+│   │   ├── builds.ts  # Build tagging system
+│   │   └── github.ts  # Bug reports & feature requests
 │   ├── services/
 │   │   ├── minecraftServer.ts  # Java process manager, version management, diagnostics
 │   │   └── backup.ts           # Backup engine
@@ -211,14 +208,16 @@ MineControlOS/
 ├── src/               # React frontend
 │   ├── pages/
 │   │   ├── Dashboard.tsx     # Server status, charts, player tracking, events
-│   │   ├── Connection.tsx    # Connection manager with copy buttons (NEW)
+│   │   ├── Connection.tsx    # Connection manager with copy buttons
 │   │   ├── Console.tsx       # Live terminal
 │   │   ├── Players.tsx       # Player list, roles, bans
 │   │   ├── Worlds.tsx        # World management
-│   │   ├── MapView.tsx       # Live world map (BlueMap/Dynmap) (NEW)
+│   │   ├── MapView.tsx       # Live world map (BlueMap/Dynmap)
 │   │   ├── Plugins.tsx       # Plugin browser
 │   │   ├── Backups.tsx       # Backup manager
-│   │   ├── Diagnostics.tsx   # Server diagnostics + health check (NEW)
+│   │   ├── Diagnostics.tsx   # Server diagnostics + health check
+│   │   ├── Guide.tsx         # Beginner's guide
+│   │   ├── GitHub.tsx        # Bug reports & feature requests
 │   │   └── Settings.tsx      # All config + version selector + Playit.gg
 │   ├── components/
 │   │   ├── Layout.tsx        # App shell, sidebar, header
@@ -252,10 +251,10 @@ MineControlOS/
 | POST | `/api/server/restart` | server.restart | Restart server |
 | GET | `/api/server/versions` | auth | List available PaperMC versions |
 | POST | `/api/server/version` | server.start | Download and switch Paper version |
+| POST | `/api/server/gamemode` | server.start | Switch survival/creative/adventure/spectator |
 | GET | `/api/server/connection` | auth | Local, LAN, Public IP, Playit.gg info |
 | GET | `/api/server/diagnostics` | auth | Firewall, port binding, CGNAT checks |
 | POST | `/api/server/health-check` | auth | Full connectivity test |
-| GET | `/api/server/events` | auth | Recent server events |
 | GET | `/api/server/properties` | auth | Read server.properties |
 | PUT | `/api/server/properties` | server.start | Update server.properties |
 | GET | `/api/server/config` | auth | Read app config (SQLite) |
@@ -266,6 +265,15 @@ MineControlOS/
 | GET | `/api/backups` | auth | List backups |
 | GET | `/api/plugins` | auth | List plugins |
 | GET | `/api/worlds` | auth | List worlds |
+| GET | `/api/claims` | auth | List land claims |
+| POST | `/api/claims` | world.manage | Create a claim |
+| DELETE | `/api/claims/:id` | world.manage | Delete a claim |
+| GET | `/api/builds` | auth | List build tags |
+| POST | `/api/builds` | auth | Create a build tag |
+| DELETE | `/api/builds/:id` | world.manage | Delete a build tag |
+| POST | `/api/github/bug-report` | auth | Submit bug report |
+| POST | `/api/github/feature-request` | auth | Submit feature request |
+| GET | `/api/github/issues` | auth | List all reports |
 
 ---
 
@@ -314,9 +322,6 @@ MIT
 ---
 
 <p align="center">
-  <a href="https://discord.com/invite/gKghAS2RVW">
-    <img src="https://img.shields.io/badge/Join_our_Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/>
-  </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases/latest">
     <img src="https://img.shields.io/badge/Download%20from%20GitHub-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub"/>
   </a>

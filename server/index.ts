@@ -20,6 +20,9 @@ import playerRoutes from './routes/players';
 import worldRoutes from './routes/worlds';
 import pluginRoutes from './routes/plugins';
 import backupRoutes from './routes/backup';
+import claimRoutes from './routes/claims';
+import buildRoutes from './routes/builds';
+import githubRoutes from './routes/github';
 
 const app = express();
 const server = http.createServer(app);
@@ -50,14 +53,17 @@ app.use('/api/players', playerRoutes);
 app.use('/api/worlds', worldRoutes);
 app.use('/api/plugins', pluginRoutes);
 app.use('/api/backups', backupRoutes);
+app.use('/api/claims', claimRoutes);
+app.use('/api/builds', buildRoutes);
+app.use('/api/github', githubRoutes);
 
-// Global error handler (must be after routes)
+// Global error handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('[Error]', err.stack || err.message || err);
   res.status(500).json({ error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error' });
 });
 
-// Serve static files (works in both dev and production)
+// Serve static files
 const possiblePaths = [
   path.join(__dirname, '../dist/client'),
   path.join(__dirname, '../client'),
@@ -141,7 +147,7 @@ minecraftServer.on('stats:update', (stats) => {
 
 // Scheduled tasks
 
-// Auto backup every hour (configurable)
+// Auto backup every hour
 cron.schedule('0 * * * *', async () => {
   console.log('[Cron] Running auto-backup...');
   try {
@@ -184,7 +190,7 @@ process.on('unhandledRejection', (reason) => {
 server.listen(PORT, () => {
   console.log(`
   ╔══════════════════════════════════════════╗
-  ║         MineControl OS v1.0.8           ║
+  ║         MineControl OS v1.0.13          ║
   ║     Minecraft Server Management         ║
   ║══════════════════════════════════════════║
   ║  Server:  http://localhost:${PORT}         ║

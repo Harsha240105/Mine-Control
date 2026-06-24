@@ -149,6 +149,44 @@ function initializeSchema() {
       ip TEXT,
       timestamp TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS claims (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      owner TEXT NOT NULL,
+      world TEXT NOT NULL DEFAULT 'world',
+      x1 INTEGER NOT NULL DEFAULT 0,
+      z1 INTEGER NOT NULL DEFAULT 0,
+      x2 INTEGER NOT NULL DEFAULT 0,
+      z2 INTEGER NOT NULL DEFAULT 0,
+      color TEXT NOT NULL DEFAULT '#ff5555',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS build_tags (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'base',
+      world TEXT NOT NULL DEFAULT 'world',
+      x REAL NOT NULL DEFAULT 0,
+      y REAL NOT NULL DEFAULT 0,
+      z REAL NOT NULL DEFAULT 0,
+      owner TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS github_issues (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      description TEXT,
+      type TEXT NOT NULL DEFAULT 'bug',
+      status TEXT NOT NULL DEFAULT 'open',
+      username TEXT,
+      image_count INTEGER NOT NULL DEFAULT 0,
+      video_count INTEGER NOT NULL DEFAULT 0,
+      github_url TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // Seed default roles if they don't exist
