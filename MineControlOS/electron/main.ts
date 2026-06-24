@@ -176,11 +176,11 @@ async function createWindow() {
         { type: 'separator' },
         {
           label: 'Documentation',
-          click: () => require('electron').shell.openExternal('https://github.com/minecontrol-os/docs'),
+          click: () => require('electron').shell.openExternal('https://github.com/Harsha240105/Mine-Control'),
         },
         {
           label: 'Report Issue',
-          click: () => require('electron').shell.openExternal('https://github.com/minecontrol-os/issues'),
+          click: () => require('electron').shell.openExternal('https://github.com/Harsha240105/Mine-Control/issues'),
         },
       ],
     },
