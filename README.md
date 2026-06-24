@@ -8,7 +8,7 @@
     <img src="https://img.shields.io/badge/Join_Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.8-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.10-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -24,7 +24,7 @@
 
 ## 📥 Download
 
-Latest version: **v1.0.8** — [Auto-updates from within the app]
+Latest version: **v1.0.10** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -39,16 +39,29 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 
 ## 🚀 Features
 
+### v1.0.10 — New in this release
+- **Minecraft Version Selector** — Choose from Paper 1.20.1, 1.20.4, 1.21, 1.21.1, 1.21.5, or Latest. Auto-downloads the correct Paper jar.
+- **Playit.gg Tunnel Integration** — Bypass CGNAT and port forwarding. Generate a DNS address friends can use directly.
+- **Connection Manager** — Dedicated page showing Localhost, LAN IP, Public IP, and Playit.gg DNS with one-click Copy buttons.
+- **Real-Time Player Tracking** — See username, join time, ping, world, gamemode, health, X/Y/Z coordinates live.
+- **Live Server Events Feed** — Join, leave, death, and chat events streamed in real-time on the dashboard.
+- **Live World Map** — Embedded BlueMap/Dynmap viewer with plugin selector and port configuration.
+- **Server Diagnostics** — Firewall checks, port binding analysis, public reachability test, CGNAT detection.
+- **Localhost Binding Warning** — Alerts when server-ip is set and blocking external connections.
+- **One-Click Health Check** — Tests everything from port reachability to CGNAT status with a single button.
+- **Removed 3D Models** — Reduced RAM usage by removing Three.js dependencies (~50MB savings).
+
 ### Server Control
 - **Start / Stop / Restart** — One-click server control from the Dashboard
 - **Auto-restart on crash** — Automatically recovers from crashes (max 3 attempts)
 - **Port conflict detection** — Auto-detects if port 25565 is in use and kills orphaned Java processes
 - **EULA auto-accept** — Accepts Minecraft EULA automatically
 - **Java pre-check** — Validates Java installation before starting
+- **Version auto-download** — Switch PaperMC versions without manual downloads
 
 ### Player Management
 - **Role-based access** — Owner / Admin / Moderator / Trusted Member / Member / Guest
-- **Player tracking** — Online/offline status, join/leave history
+- **Player tracking** — Online/offline status, join/leave history, real-time coordinates
 - **Ban / Kick / Mute** — Full moderation toolkit
 - **Whitelist** — Control who can join
 - **Chat log** — Message history with search
@@ -56,13 +69,15 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 ### Connection Modes
 - **Cracked Mode** — TLauncher / any launcher, no Mojang account needed
 - **Premium Mode** — Official Minecraft accounts only
+- **Playit.gg Tunnel** — No port forwarding required. Works behind CGNAT
 - **Switch with one click** — Toggle in Settings, restart server
 
 ### Monitoring
 - **Live Dashboard** — CPU, RAM (MC + System), TPS, Disk, Player count
 - **30-min charts** — System resources and performance trends
 - **Real-time Console** — See server output as it happens
-- **Server Connection Info** — Shows localhost and public IP right on the Dashboard
+- **Real-Time Player Cards** — Username, world, coordinates, health, ping, gamemode
+- **Live Events Feed** — Join, leave, death, and chat events
 
 ### World Management
 - **Create worlds** — Custom seed, gamemode, difficulty
@@ -86,7 +101,6 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 - **Installable** — Windows, macOS, Linux native builds
 - **Auto-update** — App updates itself from GitHub releases
 - **System tray** — Minimize to tray, background operation
-- **3D Model Viewer** — Animated Steve walk cycle preview
 
 ### Security
 - **JWT authentication** — Token-based login
@@ -101,36 +115,25 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 ### You (on the same laptop):
 1. Launch the app → click **Start Server**
 2. Wait for server to be **Online**
-3. Open **Minecraft 1.21.1** → **Multiplayer** → **Add Server**
+3. Open **Minecraft** → **Multiplayer** → **Add Server**
 4. Address: **`localhost:25565`**
 5. Click **Join Server**
 
-### Friend with TLauncher (Cracked):
-1. In the app → **Settings** → set **Connection Mode** to **Cracked (TLauncher)**
-2. Click **Save & Restart Server**
-3. Give friend your **Public IP** (shown on Dashboard)
-4. Friend opens TLauncher → selects **1.21.1** → **Multiplayer** → Add your IP
-5. Requires **port forwarding** on your router (TCP 25565 → your laptop's local IP)
+### Friend via Playit.gg (Recommended - No Port Forwarding):
+1. Go to **Connection** tab in MineControl OS
+2. Set up Playit.gg tunnel (see Settings)
+3. Share your Playit.gg DNS address (e.g. `minecontrol.playit.gg`)
+4. Friend connects using that address — no router configuration needed
+5. Works even if your ISP uses CGNAT (Jio, Airtel, BSNL)
 
-### Friend with Official Minecraft (Premium):
-1. In the app → **Settings** → set **Connection Mode** to **Premium (Official)**
-2. Click **Save & Restart Server**
-3. Give friend your **Public IP** (shown on Dashboard)
-4. Friend opens Minecraft 1.21.1 → **Multiplayer** → Add your IP
-5. Requires **port forwarding** on your router (TCP 25565 → your laptop's local IP)
+### Friend via Public IP (Requires Port Forwarding):
+1. Share your **Public IP** from the Connection page
+2. Set up port forwarding on your router: TCP 25565 → your laptop
+3. Friend connects using your public IP
 
 ### Same WiFi (LAN):
 - No port forwarding needed
-- Find your **local IP** (`ipconfig` on Windows, `ifconfig` on Mac/Linux)
-- Friends connect using that IP instead of `localhost`
-
-### Port Forwarding Guide:
-1. Find your local IP: `ipconfig` → `IPv4 Address` (e.g., `192.168.1.100`)
-2. Open router admin (usually `http://192.168.1.1`)
-3. Find **Port Forwarding** or **Virtual Server**
-4. Add rule: External Port `25565` → Internal IP `192.168.1.100` → Internal Port `25565` → TCP
-5. Save and restart router if needed
-6. Your public IP is shown on the app's Dashboard
+- Friends connect using your **LAN IP** shown on the Connection page
 
 ---
 
@@ -138,8 +141,11 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 
 | Setting | Location | Description |
 |---------|----------|-------------|
+| Server Version | Settings | Paper 1.20.1 through latest |
+| Playit.gg Token | Settings | Tunnel token from playit.gg |
+| Playit.gg DNS | Settings | Your custom tunnel address |
 | Server Name (MOTD) | Settings | Message shown in server list |
-| Connection Mode | Settings | Cracked (TLauncher) or Premium (Official) |
+| Connection Mode | Settings | Cracked / Premium / Playit.gg |
 | World Seed | Settings | Seed for new world generation |
 | Max Players | Settings | Player slot limit |
 | Difficulty | Settings | Peaceful / Easy / Normal / Hard |
@@ -150,7 +156,7 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 | Min / Max RAM | Settings | Java heap allocation |
 | Whitelist | Settings | Only allowed players can join |
 | Auto Backup | Settings | Automatic world backups |
-| Java Path | minecraftServer.ts `getConfig()` | Path to Java executable |
+| Map Plugin | Settings | BlueMap / Dynmap configuration |
 
 ---
 
@@ -163,7 +169,7 @@ npm install
 npm run dev
 ```
 
-Download PaperMC server jar:
+Download PaperMC server jar (or use the version selector in the app):
 ```bash
 curl -L -o minecraft/server.jar https://api.papermc.io/v2/projects/paper/versions/1.21.1/builds/133/downloads/paper-1.21.1-133.jar
 ```
@@ -189,34 +195,35 @@ MineControlOS/
 │   └── preload.ts     # Context bridge for IPC
 ├── server/            # Express.js backend
 │   ├── index.ts       # Entry point (Express + Socket.IO)
-│   ├── routes/        # API routes
+│   ├── routes/
 │   │   ├── auth.ts    # Login, password change
-│   │   ├── server.ts  # Status, start/stop, config, properties, logs
+│   │   ├── server.ts  # Status, start/stop, config, versions, diagnostics, connection, events
 │   │   ├── players.ts # Player management, roles, whitelist
 │   │   ├── worlds.ts  # World CRUD, clone, download/upload
 │   │   ├── plugins.ts # Plugin management
 │   │   └── backup.ts  # Backup create/restore/delete
 │   ├── services/
-│   │   ├── minecraftServer.ts  # Java process manager
+│   │   ├── minecraftServer.ts  # Java process manager, version management, diagnostics
 │   │   └── backup.ts           # Backup engine
 │   ├── middleware/
 │   │   └── auth.ts    # JWT + role-based permissions
 │   └── database.ts    # SQLite schema + seed
 ├── src/               # React frontend
 │   ├── pages/
-│   │   ├── Dashboard.tsx  # Server status, charts, connection info
-│   │   ├── Console.tsx    # Live terminal
-│   │   ├── Players.tsx    # Player list, roles, bans
-│   │   ├── Worlds.tsx     # World management
-│   │   ├── Plugins.tsx    # Plugin browser
-│   │   ├── Backups.tsx    # Backup manager
-│   │   ├── Models.tsx     # 3D Steve viewer
-│   │   └── Settings.tsx   # All config + connection mode
+│   │   ├── Dashboard.tsx     # Server status, charts, player tracking, events
+│   │   ├── Connection.tsx    # Connection manager with copy buttons (NEW)
+│   │   ├── Console.tsx       # Live terminal
+│   │   ├── Players.tsx       # Player list, roles, bans
+│   │   ├── Worlds.tsx        # World management
+│   │   ├── MapView.tsx       # Live world map (BlueMap/Dynmap) (NEW)
+│   │   ├── Plugins.tsx       # Plugin browser
+│   │   ├── Backups.tsx       # Backup manager
+│   │   ├── Diagnostics.tsx   # Server diagnostics + health check (NEW)
+│   │   └── Settings.tsx      # All config + version selector + Playit.gg
 │   ├── components/
-│   │   ├── Layout.tsx      # App shell, sidebar, header
+│   │   ├── Layout.tsx        # App shell, sidebar, header
 │   │   ├── UpdateBanner.tsx  # Auto-update UI
-│   │   ├── NotificationPanel.tsx  # Notification drawer
-│   │   └── ModelViewer/    # Three.js components
+│   │   └── NotificationPanel.tsx  # Notification drawer
 │   ├── hooks/
 │   │   ├── useAuth.tsx     # Auth context
 │   │   ├── useSocket.ts    # Socket.IO connection
@@ -224,8 +231,8 @@ MineControlOS/
 │   └── lib/
 │       └── api.ts          # Typed API client
 ├── minecraft/         # Server runtime directory
-│   ├── server.jar     # PaperMC 1.21.1
-│   ├── plugins/       # Server plugins
+│   ├── server.jar     # PaperMC (version selectable)
+│   ├── plugins/       # Server plugins (BlueMap/Dynmap, etc.)
 │   ├── worlds/        # World data
 │   ├── backups/       # Local backups
 │   └── logs/          # Server logs
@@ -243,6 +250,12 @@ MineControlOS/
 | POST | `/api/server/start` | server.start | Start Minecraft server |
 | POST | `/api/server/stop` | server.stop | Stop server |
 | POST | `/api/server/restart` | server.restart | Restart server |
+| GET | `/api/server/versions` | auth | List available PaperMC versions |
+| POST | `/api/server/version` | server.start | Download and switch Paper version |
+| GET | `/api/server/connection` | auth | Local, LAN, Public IP, Playit.gg info |
+| GET | `/api/server/diagnostics` | auth | Firewall, port binding, CGNAT checks |
+| POST | `/api/server/health-check` | auth | Full connectivity test |
+| GET | `/api/server/events` | auth | Recent server events |
 | GET | `/api/server/properties` | auth | Read server.properties |
 | PUT | `/api/server/properties` | server.start | Update server.properties |
 | GET | `/api/server/config` | auth | Read app config (SQLite) |
@@ -265,6 +278,8 @@ Available from the Plugins page:
 - **Vault** — Economy/permissions API
 - **ClearLag** — Lag reduction
 - **CoreProtect** — Block logging and rollback
+- **BlueMap** — 3D world map viewer
+- **Dynmap** — Google-maps-style world map
 
 ---
 
@@ -282,12 +297,13 @@ The app checks GitHub for new releases on startup. When an update is found:
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | React 18, TypeScript, Vite, Tailwind CSS, Recharts, Three.js |
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS, Recharts |
 | Backend | Node.js, Express, Socket.IO |
 | Database | SQLite (better-sqlite3) |
 | Desktop | Electron 28, electron-builder, electron-updater |
-| Minecraft | PaperMC 1.21.1 |
-| 3D | React Three Fiber, Three.js |
+| Minecraft | PaperMC (version selectable: 1.20.1 - latest) |
+| Tunneling | Playit.gg |
+| World Maps | BlueMap / Dynmap |
 
 ---
 
