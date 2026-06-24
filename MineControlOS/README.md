@@ -8,7 +8,7 @@
     <img src="https://img.shields.io/badge/Join_Discord-5865F2?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.10-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.11-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -24,7 +24,7 @@
 
 ## 📥 Download
 
-Latest version: **v1.0.10** — [Auto-updates from within the app]
+Latest version: **v1.0.11** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -39,7 +39,7 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 
 ## 🚀 Features
 
-### v1.0.10 — New in this release
+### v1.0.11 — New in this release
 
 - **Minecraft Version Selector** — Choose from Paper 1.20.1, 1.20.4, 1.21, 1.21.1, 1.21.5, or Latest. Auto-downloads the correct Paper jar.
 - **Playit.gg Tunnel Integration** — Bypass CGNAT and port forwarding. Generate a DNS address friends can use directly.
