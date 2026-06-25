@@ -16,6 +16,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Wifi,
   Map,
   Stethoscope,
@@ -23,6 +24,8 @@ import {
   Github,
   Home,
   Plus,
+  Layers,
+  CheckCircle,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
@@ -32,6 +35,7 @@ import toast from 'react-hot-toast';
 
 const navItems = [
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { path: '/servers', label: 'Servers', icon: Layers },
   { path: '/players', label: 'Players', icon: Users },
   { path: '/console', label: 'Console', icon: Terminal },
   { path: '/worlds', label: 'Worlds', icon: Globe },
@@ -51,8 +55,46 @@ export default function Layout() {
   const [collapsed, setCollapsed] = useState(false);
   const [serverRunning, setServerRunning] = useState(false);
   const [serverStarting, setServerStarting] = useState(false);
+  const [serverList, setServerList] = useState<any[]>([]);
+  const [activeServerName, setActiveServerName] = useState('');
+  const [showServerDropdown, setShowServerDropdown] = useState(false);
   const { socket, connected } = useSocket();
   const lastSocketUpdate = useRef(0);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const fetchServers = async () => {
+      try {
+        const data = await api.getServers();
+        setServerList(data.servers);
+        const active = data.servers.find((s: any) => s.id === data.activeServerId);
+        setActiveServerName(active?.name || '');
+      } catch {}
+    };
+    fetchServers();
+    const interval = setInterval(fetchServers, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    const handleClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setShowServerDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  const handleSwitchServer = async (id: string) => {
+    try {
+      await api.selectServer(id);
+      setShowServerDropdown(false);
+      window.location.reload();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
 
   useEffect(() => {
     const fetchStatus = async () => {
@@ -130,6 +172,39 @@ export default function Layout() {
         {/* Server Status Bar */}
         {!collapsed && (
           <div className="px-3 py-3 border-b border-surface-800">
+            {/* Active Server Dropdown */}
+            <div className="relative mb-2" ref={dropdownRef}>
+              <button
+                onClick={() => setShowServerDropdown(!showServerDropdown)}
+                className="flex items-center gap-2 w-full px-2 py-1.5 rounded-lg bg-surface-800/50 border border-surface-700/50 hover:border-surface-600 transition-all text-left"
+              >
+                <Layers size={14} className="text-minecraft-400 shrink-0" />
+                <span className="text-xs text-gray-200 truncate flex-1">
+                  {activeServerName || 'No Server'}
+                </span>
+                <ChevronDown size={12} className={`text-gray-500 transition-transform ${showServerDropdown ? 'rotate-180' : ''}`} />
+              </button>
+              {showServerDropdown && (
+                <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-surface-800 border border-surface-700 rounded-lg shadow-xl py-1 max-h-48 overflow-y-auto">
+                  {serverList.map(s => (
+                    <button
+                      key={s.id}
+                      onClick={() => handleSwitchServer(s.id)}
+                      className={`flex items-center gap-2 w-full px-3 py-2 text-xs text-left transition-colors ${
+                        s.name === activeServerName
+                          ? 'text-minecraft-400 bg-minecraft-500/10'
+                          : 'text-gray-400 hover:text-gray-200 hover:bg-surface-700/50'
+                      }`}
+                    >
+                      <Server size={12} className="shrink-0" />
+                      <span className="truncate flex-1">{s.name}</span>
+                      {s.name === activeServerName && <CheckCircle size={12} className="text-minecraft-400 shrink-0" />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div className="flex items-center gap-2 mb-2">
               <span className={statusDotClass} />
               <span className="text-xs text-gray-400">
@@ -162,6 +237,19 @@ export default function Layout() {
                 <RotateCcw className="w-3.5 h-3.5 mx-auto" />
               </button>
             </div>
+          </div>
+        )}
+
+        {collapsed && (
+          <div className="px-2 py-3 border-b border-surface-800 flex flex-col items-center gap-2">
+            <div className={statusDotClass} />
+            <button
+              onClick={() => navigate('/servers')}
+              className="p-1.5 text-gray-400 hover:text-minecraft-400 transition-colors"
+              title="Servers"
+            >
+              <Layers size={16} />
+            </button>
           </div>
         )}
 

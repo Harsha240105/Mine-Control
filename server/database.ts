@@ -187,7 +187,35 @@ function initializeSchema() {
       github_url TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS servers (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      port INTEGER NOT NULL DEFAULT 25565,
+      directory TEXT NOT NULL,
+      javaPath TEXT NOT NULL DEFAULT 'java',
+      jarFile TEXT NOT NULL DEFAULT 'server.jar',
+      minRam TEXT NOT NULL DEFAULT '2G',
+      maxRam TEXT NOT NULL DEFAULT '8G',
+      motd TEXT NOT NULL DEFAULT '§bMineControl OS §7- §fMinecraft Server',
+      difficulty TEXT NOT NULL DEFAULT 'normal',
+      gamemode TEXT NOT NULL DEFAULT 'survival',
+      pvp INTEGER NOT NULL DEFAULT 1,
+      maxPlayers INTEGER NOT NULL DEFAULT 4,
+      viewDistance INTEGER NOT NULL DEFAULT 10,
+      onlineMode INTEGER NOT NULL DEFAULT 0,
+      autoRestart INTEGER NOT NULL DEFAULT 1,
+      autoBackup INTEGER NOT NULL DEFAULT 1,
+      whitelistEnabled INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'stopped',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
+
+  // Migrate legacy server_config to a named server entry
+  migrateDefaultServer();
 
   // Seed default roles if they don't exist
   const defaultRoles = [
@@ -219,6 +247,55 @@ function initializeSchema() {
       'INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)'
     ).run(uuidv4(), 'owner', hash, 'Owner');
   }
+}
+
+function migrateDefaultServer() {
+  const count = db.prepare('SELECT COUNT(*) as c FROM servers').get() as any;
+  if (count.c > 0) return;
+
+  const config: Record<string, string> = {};
+  const rows = db.prepare('SELECT key, value FROM server_config').all() as any[];
+  for (const row of rows) {
+    config[row.key] = row.value;
+  }
+
+  const existingDir = process.env.MINECRAFT_DIR || require('./paths').resolvePath('minecraft');
+  const id = uuidv4();
+  const name = config.serverName || 'My Server';
+  const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'my-server';
+
+  db.prepare(`
+    INSERT INTO servers (id, name, slug, port, directory, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, pvp, maxPlayers, viewDistance, onlineMode, autoRestart, autoBackup, whitelistEnabled, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped')
+  `).run(
+    id, name, slug,
+    parseInt(config.port || '25565'),
+    existingDir,
+    config.javaPath || 'java',
+    config.jarFile || 'server.jar',
+    config.minRam || '2G',
+    config.maxRam || '8G',
+    config.motd || '§bMineControl OS §7- §fMinecraft Server',
+    config.difficulty || 'normal',
+    config.gamemode || 'survival',
+    config.pvp !== 'false' ? 1 : 0,
+    parseInt(config.maxPlayers || '4'),
+    parseInt(config.viewDistance || '10'),
+    config.onlineMode === 'true' ? 1 : 0,
+    config.autoRestart !== 'false' ? 1 : 0,
+    config.autoBackup !== 'false' ? 1 : 0,
+    config.whitelistEnabled !== 'false' ? 1 : 0,
+  );
+
+  db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('active_server_id', ?)").run(id);
+}
+
+export function generateSlug(name: string): string {
+  return name.toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'server';
 }
 
 export function closeDatabase() {

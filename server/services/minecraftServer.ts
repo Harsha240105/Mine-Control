@@ -4,7 +4,7 @@ import fs from 'fs';
 import net from 'net';
 import { EventEmitter } from 'events';
 import { getDatabase } from '../database';
-import { resolveMinecraftDir } from '../paths';
+import { resolveMinecraftDir, setMinecraftDir } from '../paths';
 
 export interface MinecraftEventMap {
   'server:output': (data: string) => void;
@@ -35,6 +35,13 @@ class MinecraftServerManager extends EventEmitter {
   constructor() {
     super();
     this.serverDir = resolveMinecraftDir();
+    this.ensureDirectories();
+  }
+
+  loadServer(directory: string) {
+    if (this.running || this.starting) return;
+    this.serverDir = directory;
+    setMinecraftDir(directory);
     this.ensureDirectories();
   }
 
@@ -473,6 +480,33 @@ class MinecraftServerManager extends EventEmitter {
 
   getConfig() {
     const db = getDatabase();
+    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+    let server: any = null;
+    if (activeId) {
+      server = db.prepare('SELECT * FROM servers WHERE id = ?').get(activeId) as any;
+    }
+
+    if (server) {
+      return {
+        javaPath: server.javaPath || 'java',
+        jarFile: server.jarFile || 'server.jar',
+        minRam: server.minRam || '2G',
+        maxRam: server.maxRam || '8G',
+        port: server.port || 25565,
+        autoRestart: !!server.autoRestart,
+        autoBackup: !!server.autoBackup,
+        backupInterval: parseInt('60'),
+        backupEncryption: false,
+        whitelistEnabled: !!server.whitelistEnabled,
+        motd: server.motd || '§bMineControl OS §7- §fMinecraft Server',
+        difficulty: server.difficulty || 'normal',
+        gamemode: server.gamemode || 'survival',
+        pvp: !!server.pvp,
+        maxPlayers: server.maxPlayers || 4,
+      };
+    }
+
+    // Fallback to legacy server_config
     const config: Record<string, string> = {};
     const rows = db.prepare('SELECT key, value FROM server_config').all() as any[];
     for (const row of rows) {
@@ -500,6 +534,36 @@ class MinecraftServerManager extends EventEmitter {
 
   updateConfig(key: string, value: string) {
     const db = getDatabase();
+    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+    if (activeId) {
+      // Map common keys to server columns
+      const columnMap: Record<string, string> = {
+        javaPath: 'javaPath',
+        jarFile: 'jarFile',
+        minRam: 'minRam',
+        maxRam: 'maxRam',
+        port: 'port',
+        motd: 'motd',
+        difficulty: 'difficulty',
+        gamemode: 'gamemode',
+        pvp: 'pvp',
+        maxPlayers: 'maxPlayers',
+        viewDistance: 'viewDistance',
+        onlineMode: 'onlineMode',
+        autoRestart: 'autoRestart',
+        autoBackup: 'autoBackup',
+        whitelistEnabled: 'whitelistEnabled',
+      };
+      const col = columnMap[key];
+      if (col) {
+        let val = value;
+        if (['pvp', 'onlineMode', 'autoRestart', 'autoBackup', 'whitelistEnabled'].includes(col)) {
+          val = value === 'true' || value === '1' ? '1' : '0';
+        }
+        db.prepare(`UPDATE servers SET ${col} = ?, updated_at = datetime('now') WHERE id = ?`).run(val, activeId);
+        return;
+      }
+    }
     db.prepare('INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)').run(key, value);
   }
 

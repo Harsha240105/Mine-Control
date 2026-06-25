@@ -12,10 +12,11 @@ import { rateLimiter, verifyToken } from './middleware/auth';
 import { getDatabase } from './database';
 import { minecraftServer } from './services/minecraftServer';
 import { backupService } from './services/backup';
-import { BASE_PATH, resolvePath } from './paths';
+import { BASE_PATH, resolvePath, setMinecraftDir, getMinecraftDir } from './paths';
 
 import authRoutes from './routes/auth';
 import serverRoutes from './routes/server';
+import serverManagerRoutes from './routes/servers';
 import playerRoutes from './routes/players';
 import worldRoutes from './routes/worlds';
 import pluginRoutes from './routes/plugins';
@@ -49,6 +50,7 @@ app.use(rateLimiter(60000, 200));
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/server', serverRoutes);
+app.use('/api/servers', serverManagerRoutes);
 app.use('/api/players', playerRoutes);
 app.use('/api/worlds', worldRoutes);
 app.use('/api/plugins', pluginRoutes);
@@ -186,11 +188,42 @@ process.on('unhandledRejection', (reason) => {
   console.error('[Unhandled Rejection]', reason);
 });
 
+// Initialize active server
+const db = getDatabase();
+const activeRow = db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any;
+const activeId = activeRow?.value;
+if (activeId) {
+  const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(activeId) as any;
+  if (server) {
+    setMinecraftDir(server.directory);
+    minecraftServer.loadServer(server.directory);
+    console.log(`[Server] Active: ${server.name} (${server.slug})`);
+  }
+} else {
+  // Create default server from existing config or use default minecraft dir
+  const count = db.prepare('SELECT COUNT(*) as c FROM servers').get() as any;
+  if (count.c === 0) {
+    const { v4 } = require('uuid');
+    const id = v4();
+    const portRow = db.prepare("SELECT value FROM server_config WHERE key = 'port'").get() as any;
+    const port = parseInt(portRow?.value || '25565');
+    const dir = getMinecraftDir();
+    db.prepare(`
+      INSERT INTO servers (id, name, slug, port, directory, status)
+      VALUES (?, 'My Server', 'my-server', ?, ?, 'stopped')
+    `).run(id, Number.isNaN(port) ? 25565 : port, dir);
+    db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('active_server_id', ?)").run(id);
+    setMinecraftDir(dir);
+    minecraftServer.loadServer(dir);
+    console.log(`[Server] Created default server at ${dir}`);
+  }
+}
+
 // Start server
 server.listen(PORT, () => {
   console.log(`
   ╔══════════════════════════════════════════╗
-  ║         MineControl OS v1.0.13          ║
+  ║         MineControl OS v1.0.15          ║
   ║     Minecraft Server Management         ║
   ║══════════════════════════════════════════║
   ║  Server:  http://localhost:${PORT}         ║

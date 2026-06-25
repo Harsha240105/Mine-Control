@@ -81,6 +81,24 @@ export const api = {
       body: JSON.stringify(props),
     }),
 
+  // Servers (multi-server)
+  getServers: () => request<{ servers: any[]; activeServerId: string }>('/servers'),
+  getServer: (id: string) => request<any>(`/servers/${id}`),
+  createServer: (data: any) =>
+    request<any>('/servers', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  updateServer: (id: string, data: any) =>
+    request<any>(`/servers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+  deleteServer: (id: string) =>
+    request<{ success: boolean }>(`/servers/${id}`, { method: 'DELETE' }),
+  selectServer: (id: string) =>
+    request<any>(`/servers/${id}/select`, { method: 'POST' }),
+
   // Connection Info
   getConnectionInfo: () => request<any>('/server/connection'),
 

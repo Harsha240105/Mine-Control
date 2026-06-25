@@ -18,6 +18,7 @@ import MapView from './pages/MapView';
 import Diagnostics from './pages/Diagnostics';
 import Guide from './pages/Guide';
 import GitHub from './pages/GitHub';
+import Servers from './pages/Servers';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -79,6 +80,7 @@ export default function App() {
             }
           >
             <Route path="dashboard" element={<Dashboard />} />
+            <Route path="servers" element={<Servers />} />
             <Route path="players" element={<Players />} />
             <Route path="console" element={<Console />} />
             <Route path="worlds" element={<Worlds />} />
