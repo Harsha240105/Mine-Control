@@ -19,6 +19,9 @@ import Diagnostics from './pages/Diagnostics';
 import Guide from './pages/Guide';
 import GitHub from './pages/GitHub';
 import Servers from './pages/Servers';
+import Compatibility from './pages/Compatibility';
+import Import from './pages/Import';
+import AutoUpdater from './components/AutoUpdater';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -53,6 +56,7 @@ export default function App() {
             },
           }}
         />
+        <AutoUpdater />
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route
@@ -72,6 +76,14 @@ export default function App() {
             }
           />
           <Route
+            path="/import"
+            element={
+              <ProtectedRoute>
+                <Import />
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/"
             element={
               <ProtectedRoute>
@@ -87,6 +99,7 @@ export default function App() {
             <Route path="plugins" element={<Plugins />} />
             <Route path="backups" element={<Backups />} />
             <Route path="connection" element={<Connection />} />
+            <Route path="compatibility" element={<Compatibility />} />
             <Route path="map" element={<MapView />} />
             <Route path="diagnostics" element={<Diagnostics />} />
             <Route path="guide" element={<Guide />} />

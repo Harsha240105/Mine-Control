@@ -100,6 +100,19 @@ export const api = {
   // Connection Info
   getConnectionInfo: () => request<any>('/server/connection'),
 
+  // Compatibility Manager
+  getCompatibilityStatus: () => request<any>('/compatibility/status'),
+  checkCompatibility: (settings: { mode: string; allowMultipleVersions: boolean }) =>
+    request<any>('/compatibility/check', {
+      method: 'POST',
+      body: JSON.stringify(settings),
+    }),
+  configureCompatibility: (settings: { mode: string; allowMultipleVersions: boolean }) =>
+    request<any>('/compatibility/configure', {
+      method: 'POST',
+      body: JSON.stringify(settings),
+    }),
+
   // Diagnostics
   getDiagnostics: () => request<any[]>('/server/diagnostics'),
   healthCheck: () => request<any>('/server/health-check'),
@@ -254,4 +267,17 @@ export const api = {
       body: JSON.stringify(data),
     }),
   getGitHubIssues: () => request<any[]>('/github/issues'),
+
+  // Import
+  importAnalyze: (filePath: string) =>
+    request<any>('/import/analyze', {
+      method: 'POST',
+      body: JSON.stringify({ filePath }),
+    }),
+  importExecute: (filePath: string, config: any) =>
+    request<any>('/import/execute', {
+      method: 'POST',
+      body: JSON.stringify({ filePath, config }),
+    }),
+  getSupportedFormats: () => request<any>('/import/supported-formats'),
 };

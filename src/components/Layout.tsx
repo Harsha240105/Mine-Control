@@ -26,6 +26,7 @@ import {
   Plus,
   Layers,
   CheckCircle,
+  Cable,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
@@ -42,6 +43,7 @@ const navItems = [
   { path: '/plugins', label: 'Plugins', icon: Puzzle },
   { path: '/backups', label: 'Backups', icon: HardDrive },
   { path: '/connection', label: 'Connection', icon: Wifi },
+  { path: '/compatibility', label: 'Compatibility', icon: Cable },
   { path: '/map', label: 'World Map', icon: Map },
   { path: '/diagnostics', label: 'Diagnostics', icon: Stethoscope },
   { path: '/guide', label: 'Guide', icon: BookOpen },

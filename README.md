@@ -5,7 +5,7 @@
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.13-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.17-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -21,7 +21,7 @@
 
 ## 📥 Download
 
-Latest version: **v1.0.13** — [Auto-updates from within the app]
+Latest version: **v1.0.17** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -36,7 +36,10 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 
 ## 🚀 Features
 
-### v1.0.13 — New in this release
+### v1.0.17 — New in this release
+- **Import Existing Server UI** — Easily import existing Minecraft servers from ZIP files or uncompressed folders with the new step-by-step wizard.
+- **GitHub Release Automation** — Full CI/CD pipeline with GitHub Actions for building Windows, macOS, and Linux binaries automatically on release.
+- **In-App Auto-Updater UI** — Get notified when a new version of MineControl OS is available and install it seamlessly with one click.
 - **Beginner's Guide Tab** — Step-by-step guide explaining everything: start server, change versions, add plugins, use map, share join link, premium/cracked modes, and more.
 - **GitHub Community Hub** — Submit bug reports and feature requests directly from the app with image/video attachments up to 25MB/100MB.
 - **Land Claim System** — Track player claims and boundaries from the app with full database support.

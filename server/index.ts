@@ -24,6 +24,7 @@ import backupRoutes from './routes/backup';
 import claimRoutes from './routes/claims';
 import buildRoutes from './routes/builds';
 import githubRoutes from './routes/github';
+import compatibilityRoutes from './routes/compatibility';
 
 const app = express();
 const server = http.createServer(app);
@@ -58,6 +59,7 @@ app.use('/api/backups', backupRoutes);
 app.use('/api/claims', claimRoutes);
 app.use('/api/builds', buildRoutes);
 app.use('/api/github', githubRoutes);
+app.use('/api/compatibility', compatibilityRoutes);
 
 // Global error handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

@@ -69,7 +69,7 @@ export default function Welcome() {
             <p className="text-xs text-gray-500 mt-1">Browse for an existing server folder</p>
           </button>
 
-          <button className="group relative p-5 rounded-xl bg-surface-800/50 border border-surface-700/50 hover:border-surface-600 transition-all duration-300 text-left">
+          <button onClick={() => navigate('/import')} className="group relative p-5 rounded-xl bg-surface-800/50 border border-surface-700/50 hover:border-surface-600 transition-all duration-300 text-left">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-10 h-10 rounded-lg bg-surface-700/50 flex items-center justify-center">
                 <Download className="w-5 h-5 text-gray-400" />

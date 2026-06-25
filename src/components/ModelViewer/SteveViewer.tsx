@@ -8,7 +8,7 @@ export default function SteveViewer() {
   const sceneRef = useRef<{
     scene: THREE.Scene;
     camera: THREE.PerspectiveCamera;
-    renderer: THREE.Renderer;
+    renderer: THREE.WebGLRenderer;
     controls: OrbitControls;
     animRef: number;
     bodyParts: { group: THREE.Group; pivot: THREE.Object3D }[];
