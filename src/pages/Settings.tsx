@@ -498,7 +498,7 @@ export default function Settings() {
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <span className="text-gray-500">Version:</span>
-            <span className="ml-2 text-gray-300">MineControl OS v1.0.16</span>
+            <span className="ml-2 text-gray-300">MineControl OS v1.0.17</span>
           </div>
           <div>
             <span className="text-gray-500">User:</span>
