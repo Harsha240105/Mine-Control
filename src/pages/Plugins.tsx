@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Puzzle, Plus, Trash2, Power, PowerOff, Download, ExternalLink } from 'lucide-react';
+import { Puzzle, Plus, Trash2, Power, PowerOff, Download, ExternalLink, Search, Star, Shield, Wifi, Globe, BookOpen } from 'lucide-react';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 
@@ -13,20 +13,52 @@ interface Plugin {
   main: string;
 }
 
-const POPULAR_PLUGINS = [
-  { name: 'LuckPerms', url: 'https://download.luckperms.net/latest/bukkit/loader/LuckPerms-Bukkit.jar' },
-  { name: 'EssentialsX', url: 'https://ci.ender.zone/job/EssentialsX/lastSuccessfulBuild/artifact/jars/EssentialsX-2.20.1.jar' },
-  { name: 'WorldEdit', url: 'https://dev.bukkit.org/projects/worldedit/files/latest' },
-  { name: 'Vault', url: 'https://github.com/MilkBowl/Vault/releases/download/1.7.3/Vault.jar' },
-  { name: 'ClearLag', url: 'https://github.com/galaxydevelopment/clearlag/releases/latest' },
-  { name: 'CoreProtect', url: 'https://www.coreprotect.de/downloads/' },
+const SAFE_PLUGIN_SOURCES = [
+  {
+    name: 'Hangar (PaperMC)', url: 'https://hangar.papermc.io', desc: 'Official PaperMC plugin repository',
+    badge: 'Recommended', type: 'repository',
+  },
+  {
+    name: 'Modrinth', url: 'https://modrinth.com/plugins', desc: 'Modern open-source mod & plugin platform',
+    badge: 'Safe', type: 'repository',
+  },
+  {
+    name: 'SpigotMC', url: 'https://www.spigotmc.org/resources/', desc: 'Largest Minecraft server plugin marketplace',
+    badge: 'Popular', type: 'marketplace',
+  },
+  {
+    name: 'BuiltByBit', url: 'https://builtbybit.com/resources/', desc: 'Premium plugin marketplace',
+    badge: 'Premium', type: 'marketplace',
+  },
 ];
+
+const POPULAR_PLUGINS = [
+  { name: 'LuckPerms', desc: 'Best permissions plugin', url: 'https://hangar.papermc.io/api/v1/projects/LuckPerms/versions/latest/download', source: 'Hangar', category: 'Admin Tools' },
+  { name: 'EssentialsX', desc: 'Essential server commands & economy', url: 'https://hangar.papermc.io/api/v1/projects/EssentialsX/versions/latest/download', source: 'Hangar', category: 'Admin Tools' },
+  { name: 'WorldEdit', desc: 'Powerful in-game world editor', url: 'https://hangar.papermc.io/api/v1/projects/WorldEdit/versions/latest/download', source: 'Hangar', category: 'World Management' },
+  { name: 'BlueMap', desc: '3D web map viewer', url: 'https://hangar.papermc.io/api/v1/projects/BlueMap/versions/latest/download', source: 'Hangar', category: 'Map & Visualization' },
+  { name: 'CoreProtect', desc: 'Block logging & rollback system', url: 'https://hangar.papermc.io/api/v1/projects/CoreProtect/versions/latest/download', source: 'Hangar', category: 'Protection' },
+  { name: 'Geyser', desc: 'Allow Bedrock players to join', url: 'https://hangar.papermc.io/api/v1/projects/Geyser/versions/latest/download', source: 'Hangar', category: 'Cross-Platform' },
+  { name: 'ViaVersion', desc: 'Cross-version protocol support', url: 'https://hangar.papermc.io/api/v1/projects/ViaVersion/versions/latest/download', source: 'Hangar', category: 'Compatibility' },
+  { name: 'GriefPrevention', desc: 'Land claiming & grief protection', url: 'https://hangar.papermc.io/api/v1/projects/GriefPrevention/versions/latest/download', source: 'Hangar', category: 'Protection' },
+  { name: 'Dynmap', desc: 'Classic web map viewer', url: 'https://hangar.papermc.io/api/v1/projects/Dynmap/versions/latest/download', source: 'Hangar', category: 'Map & Visualization' },
+  { name: 'Vault', desc: 'Economy & permissions API layer', url: 'https://hangar.papermc.io/api/v1/projects/Vault/versions/latest/download', source: 'Hangar', category: 'API & Libraries' },
+  { name: 'PlaceholderAPI', desc: 'Placeholder expansion system', url: 'https://hangar.papermc.io/api/v1/projects/PlaceholderAPI/versions/latest/download', source: 'Hangar', category: 'API & Libraries' },
+  { name: 'AuthMe', desc: 'Login & authentication system', url: 'https://hangar.papermc.io/api/v1/projects/AuthMe/versions/latest/download', source: 'Hangar', category: 'Security' },
+  { name: 'WorldGuard', desc: 'Region protection & management', url: 'https://hangar.papermc.io/api/v1/projects/WorldGuard/versions/latest/download', source: 'Hangar', category: 'Protection' },
+  { name: 'Multiverse-Core', desc: 'Multi-world management', url: 'https://hangar.papermc.io/api/v1/projects/Multiverse-Core/versions/latest/download', source: 'Hangar', category: 'World Management' },
+  { name: 'ProtocolLib', desc: 'Packet handling library', url: 'https://hangar.papermc.io/api/v1/projects/ProtocolLib/versions/latest/download', source: 'Hangar', category: 'API & Libraries' },
+];
+
+const categories = [...new Set(POPULAR_PLUGINS.map(p => p.category))];
 
 export default function Plugins() {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [showInstall, setShowInstall] = useState(false);
   const [pluginName, setPluginName] = useState('');
   const [pluginUrl, setPluginUrl] = useState('');
+  const [search, setSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
 
   useEffect(() => {
     fetchPlugins();
@@ -39,12 +71,24 @@ export default function Plugins() {
     } catch {}
   };
 
-  const handleInstall = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleInstall = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const name = pluginName || 'Custom Plugin';
+    const url = pluginUrl || undefined;
     try {
-      await api.installPlugin(pluginName, pluginUrl || undefined);
-      toast.success(`Installing ${pluginName}...`);
-      setPluginName(''); setPluginUrl(''); setShowInstall(false);
+      await api.installPlugin(name, url);
+      toast.success(`Installing ${name}...`);
+      if (e) { setPluginName(''); setPluginUrl(''); setShowInstall(false); }
+      setTimeout(fetchPlugins, 3000);
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleQuickInstall = async (p: typeof POPULAR_PLUGINS[0]) => {
+    try {
+      await api.installPlugin(p.name, p.url);
+      toast.success(`Installing ${p.name}...`);
       setTimeout(fetchPlugins, 3000);
     } catch (err: any) {
       toast.error(err.message);
@@ -71,12 +115,18 @@ export default function Plugins() {
     }
   };
 
+  const filteredPopular = POPULAR_PLUGINS.filter(p => {
+    if (search && !p.name.toLowerCase().includes(search.toLowerCase()) && !p.desc.toLowerCase().includes(search.toLowerCase())) return false;
+    if (selectedCategory && p.category !== selectedCategory) return false;
+    return true;
+  });
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-gray-100">Plugin Manager</h2>
-          <p className="text-sm text-gray-500 mt-0.5">{plugins.length} plugins</p>
+          <p className="text-sm text-gray-500 mt-0.5">{plugins.length} plugin{plugins.length !== 1 ? 's' : ''} installed</p>
         </div>
         <button onClick={() => setShowInstall(!showInstall)} className="btn-primary flex items-center gap-2">
           <Plus size={16} />
@@ -84,6 +134,23 @@ export default function Plugins() {
         </button>
       </div>
 
+      {/* Safe Sources Info */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {SAFE_PLUGIN_SOURCES.map(src => (
+          <a key={src.name} href={src.url} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-2 p-3 rounded-lg bg-surface-800/50 border border-surface-700/50 hover:border-surface-600 transition-all group"
+          >
+            <Shield size={14} className="text-green-400 shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-medium text-gray-200 truncate">{src.name}</p>
+              <p className="text-[10px] text-gray-500 truncate">{src.desc}</p>
+            </div>
+            <ExternalLink size={12} className="text-gray-600 group-hover:text-gray-400 shrink-0" />
+          </a>
+        ))}
+      </div>
+
+      {/* Install Form */}
       {showInstall && (
         <div className="card p-5 animate-slide-in">
           <form onSubmit={handleInstall} className="space-y-4">
@@ -93,28 +160,10 @@ export default function Plugins() {
                 <input type="text" value={pluginName} onChange={(e) => setPluginName(e.target.value)} className="input" required placeholder="e.g. MyPlugin" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">Download URL (optional)</label>
-                <input type="url" value={pluginUrl} onChange={(e) => setPluginUrl(e.target.value)} className="input" placeholder="https://example.com/plugin.jar" />
+                <label className="block text-xs font-medium text-gray-400 mb-1">Download URL</label>
+                <input type="url" value={pluginUrl} onChange={(e) => setPluginUrl(e.target.value)} className="input" placeholder="https://hangar.papermc.io/..." />
               </div>
             </div>
-
-            {/* Quick Install */}
-            <div>
-              <p className="text-xs font-medium text-gray-400 mb-2">Quick Install Popular Plugins:</p>
-              <div className="flex flex-wrap gap-2">
-                {POPULAR_PLUGINS.map((p) => (
-                  <button
-                    key={p.name}
-                    type="button"
-                    onClick={() => { setPluginName(p.name); setPluginUrl(p.url); }}
-                    className="text-xs px-3 py-1.5 bg-surface-800 hover:bg-surface-700 border border-surface-700 rounded-lg text-gray-300 transition-colors"
-                  >
-                    {p.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setShowInstall(false)} className="btn-secondary">Cancel</button>
               <button type="submit" className="btn-primary">Install</button>
@@ -123,12 +172,69 @@ export default function Plugins() {
         </div>
       )}
 
+      {/* Popular Plugins */}
+      <div className="card">
+        <div className="flex items-center gap-2 mb-4">
+          <Star size={14} className="text-yellow-400" />
+          <h3 className="text-sm font-medium text-gray-200">Popular Plugins (Safe Sources)</h3>
+        </div>
+
+        <div className="flex flex-wrap gap-2 mb-4">
+          <button
+            onClick={() => setSelectedCategory('')}
+            className={`text-xs px-2.5 py-1 rounded-full transition-colors ${!selectedCategory ? 'bg-minecraft-600/20 text-minecraft-400 border border-minecraft-500/20' : 'bg-surface-800 text-gray-400 border border-surface-700 hover:border-surface-600'}`}
+          >
+            All
+          </button>
+          {categories.map(cat => (
+            <button
+              key={cat}
+              onClick={() => setSelectedCategory(cat === selectedCategory ? '' : cat)}
+              className={`text-xs px-2.5 py-1 rounded-full transition-colors ${cat === selectedCategory ? 'bg-minecraft-600/20 text-minecraft-400 border border-minecraft-500/20' : 'bg-surface-800 text-gray-400 border border-surface-700 hover:border-surface-600'}`}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+
+        <div className="relative mb-3">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search plugins..."
+            className="input pl-9 text-sm"
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+          {filteredPopular.map(p => (
+            <button
+              key={p.name}
+              onClick={() => handleQuickInstall(p)}
+              className="flex items-center gap-3 p-2.5 rounded-lg bg-surface-800/30 border border-surface-700/30 hover:border-surface-600 hover:bg-surface-800/50 transition-all text-left group"
+            >
+              <div className="w-8 h-8 rounded-lg bg-minecraft-600/20 flex items-center justify-center shrink-0">
+                <Download size={14} className="text-minecraft-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-200 truncate">{p.name}</p>
+                <p className="text-[10px] text-gray-500 truncate">{p.desc}</p>
+              </div>
+              <span className="text-[10px] text-gray-600 bg-surface-800 px-1.5 py-0.5 rounded">{p.source}</span>
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-gray-500 mt-3">
+          Plugins downloaded from Hangar (PaperMC's official repository). Always verify plugin sources for safety.
+        </p>
+      </div>
+
+      {/* Installed Plugins */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {plugins.map((plugin) => (
-          <div
-            key={plugin.name}
-            className={`card-hover ${!plugin.enabled ? 'opacity-60' : ''}`}
-          >
+          <div key={plugin.name} className={`card-hover ${!plugin.enabled ? 'opacity-60' : ''}`}>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-3">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
@@ -153,11 +259,9 @@ export default function Plugins() {
                 {plugin.enabled ? <Power size={16} /> : <PowerOff size={16} />}
               </button>
             </div>
-
-            <p className="text-xs text-gray-400 line-clamp-2 mb-3">{plugin.description}</p>
-
+            <p className="text-xs text-gray-400 line-clamp-2 mb-3">{plugin.description || 'No description'}</p>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-gray-500">by {plugin.author}</span>
+              <span className="text-gray-500">by {plugin.author || 'Unknown'}</span>
               <button
                 onClick={() => handleRemove(plugin.name)}
                 className="p-1 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
@@ -168,7 +272,6 @@ export default function Plugins() {
             </div>
           </div>
         ))}
-
         {plugins.length === 0 && (
           <div className="col-span-full card p-8 text-center text-gray-500">
             <Puzzle size={40} className="mx-auto mb-3 opacity-30" />

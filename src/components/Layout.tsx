@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import {
   LayoutDashboard,
@@ -21,6 +21,8 @@ import {
   Stethoscope,
   BookOpen,
   Github,
+  Home,
+  Plus,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
@@ -45,6 +47,7 @@ const navItems = [
 
 export default function Layout() {
   const { user, logout, isOwner } = useAuth();
+  const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(false);
   const [serverRunning, setServerRunning] = useState(false);
   const [serverStarting, setServerStarting] = useState(false);
@@ -162,8 +165,30 @@ export default function Layout() {
           </div>
         )}
 
+        {/* Servers Button */}
+        {!collapsed && (
+          <div className="px-3 pt-2 pb-1">
+            <button
+              onClick={() => navigate('/')}
+              className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm text-minecraft-400 bg-minecraft-600/10 border border-minecraft-500/20 hover:bg-minecraft-600/20 transition-all"
+            >
+              <Home size={16} />
+              <span>Server Home</span>
+            </button>
+          </div>
+        )}
+
         {/* Nav Items */}
         <nav className="flex-1 py-2 overflow-y-auto">
+          {collapsed && (
+            <button
+              onClick={() => navigate('/')}
+              className="flex items-center justify-center w-full px-2 py-2 text-gray-400 hover:text-minecraft-400 transition-colors"
+              title="Server Home"
+            >
+              <Home size={18} />
+            </button>
+          )}
           {navItems.map((item) => (
             <NavLink
               key={item.path}
@@ -222,7 +247,7 @@ export default function Layout() {
             <UpdateBanner />
             <NotificationPanel />
             <span className="text-xs text-gray-500">
-              v1.0.13
+              v1.0.14
             </span>
           </div>
         </header>

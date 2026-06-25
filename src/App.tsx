@@ -4,6 +4,8 @@ import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import Welcome from './pages/Welcome';
+import Wizard from './pages/Wizard';
 import Dashboard from './pages/Dashboard';
 import Players from './pages/Players';
 import Console from './pages/Console';
@@ -46,6 +48,7 @@ export default function App() {
               background: '#1e293b',
               color: '#f1f5f9',
               border: '1px solid #334155',
+              borderRadius: '12px',
             },
           }}
         />
@@ -55,11 +58,26 @@ export default function App() {
             path="/"
             element={
               <ProtectedRoute>
+                <WelcomeWrapper />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/wizard"
+            element={
+              <ProtectedRoute>
+                <Wizard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/"
+            element={
+              <ProtectedRoute>
                 <Layout />
               </ProtectedRoute>
             }
           >
-            <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="players" element={<Players />} />
             <Route path="console" element={<Console />} />
@@ -77,4 +95,19 @@ export default function App() {
       </AuthProvider>
     </BrowserRouter>
   );
+}
+
+function WelcomeWrapper() {
+  const wizardComplete = localStorage.getItem('mc_wizard_complete') === 'true';
+  const hasServers = (() => {
+    try {
+      const s = localStorage.getItem('mc_servers');
+      return s && JSON.parse(s).length > 0;
+    } catch { return false; }
+  })();
+
+  if (wizardComplete || hasServers) {
+    return <Navigate to="/dashboard" replace />;
+  }
+  return <Welcome />;
 }
