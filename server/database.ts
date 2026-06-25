@@ -194,6 +194,8 @@ function initializeSchema() {
       slug TEXT UNIQUE NOT NULL,
       port INTEGER NOT NULL DEFAULT 25565,
       directory TEXT NOT NULL,
+      version TEXT DEFAULT '',
+      version_source TEXT DEFAULT '',
       javaPath TEXT NOT NULL DEFAULT 'java',
       jarFile TEXT NOT NULL DEFAULT 'server.jar',
       minRam TEXT NOT NULL DEFAULT '2G',
@@ -216,6 +218,12 @@ function initializeSchema() {
 
   // Migrate legacy server_config to a named server entry
   migrateDefaultServer();
+
+  // Add version columns to existing servers (schema migration)
+  try { db.exec('ALTER TABLE servers ADD COLUMN version TEXT DEFAULT \'\''); } catch {}
+  try { db.exec('ALTER TABLE servers ADD COLUMN version_source TEXT DEFAULT \'\''); } catch {}
+  // Populate version/source from jarFile for existing rows
+  db.exec("UPDATE servers SET version = REPLACE(REPLACE(REPLACE(jarFile, 'paper-', ''), 'vanilla-', ''), '.jar', ''), version_source = CASE WHEN jarFile LIKE 'paper-%' THEN 'PaperMC' WHEN jarFile LIKE 'vanilla-%' THEN 'Mojang' ELSE '' END WHERE version = '' OR version IS NULL");
 
   // Seed default roles if they don't exist
   const defaultRoles = [
@@ -264,15 +272,28 @@ function migrateDefaultServer() {
   const name = config.serverName || 'My Server';
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'my-server';
 
+  // Extract version info from jarFile
+  const jarFile = config.jarFile || 'server.jar';
+  let version = '';
+  let versionSource = '';
+  if (jarFile.startsWith('paper-')) {
+    version = jarFile.replace('paper-', '').replace('.jar', '');
+    versionSource = 'PaperMC';
+  } else if (jarFile.startsWith('vanilla-')) {
+    version = jarFile.replace('vanilla-', '').replace('.jar', '');
+    versionSource = 'Mojang';
+  }
+
   db.prepare(`
-    INSERT INTO servers (id, name, slug, port, directory, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, pvp, maxPlayers, viewDistance, onlineMode, autoRestart, autoBackup, whitelistEnabled, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped')
+    INSERT INTO servers (id, name, slug, port, directory, version, version_source, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, pvp, maxPlayers, viewDistance, onlineMode, autoRestart, autoBackup, whitelistEnabled, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped')
   `).run(
     id, name, slug,
     parseInt(config.port || '25565'),
     existingDir,
+    version, versionSource,
     config.javaPath || 'java',
-    config.jarFile || 'server.jar',
+    jarFile,
     config.minRam || '2G',
     config.maxRam || '8G',
     config.motd || '§bMineControl OS §7- §fMinecraft Server',

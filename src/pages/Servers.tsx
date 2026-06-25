@@ -14,6 +14,8 @@ interface ServerRecord {
   slug: string;
   port: number;
   directory: string;
+  version: string;
+  version_source: string;
   javaPath: string;
   jarFile: string;
   minRam: string;
@@ -80,9 +82,14 @@ export default function Servers() {
     if (!window.confirm(`Delete server "${server.name}"?\nThis will NOT remove the server files from disk.`)) return;
 
     try {
-      await api.deleteServer(id);
-      setServers(prev => prev.filter(s => s.id !== id));
-      toast.success(`Deleted ${server.name}`);
+      const result = await api.deleteServer(id) as any;
+      if (result.switchedTo) {
+        toast.success(`Deleted ${server.name}. Switched to ${result.switchedTo.name}`);
+        setTimeout(() => window.location.reload(), 1000);
+      } else {
+        setServers(prev => prev.filter(s => s.id !== id));
+        toast.success(`Deleted ${server.name}`);
+      }
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -187,11 +194,11 @@ export default function Servers() {
                   </div>
                   <div className="flex items-center gap-1.5 text-gray-500">
                     <Cpu size={12} />
-                    {server.minRam}/{server.maxRam}
+                    {server.version || '?'}
                   </div>
                   <div className="flex items-center gap-1.5 text-gray-500">
                     <HardDrive size={12} />
-                    {server.difficulty}
+                    {server.version_source || '?'}
                   </div>
                 </div>
 
@@ -223,15 +230,13 @@ export default function Servers() {
                     >
                       <Play size={14} />
                     </button>
-                    {!isActive && (
-                      <button
-                        onClick={() => handleDelete(server.id)}
-                        className="p-1.5 rounded-lg text-red-400/70 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                        title="Delete server"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleDelete(server.id)}
+                      className="p-1.5 rounded-lg text-red-400/70 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                      title="Delete server"
+                    >
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
               </div>

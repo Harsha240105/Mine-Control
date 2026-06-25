@@ -501,11 +501,25 @@ router.post('/health-check', authMiddleware, async (_req: AuthRequest, res) => {
 router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
   const mcDir = resolveMinecraftDir();
   const config = minecraftServer.getConfig();
-  const currentJar = config.jarFile || 'server.jar';
-  const currentVersion = currentJar
-    .replace('paper-', '')
-    .replace('vanilla-', '')
-    .replace('.jar', '');
+
+  // Read version from servers table (more reliable than parsing jar filename)
+  const db = getDatabase();
+  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+  let currentVersion = 'unknown';
+  let currentSource = 'unknown';
+  if (activeId) {
+    const server = db.prepare('SELECT version, version_source, jarFile FROM servers WHERE id = ?').get(activeId) as any;
+    if (server?.version) {
+      currentVersion = server.version;
+      currentSource = server.version_source || 'unknown';
+    } else {
+      // Fallback: parse jar filename
+      const jarFile = server?.jarFile || config.jarFile || 'server.jar';
+      currentVersion = jarFile.replace('paper-', '').replace('vanilla-', '').replace('.jar', '');
+      if (jarFile.startsWith('paper-')) currentSource = 'PaperMC';
+      else if (jarFile.startsWith('vanilla-')) currentSource = 'Mojang';
+    }
+  }
 
   // Get downloaded jars
   let downloadedJars: string[] = [];
@@ -556,7 +570,7 @@ router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
       type: 'release',
       source: 'PaperMC',
       downloaded: downloadedJars.some(d => d === jarPrefix),
-      current: currentJar === `${jarPrefix}.jar`,
+      current: currentVersion === v && currentSource === 'PaperMC',
     });
   }
 
@@ -586,7 +600,6 @@ router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
 
   for (const mv of mojangVersions) {
     if (versionSet.has(mv.id)) continue;
-    // Skip snapshots for brevity (only show release, beta, alpha, etc.)
     const displayType = typeLabels[mv.type] || mv.type;
     versionSet.add(mv.id);
     const jarPrefix = `vanilla-${mv.id}`;
@@ -596,7 +609,7 @@ router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
       typeRaw: mv.type,
       source: 'Mojang',
       downloaded: downloadedJars.some(d => d === jarPrefix),
-      current: currentJar === `${jarPrefix}.jar`,
+      current: currentVersion === mv.id && currentSource === 'Mojang',
       releaseTime: mv.releaseTime,
     });
   }
@@ -606,20 +619,14 @@ router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
     const orderA = typeOrder[a.typeRaw] ?? 99;
     const orderB = typeOrder[b.typeRaw] ?? 99;
     if (orderA !== orderB) return orderA - orderB;
-    // Within same type, sort by release time descending
     const tA = a.releaseTime || '';
     const tB = b.releaseTime || '';
     return tB.localeCompare(tA);
   });
 
-  // Also fetch the current jar info
-  let currentSource = 'unknown';
-  if (currentJar.startsWith('paper-')) currentSource = 'PaperMC';
-  else if (currentJar.startsWith('vanilla-')) currentSource = 'Mojang';
-
   res.json({
     currentVersion: currentVersion || 'unknown',
-    currentSource,
+    currentSource: currentSource || 'unknown',
     availableVersions: combined,
     downloadedJars,
   });
@@ -654,8 +661,15 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
     }
 
     minecraftServer.updateConfig('jarFile', jarFile);
-    const sourceName = usePaper ? 'Paper' : 'Mojang';
-    res.json({ success: true, message: `Switched to ${sourceName} ${version}. Start the server to apply.` });
+    // Also save version info to servers table
+    const db = getDatabase();
+    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+    if (activeId) {
+      const sourceName = usePaper ? 'PaperMC' : 'Mojang';
+      db.prepare("UPDATE servers SET version = ?, version_source = ?, updated_at = datetime('now') WHERE id = ?").run(version, sourceName, activeId);
+    }
+    const displaySource = usePaper ? 'Paper' : 'Mojang';
+    res.json({ success: true, message: `Switched to ${displaySource} ${version}. Start the server to apply.` });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }
