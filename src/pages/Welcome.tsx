@@ -11,7 +11,7 @@ export default function Welcome() {
     try {
       const stored = localStorage.getItem('mc_servers');
       if (stored) setRecentServers(JSON.parse(stored));
-    } catch {}
+    } catch { }
   }, []);
 
   const startWizard = () => {
