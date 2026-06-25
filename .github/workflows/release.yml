@@ -37,7 +37,7 @@ jobs:
       - name: Build and Publish Electron app
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npm run dist
+        run: npx electron-rebuild -f -w better-sqlite3 && npx electron-builder --publish always
         
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
