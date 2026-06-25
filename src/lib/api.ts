@@ -89,11 +89,11 @@ export const api = {
   healthCheck: () => request<any>('/server/health-check'),
 
   // Version Management
-  getAvailableVersions: () => request<any[]>('/server/versions'),
-  setServerVersion: (version: string) =>
+  getAvailableVersions: () => request<any>('/server/versions'),
+  setServerVersion: (version: string, source?: string) =>
     request<any>('/server/version', {
       method: 'POST',
-      body: JSON.stringify({ version }),
+      body: JSON.stringify({ version, source }),
     }),
 
   // Game Mode

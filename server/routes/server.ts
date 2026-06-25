@@ -12,6 +12,38 @@ import { resolveMinecraftDir } from '../paths';
 const router = Router();
 
 const PAPER_API = 'https://api.papermc.io/v2/projects/paper';
+const MOJANG_MANIFEST = 'https://launchermeta.mojang.com/mc/game/version_manifest.json';
+
+interface MojangVersion {
+  id: string;
+  type: string;
+  url: string;
+  time: string;
+  releaseTime: string;
+}
+
+// Simple in-memory cache
+const cache: { [key: string]: { data: any; expiry: number } } = {};
+
+function cacheGet<T>(key: string): T | null {
+  const entry = cache[key];
+  if (entry && entry.expiry > Date.now()) return entry.data;
+  return null;
+}
+
+function cacheSet(key: string, data: any, ttlMs = 300000) {
+  cache[key] = { data, expiry: Date.now() + ttlMs };
+}
+
+function httpsGet(url: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    https.get(url, (resp) => {
+      let d = '';
+      resp.on('data', (chunk) => d += chunk);
+      resp.on('end', () => resolve(d));
+    }).on('error', reject);
+  });
+}
 
 router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
   const db = getDatabase();
@@ -261,7 +293,7 @@ router.get('/connection', authMiddleware, async (_req: AuthRequest, res) => {
     port: String(config.port),
     serverIp,
     onlineMode,
-    serverVersion: config.jarFile?.replace('paper-', '').replace('.jar', '') || 'Unknown',
+    serverVersion: (config.jarFile || '').replace('paper-', '').replace('vanilla-', '').replace('.jar', '') || 'Unknown',
     playitAddress,
     playitEnabled: !!playitAddress,
     boundToLocalhost: serverIp === '127.0.0.1' || serverIp === 'localhost',
@@ -289,7 +321,13 @@ router.get('/diagnostics', authMiddleware, async (_req: AuthRequest, res) => {
     const size = fs.statSync(jarPath).size;
     checks.push({ name: 'Server Jar', status: 'pass', message: `${config.jarFile || 'server.jar'} found (${(size / 1024 / 1024).toFixed(1)} MB)` });
   } else {
-    checks.push({ name: 'Server Jar', status: 'fail', message: `Server jar not found at ${jarPath}. Use the Version Selector to download one.` });
+    // Check for any paper-*.jar or vanilla-*.jar as fallback
+    const jars = fs.readdirSync(mcDir).filter(f => f.endsWith('.jar') && (f.startsWith('paper-') || f.startsWith('vanilla-')));
+    if (jars.length > 0) {
+      checks.push({ name: 'Server Jar', status: 'warn', message: `No jar configured, but found: ${jars.join(', ')}. Select one in Version Selector.` });
+    } else {
+      checks.push({ name: 'Server Jar', status: 'fail', message: `Server jar not found at ${jarPath}. Use the Version Selector to download one.` });
+    }
   }
 
   // EULA check
@@ -424,7 +462,12 @@ router.post('/health-check', authMiddleware, async (_req: AuthRequest, res) => {
   if (fs.existsSync(jarPath)) {
     checks.push({ name: 'Server Jar', status: 'pass', message: 'Server jar found' });
   } else {
-    checks.push({ name: 'Server Jar', status: 'fail', message: 'Server jar not found. Use Version Selector.' });
+    const jars = fs.readdirSync(mcDir).filter(f => f.endsWith('.jar') && (f.startsWith('paper-') || f.startsWith('vanilla-')));
+    if (jars.length > 0) {
+      checks.push({ name: 'Server Jar', status: 'warn', message: `No jar configured. Found: ${jars.join(', ')}` });
+    } else {
+      checks.push({ name: 'Server Jar', status: 'fail', message: 'Server jar not found. Use Version Selector.' });
+    }
   }
 
   try {
@@ -447,52 +490,136 @@ router.post('/health-check', authMiddleware, async (_req: AuthRequest, res) => {
   });
 });
 
-// Version Management
+// Version Management - All Minecraft versions
 router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
   const mcDir = resolveMinecraftDir();
   const config = minecraftServer.getConfig();
-  const currentVersion = config.jarFile?.replace('paper-', '').replace('.jar', '') || 'unknown';
+  const currentJar = config.jarFile || 'server.jar';
+  const currentVersion = currentJar
+    .replace('paper-', '')
+    .replace('vanilla-', '')
+    .replace('.jar', '');
 
-  // Get currently downloaded jar
-  let downloadedVersions: string[] = [];
+  // Get downloaded jars
+  let downloadedJars: string[] = [];
   try {
-    const files = fs.readdirSync(mcDir).filter(f => f.endsWith('.jar') && !f.includes('server'));
-    downloadedVersions = files.map(f => f.replace('.jar', ''));
+    const files = fs.readdirSync(mcDir).filter(f => f.endsWith('.jar') && !f.startsWith('server'));
+    downloadedJars = files.map(f => f.replace('.jar', ''));
   } catch {}
 
-  // Fetch available versions from PaperMC API
-  let availableVersions: any[] = [];
-  try {
-    const data = await new Promise<string>((resolve, reject) => {
-      https.get(`${PAPER_API}`, (resp) => {
-        let d = '';
-        resp.on('data', (chunk) => d += chunk);
-        resp.on('end', () => resolve(d));
-      }).on('error', reject);
-    });
-    const parsed = JSON.parse(data);
-    availableVersions = (parsed.versions || []).reverse().map((v: string) => ({
-      version: v,
-      downloaded: downloadedVersions.some(d => d.includes(v)),
-      current: currentVersion.includes(v),
-    }));
-  } catch {
-    availableVersions = downloadedVersions.map(v => ({
-      version: v,
-      downloaded: true,
-      current: currentVersion.includes(v),
-    }));
+  // Fetch PaperMC versions (for fast lookup)
+  let paperVersions: string[] = [];
+  const cachedPaper = cacheGet<string[]>('paperVersions');
+  if (cachedPaper) {
+    paperVersions = cachedPaper;
+  } else {
+    try {
+      const data = await httpsGet(PAPER_API);
+      const parsed = JSON.parse(data);
+      paperVersions = parsed.versions || [];
+      cacheSet('paperVersions', paperVersions);
+    } catch {}
   }
 
+  // Fetch Mojang manifest for ALL Minecraft versions
+  let mojangVersions: MojangVersion[] = [];
+  const cachedMojang = cacheGet<MojangVersion[]>('mojangVersions');
+  if (cachedMojang) {
+    mojangVersions = cachedMojang;
+  } else {
+    try {
+      const data = await httpsGet(MOJANG_MANIFEST);
+      const parsed = JSON.parse(data);
+      mojangVersions = parsed.versions || [];
+      cacheSet('mojangVersions', mojangVersions);
+    } catch {}
+  }
+
+  // Build combined version list
+  const versionSet = new Set<string>();
+  const combined: any[] = [];
+
+  // Add PaperMC versions first (preferred)
+  for (const v of paperVersions) {
+    if (versionSet.has(v)) continue;
+    versionSet.add(v);
+    const jarPrefix = `paper-${v}`;
+    combined.push({
+      version: v,
+      type: 'release',
+      source: 'PaperMC',
+      downloaded: downloadedJars.some(d => d === jarPrefix),
+      current: currentJar === `${jarPrefix}.jar`,
+    });
+  }
+
+  // Add all versions from Mojang manifest (including old/beta/alpha)
+  const typeOrder: Record<string, number> = {
+    'release': 0,
+    'snapshot': 1,
+    'old_beta': 2,
+    'beta': 2,
+    'old_alpha': 3,
+    'alpha': 3,
+  };
+
+  const typeLabels: Record<string, string> = {
+    'release': 'Release',
+    'snapshot': 'Snapshot',
+    'old_beta': 'Beta',
+    'beta': 'Beta',
+    'old_alpha': 'Alpha',
+    'alpha': 'Alpha',
+  };
+
+  const releaseTimeMap = new Map<string, string>();
+  for (const mv of mojangVersions) {
+    releaseTimeMap.set(mv.id, mv.releaseTime);
+  }
+
+  for (const mv of mojangVersions) {
+    if (versionSet.has(mv.id)) continue;
+    // Skip snapshots for brevity (only show release, beta, alpha, etc.)
+    const displayType = typeLabels[mv.type] || mv.type;
+    versionSet.add(mv.id);
+    const jarPrefix = `vanilla-${mv.id}`;
+    combined.push({
+      version: mv.id,
+      type: displayType,
+      typeRaw: mv.type,
+      source: 'Mojang',
+      downloaded: downloadedJars.some(d => d === jarPrefix),
+      current: currentJar === `${jarPrefix}.jar`,
+      releaseTime: mv.releaseTime,
+    });
+  }
+
+  // Sort: release first (by version descending), then other types
+  combined.sort((a, b) => {
+    const orderA = typeOrder[a.typeRaw] ?? 99;
+    const orderB = typeOrder[b.typeRaw] ?? 99;
+    if (orderA !== orderB) return orderA - orderB;
+    // Within same type, sort by release time descending
+    const tA = a.releaseTime || '';
+    const tB = b.releaseTime || '';
+    return tB.localeCompare(tA);
+  });
+
+  // Also fetch the current jar info
+  let currentSource = 'unknown';
+  if (currentJar.startsWith('paper-')) currentSource = 'PaperMC';
+  else if (currentJar.startsWith('vanilla-')) currentSource = 'Mojang';
+
   res.json({
-    currentVersion,
-    availableVersions,
-    downloadedVersions,
+    currentVersion: currentVersion || 'unknown',
+    currentSource,
+    availableVersions: combined,
+    downloadedJars,
   });
 });
 
 router.post('/version', authMiddleware, requirePermission('server.start'), async (req: AuthRequest, res) => {
-  const { version } = req.body;
+  const { version, source } = req.body;
   if (!version) {
     return res.status(400).json({ error: 'Version is required' });
   }
@@ -504,48 +631,112 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
     }
 
     const mcDir = resolveMinecraftDir();
-    const jarFile = `paper-${version}.jar`;
+    const usePaper = source === 'PaperMC' || (!source && await isPaperAvailable(version));
+    const jarPrefix = usePaper ? 'paper' : 'vanilla';
+    const jarFile = `${jarPrefix}-${version}.jar`;
     const jarPath = path.join(mcDir, jarFile);
 
     if (!fs.existsSync(jarPath)) {
-      // Try to download the latest build for this version
-      try {
-        const buildsData = await new Promise<string>((resolve, reject) => {
-          https.get(`${PAPER_API}/versions/${version}/builds`, (resp) => {
-            let d = '';
-            resp.on('data', (chunk) => d += chunk);
-            resp.on('end', () => resolve(d));
-          }).on('error', reject);
-        });
-        const builds = JSON.parse(buildsData);
-        const latestBuild = builds.builds && builds.builds[builds.builds.length - 1];
-        if (!latestBuild) {
-          throw new Error(`No builds found for Paper ${version}`);
-        }
-        const downloadUrl = `${PAPER_API}/versions/${version}/builds/${latestBuild.build}/downloads/${latestBuild.downloads.application.name}`;
-
-        await new Promise<void>((resolve, reject) => {
-          const file = fs.createWriteStream(jarPath);
-          https.get(downloadUrl, (resp) => {
-            if (resp.statusCode !== 200) {
-              reject(new Error(`Failed to download: HTTP ${resp.statusCode}`));
-              return;
-            }
-            resp.pipe(file);
-            file.on('finish', () => { file.close(); resolve(); });
-          }).on('error', reject);
-        });
-      } catch (err: any) {
-        return res.status(400).json({ error: `Failed to download Paper ${version}: ${err.message}. Try a different version.` });
+      if (usePaper) {
+        // Download from PaperMC
+        await downloadPaperVersion(version, jarPath);
+      } else {
+        // Download from Mojang
+        await downloadVanillaVersion(version, jarPath);
       }
     }
 
     minecraftServer.updateConfig('jarFile', jarFile);
-    res.json({ success: true, message: `Switched to Paper ${version}. Start the server to apply.` });
+    const sourceName = usePaper ? 'Paper' : 'Mojang';
+    res.json({ success: true, message: `Switched to ${sourceName} ${version}. Start the server to apply.` });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }
 });
+
+async function isPaperAvailable(version: string): Promise<boolean> {
+  let paperVersions: string[] = [];
+  const cached = cacheGet<string[]>('paperVersions');
+  if (cached) {
+    paperVersions = cached;
+  } else {
+    try {
+      const data = await httpsGet(PAPER_API);
+      const parsed = JSON.parse(data);
+      paperVersions = parsed.versions || [];
+      cacheSet('paperVersions', paperVersions);
+    } catch {
+      return false;
+    }
+  }
+  return paperVersions.includes(version);
+}
+
+async function downloadPaperVersion(version: string, jarPath: string): Promise<void> {
+  try {
+    const buildsData = await httpsGet(`${PAPER_API}/versions/${version}/builds`);
+    const builds = JSON.parse(buildsData);
+    const latestBuild = builds.builds && builds.builds[builds.builds.length - 1];
+    if (!latestBuild) {
+      throw new Error(`No builds found for Paper ${version}`);
+    }
+    const downloadUrl = `${PAPER_API}/versions/${version}/builds/${latestBuild.build}/downloads/${latestBuild.downloads.application.name}`;
+    await downloadFile(downloadUrl, jarPath);
+  } catch (err: any) {
+    throw new Error(`Failed to download Paper ${version}: ${err.message}`);
+  }
+}
+
+async function downloadVanillaVersion(version: string, jarPath: string): Promise<void> {
+  try {
+    // Get manifest
+    let mojangVersions: MojangVersion[] = [];
+    const cached = cacheGet<MojangVersion[]>('mojangVersions');
+    if (cached) {
+      mojangVersions = cached;
+    } else {
+      const data = await httpsGet(MOJANG_MANIFEST);
+      const parsed = JSON.parse(data);
+      mojangVersions = parsed.versions || [];
+      cacheSet('mojangVersions', mojangVersions);
+    }
+
+    // Find the version entry
+    const versionEntry = mojangVersions.find(v => v.id === version);
+    if (!versionEntry) {
+      throw new Error(`Version ${version} not found in Mojang manifest`);
+    }
+
+    // Get version details (contains download URL)
+    const detailsData = await httpsGet(versionEntry.url);
+    const details = JSON.parse(detailsData);
+    const serverDownload = details.downloads?.server;
+    if (!serverDownload?.url) {
+      throw new Error(`No server download available for ${version}`);
+    }
+
+    await downloadFile(serverDownload.url, jarPath);
+  } catch (err: any) {
+    throw new Error(`Failed to download Minecraft ${version}: ${err.message}`);
+  }
+}
+
+function downloadFile(url: string, destPath: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(destPath);
+    https.get(url, (resp) => {
+      if (resp.statusCode !== 200) {
+        reject(new Error(`Failed to download: HTTP ${resp.statusCode}`));
+        return;
+      }
+      resp.pipe(file);
+      file.on('finish', () => { file.close(); resolve(); });
+    }).on('error', (err) => {
+      file.close();
+      reject(err);
+    });
+  });
+}
 
 // Game Mode Switch
 router.post('/gamemode', authMiddleware, requirePermission('server.start'), async (req: AuthRequest, res) => {

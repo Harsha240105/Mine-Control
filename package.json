@@ -18,7 +18,7 @@
     "build:desktop:linux": "npm run build && npm run build:electron && npx electron-rebuild -f -w better-sqlite3 && electron-builder --linux && npm rebuild better-sqlite3",
     "start": "node dist/server/index.js",
     "start:electron": "electron dist/electron/main.js",
-    "postinstall": "npm rebuild better-sqlite3 2>/dev/null || true",
+    "postinstall": "npm rebuild better-sqlite3 2>nul || exit 0",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit"
   },

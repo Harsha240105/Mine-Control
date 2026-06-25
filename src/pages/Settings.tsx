@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
   Settings as SettingsIcon, Save, Key, Shield, Server, RefreshCw,
-  Eye, EyeOff, Globe, Users, Wifi
+  Eye, EyeOff, Globe, Users, Wifi, Download, CheckCircle, AlertCircle,
+  ChevronDown, ChevronRight, Search, Cpu
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
@@ -15,9 +16,28 @@ export default function Settings() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  // Version state
+  const [versions, setVersions] = useState<any[]>([]);
+  const [currentVersion, setCurrentVersion] = useState('');
+  const [currentSource, setCurrentSource] = useState('');
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [switchingVersion, setSwitchingVersion] = useState<string | null>(null);
+  const [versionSearch, setVersionSearch] = useState('');
+  const [expandedTypes, setExpandedTypes] = useState<Record<string, boolean>>({
+    'Release': true,
+    'Snapshot': false,
+    'Beta': false,
+    'Alpha': false,
+  });
+
   useEffect(() => {
     Promise.all([fetchConfig(), fetchProps()]).finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!loading) fetchVersions();
+  }, [loading]);
 
   const fetchConfig = async () => {
     try { setConfig(await api.getServerConfig()); } catch {}
@@ -25,6 +45,17 @@ export default function Settings() {
 
   const fetchProps = async () => {
     try { setProps(await api.getServerProperties()); } catch {}
+  };
+
+  const fetchVersions = async () => {
+    setVersionsLoading(true);
+    try {
+      const data = await api.getAvailableVersions();
+      setVersions(data.availableVersions || []);
+      setCurrentVersion(data.currentVersion || '');
+      setCurrentSource(data.currentSource || '');
+    } catch {}
+    setVersionsLoading(false);
   };
 
   const handleSave = async () => {
@@ -56,6 +87,24 @@ export default function Settings() {
     }
   };
 
+  const handleSwitchVersion = async (version: string, source: string) => {
+    if (switchingVersion) return;
+    setSwitchingVersion(version);
+    try {
+      await api.setServerVersion(version, source);
+      toast.success(`Switched to ${source === 'PaperMC' ? 'Paper' : 'Mojang Vanilla'} ${version}`);
+      await fetchVersions();
+      await fetchConfig();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+    setSwitchingVersion(null);
+  };
+
+  const toggleType = (type: string) => {
+    setExpandedTypes(prev => ({ ...prev, [type]: !prev[type] }));
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -64,8 +113,29 @@ export default function Settings() {
     );
   }
 
+  const grouped = versions.reduce((acc: any, v: any) => {
+    const type = v.type || 'Other';
+    if (!acc[type]) acc[type] = [];
+    acc[type].push(v);
+    return acc;
+  }, {} as Record<string, any[]>);
+
+  const typeOrder = ['Release', 'Snapshot', 'Beta', 'Alpha'];
+  const sortedTypes = Object.keys(grouped).sort((a, b) => {
+    const ia = typeOrder.indexOf(a);
+    const ib = typeOrder.indexOf(b);
+    if (ia === -1 && ib === -1) return a.localeCompare(b);
+    if (ia === -1) return 1;
+    if (ib === -1) return -1;
+    return ia - ib;
+  });
+
+  const filteredVersions = versionSearch
+    ? versions.filter(v => v.version.toLowerCase().includes(versionSearch.toLowerCase()))
+    : null;
+
   return (
-    <div className="space-y-6 animate-fade-in max-w-3xl">
+    <div className="space-y-6 animate-fade-in max-w-4xl">
       <div>
         <h2 className="text-xl font-bold text-gray-100">Settings</h2>
         <p className="text-sm text-gray-500 mt-0.5">Configure your Minecraft server</p>
@@ -78,8 +148,8 @@ export default function Settings() {
           Connection Mode
         </h3>
         <p className="text-xs text-gray-500 mb-4">
-          <strong className="text-yellow-400">Cracked (offline)</strong> — TLauncher &amp; any client can join without a Mojang account.
-          {' '}<strong className="text-green-400">Premium (online)</strong> — Only official Minecraft accounts can join.
+          <strong className="text-yellow-400">Cracked (offline)</strong> &mdash; TLauncher &amp; any client can join without a Mojang account.
+          {' '}<strong className="text-green-400">Premium (online)</strong> &mdash; Only official Minecraft accounts can join.
         </p>
         <div className="flex gap-4">
           <button
@@ -105,6 +175,101 @@ export default function Settings() {
             Premium (Official)
           </button>
         </div>
+      </div>
+
+      {/* Version Selector */}
+      <div className="card">
+        <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
+          <Cpu size={16} className="text-minecraft-500" />
+          Version Selector
+        </h3>
+
+        <div className="flex items-center gap-3 p-3 bg-surface-800/50 rounded-lg border border-surface-700 mb-4">
+          <Server size={18} className="text-minecraft-400 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-gray-200">
+              Current: <span className="font-mono text-minecraft-400 font-medium">{currentVersion || 'None'}</span>
+            </p>
+            <p className="text-xs text-gray-500">
+              Source: {currentSource === 'PaperMC' ? 'PaperMC' : currentSource === 'Mojang' ? 'Mojang Vanilla' : 'Unknown'}
+            </p>
+          </div>
+          <button
+            onClick={fetchVersions}
+            disabled={versionsLoading}
+            className="btn-ghost p-2 text-gray-400 hover:text-gray-200"
+          >
+            <RefreshCw size={16} className={versionsLoading ? 'animate-spin' : ''} />
+          </button>
+        </div>
+
+        <div className="relative mb-3">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+          <input
+            type="text"
+            value={versionSearch}
+            onChange={(e) => setVersionSearch(e.target.value)}
+            placeholder="Search versions..."
+            className="input pl-9 text-sm"
+          />
+        </div>
+
+        <div className="max-h-96 overflow-y-auto space-y-1 pr-1">
+          {versionsLoading && versions.length === 0 ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="w-5 h-5 border-2 border-minecraft-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          ) : filteredVersions ? (
+            filteredVersions.map((v: any) => (
+              <VersionRow
+                key={`${v.source}-${v.version}`}
+                version={v}
+                currentVersion={currentVersion}
+                switchingVersion={switchingVersion}
+                onSwitch={handleSwitchVersion}
+              />
+            ))
+          ) : (
+            sortedTypes.map((type) => {
+              const versionsInType = grouped[type] || [];
+              if (versionsInType.length === 0) return null;
+              const isExpanded = expandedTypes[type] !== false;
+              const typeCount = versionsInType.length;
+              const downloadedCount = versionsInType.filter((v: any) => v.downloaded).length;
+              return (
+                <div key={type}>
+                  <button
+                    onClick={() => toggleType(type)}
+                    className="flex items-center gap-2 w-full px-2 py-1.5 rounded text-xs font-medium text-gray-400 hover:text-gray-200 hover:bg-surface-800 transition-colors"
+                  >
+                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    <span>{type}</span>
+                    <span className="text-gray-600 font-normal ml-1">
+                      ({downloadedCount}/{typeCount} downloaded)
+                    </span>
+                  </button>
+                  {isExpanded && (
+                    <div className="ml-1 space-y-0.5">
+                      {versionsInType.map((v: any) => (
+                        <VersionRow
+                          key={`${v.source}-${v.version}`}
+                          version={v}
+                          currentVersion={currentVersion}
+                          switchingVersion={switchingVersion}
+                          onSwitch={handleSwitchVersion}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <p className="text-xs text-gray-500 mt-3">
+          Versions from PaperMC (optimized) and Mojang (vanilla). Downloading may take a moment.
+        </p>
       </div>
 
       {/* Server Configuration */}
@@ -333,7 +498,7 @@ export default function Settings() {
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <span className="text-gray-500">Version:</span>
-            <span className="ml-2 text-gray-300">MineControl OS v1.0.8</span>
+            <span className="ml-2 text-gray-300">MineControl OS v1.0.13</span>
           </div>
           <div>
             <span className="text-gray-500">User:</span>
@@ -349,6 +514,83 @@ export default function Settings() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function VersionRow({ version, currentVersion, switchingVersion, onSwitch }: {
+  version: any;
+  currentVersion: string;
+  switchingVersion: string | null;
+  onSwitch: (version: string, source: string) => void;
+}) {
+  const isCurrent = version.current || currentVersion === version.version;
+  const isSwitching = switchingVersion === version.version;
+  const isDownloaded = version.downloaded;
+
+  return (
+    <div className={`flex items-center gap-2 px-3 py-2 rounded-lg border-l-2 transition-all ${
+      isCurrent
+        ? 'bg-minecraft-500/10 border-l-green-500 border border-green-500/20'
+        : 'bg-surface-800/30 border-l-transparent border border-transparent hover:bg-surface-800 hover:border-surface-600'
+    }`}>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <span className={`text-sm font-mono ${
+            isCurrent ? 'text-green-400 font-medium' : 'text-gray-300'
+          }`}>
+            {version.version}
+          </span>
+          {isCurrent && (
+            <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded font-medium">
+              CURRENT
+            </span>
+          )}
+          {isDownloaded && !isCurrent && (
+            <span className="text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded font-medium">
+              DOWNLOADED
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 mt-0.5">
+          <span className={`text-[11px] px-1.5 py-0.5 rounded ${
+            version.source === 'PaperMC'
+              ? 'bg-purple-500/20 text-purple-400'
+              : 'bg-orange-500/20 text-orange-400'
+          }`}>
+            {version.source === 'PaperMC' ? 'Paper' : 'Vanilla'}
+          </span>
+          <span className="text-xs text-gray-500">{version.type}</span>
+        </div>
+      </div>
+      <button
+        onClick={() => onSwitch(version.version, version.source)}
+        disabled={isCurrent || isSwitching}
+        className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+          isCurrent
+            ? 'bg-green-500/10 text-green-400/50 cursor-default'
+            : isSwitching
+              ? 'bg-minecraft-500/20 text-minecraft-400 cursor-wait'
+              : 'bg-minecraft-500/20 text-minecraft-400 hover:bg-minecraft-500/30 active:bg-minecraft-500/40'
+        }`}
+      >
+        {isSwitching ? (
+          <span className="flex items-center gap-1.5">
+            <div className="w-3 h-3 border-2 border-minecraft-400 border-t-transparent rounded-full animate-spin" />
+            Downloading...
+          </span>
+        ) : isCurrent ? (
+          <span className="flex items-center gap-1.5">
+            <CheckCircle size={13} />
+            Active
+          </span>
+        ) : (
+          <span className="flex items-center gap-1.5">
+            {isDownloaded ? <CheckCircle size={13} /> : <Download size={13} />}
+            {isDownloaded ? 'Switch' : 'Download'}
+          </span>
+        )}
+      </button>
     </div>
   );
 }
