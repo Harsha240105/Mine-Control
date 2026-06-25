@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Wifi, Copy, Check, Globe, Monitor, Network, ExternalLink } from 'lucide-react';
+import { Wifi, Copy, Check, Globe, Monitor, Network, ExternalLink, ChevronDown, ChevronUp, Save, ExternalLink as ExternalLinkIcon } from 'lucide-react';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 
@@ -19,12 +19,19 @@ interface ConnectionInfo {
 export default function Connection() {
   const [info, setInfo] = useState<ConnectionInfo | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const [showPlayitConfig, setShowPlayitConfig] = useState(false);
+  const [playitAddress, setPlayitAddress] = useState('');
+  const [savingPlayit, setSavingPlayit] = useState(false);
 
   useEffect(() => {
     fetchConnection();
     const interval = setInterval(fetchConnection, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    if (info) setPlayitAddress(info.playitAddress);
+  }, [info?.playitAddress]);
 
   const fetchConnection = async () => {
     try {
@@ -42,6 +49,18 @@ export default function Connection() {
     } catch {
       toast.error('Failed to copy');
     }
+  };
+
+  const savePlayitAddress = async () => {
+    setSavingPlayit(true);
+    try {
+      await api.updateServerConfig({ playitAddress });
+      toast.success('Playit.gg address saved');
+      await fetchConnection();
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+    setSavingPlayit(false);
   };
 
   const ConnectionCard = ({ title, address, description, icon: Icon, color }: any) => (
@@ -133,13 +152,84 @@ export default function Connection() {
           icon={Globe}
           color="bg-purple-500/10 text-purple-400"
         />
-        <ConnectionCard
-          title="Playit.gg Tunnel"
-          address={info.playitAddress || 'Not configured'}
-          description="Connect without port forwarding (recommended)"
-          icon={ExternalLink}
-          color="bg-pink-500/10 text-pink-400"
-        />
+        <div className="card-hover relative overflow-hidden cursor-pointer" onClick={() => setShowPlayitConfig(!showPlayitConfig)}>
+          <div className="flex items-start gap-4">
+            <div className="p-3 rounded-lg bg-pink-500/10 text-pink-400 flex-shrink-0">
+              <ExternalLink size={22} />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold text-gray-200 mb-1">Playit.gg Tunnel</h3>
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowPlayitConfig(!showPlayitConfig); }}
+                  className="p-1 text-gray-500 hover:text-gray-300 transition-colors"
+                >
+                  {showPlayitConfig ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mb-2">Connect without port forwarding (recommended)</p>
+              <div className="flex items-center gap-2">
+                <code className="text-sm font-mono bg-surface-800 px-3 py-1.5 rounded-lg flex-1 truncate"
+                  style={info.playitAddress ? { color: '#f472b6' } : { color: '#ef4444' }}
+                >
+                  {info.playitAddress || 'Not configured'}
+                </code>
+                {info.playitAddress && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); copyToClipboard(info.playitAddress, 'Playit.gg'); }}
+                    className={`p-2 rounded-lg transition-colors ${
+                      copied === 'Playit.gg' ? 'bg-green-500/20 text-green-400' : 'bg-surface-800 text-gray-400 hover:text-gray-200'
+                    }`}
+                  >
+                    {copied === 'Playit.gg' ? <Check size={16} /> : <Copy size={16} />}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Playit.gg Configuration Panel */}
+          {showPlayitConfig && (
+            <div className="mt-4 pt-4 border-t border-surface-700/50 space-y-4">
+              {/* Setup Guide */}
+              <div className="p-4 rounded-lg bg-surface-800/50 border border-surface-700/50">
+                <h4 className="text-sm font-semibold text-gray-200 mb-3">How to set up Playit.gg</h4>
+                <ol className="space-y-2 text-xs text-gray-400 list-decimal list-inside">
+                  <li>Go to <a href="https://playit.gg" target="_blank" rel="noopener noreferrer" className="text-pink-400 hover:text-pink-300 underline underline-offset-2 inline-flex items-center gap-1">
+                    playit.gg <ExternalLinkIcon size={10} />
+                  </a> and create a free account</li>
+                  <li>Download and run the Playit.gg agent on this PC</li>
+                  <li>In the Playit.gg dashboard, create a new tunnel pointing to <code className="text-minecraft-400 bg-surface-900 px-1 rounded">localhost:{info?.port || 25565}</code></li>
+                  <li>Copy the tunnel address (e.g. <code className="text-minecraft-400 bg-surface-900 px-1 rounded">something.playit.gg</code>)</li>
+                  <li>Paste it below and save</li>
+                </ol>
+              </div>
+
+              {/* Address Input */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={playitAddress}
+                  onChange={(e) => setPlayitAddress(e.target.value)}
+                  placeholder="e.g. your-server.playit.gg"
+                  className="input flex-1 text-sm font-mono"
+                />
+                <button
+                  onClick={savePlayitAddress}
+                  disabled={savingPlayit}
+                  className="btn-primary flex items-center gap-2 text-sm whitespace-nowrap"
+                >
+                  <Save size={14} />
+                  {savingPlayit ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+
+              <p className="text-[11px] text-gray-500">
+                Once configured, share the tunnel address with your friends. No port forwarding needed!
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="card">

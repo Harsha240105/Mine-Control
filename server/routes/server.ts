@@ -91,9 +91,16 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
   const config = minecraftServer.getConfig();
   const mcMaxRam = parseInt(config.maxRam) * 1024 || 8192;
 
+  let publicIp = '';
+  try { publicIp = (await httpsGet('https://api.ipify.org?format=json')).match(/"ip":"([^"]+)"/)?.[1] || ''; } catch {}
+
   const status = {
     running: minecraftServer.isRunning,
     starting: minecraftServer.isStarting,
+    serverName: config.motd || 'MineControl OS',
+    port: config.port || 25565,
+    publicIp,
+    serverVersion: (config.jarFile || '').replace('paper-', '').replace('vanilla-', '').replace('.jar', '') || 'Unknown',
     onlinePlayers: onlinePlayers?.count || 0,
     totalPlayers: totalPlayers?.count || 0,
     maxPlayers: config.maxPlayers,

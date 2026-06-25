@@ -29,6 +29,10 @@ import toast from 'react-hot-toast';
 interface StatusData {
   running: boolean;
   starting: boolean;
+  serverName: string;
+  port: number;
+  publicIp: string;
+  serverVersion: string;
   onlinePlayers: number;
   maxPlayers: number;
   cpuUsage: number;
@@ -56,14 +60,12 @@ export default function Dashboard() {
   const [status, setStatus] = useState<StatusData | null>(null);
   const [statsHistory, setStatsHistory] = useState<StatPoint[]>([]);
   const [startError, setStartError] = useState<string | null>(null);
-  const [publicIp, setPublicIp] = useState<string>('');
   const { socket } = useSocket();
   const [currentTime, setCurrentTime] = useState(new Date());
 
   useEffect(() => {
     fetchStatus();
     fetchStats();
-    fetch('https://api.ipify.org?format=json').then(r => r.json()).then(d => setPublicIp(d.ip)).catch(() => {});
     const interval = setInterval(fetchStatus, 5000);
     const timeInterval = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => {
@@ -166,13 +168,20 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div>
-        <h2 className="text-xl font-bold text-gray-100">Dashboard</h2>
-        <p className="text-sm text-gray-500 mt-0.5">
-          {currentTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-          {' '}·{' '}
-          {currentTime.toLocaleTimeString('en-US')}
-        </p>
+      <div className="flex items-start gap-3">
+        <div className="p-2.5 rounded-xl bg-minecraft-500/10 border border-minecraft-500/20">
+          <Server size={22} className="text-minecraft-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-xl font-bold text-gray-100 truncate">
+            {status?.serverName || 'Dashboard'}
+          </h2>
+          <p className="text-sm text-gray-500 mt-0.5">
+            {currentTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+            {' '}·{' '}
+            {currentTime.toLocaleTimeString('en-US')}
+          </p>
+        </div>
       </div>
 
       {/* Start Error Banner */}
@@ -213,15 +222,15 @@ export default function Dashboard() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
               <div className="bg-surface-800 rounded p-2.5">
                 <span className="text-gray-500 block mb-0.5">Local Address</span>
-                <span className="text-gray-100 font-mono font-medium">localhost:25565</span>
+                <span className="text-gray-100 font-mono font-medium">localhost:{status?.port || 25565}</span>
               </div>
               <div className="bg-surface-800 rounded p-2.5">
                 <span className="text-gray-500 block mb-0.5">Public IP</span>
-                <span className="text-gray-100 font-mono font-medium">{publicIp || 'Fetching...'}:25565</span>
+                <span className="text-gray-100 font-mono font-medium">{status?.publicIp || 'Fetching...'}:{status?.port || 25565}</span>
               </div>
               <div className="bg-surface-800 rounded p-2.5">
                 <span className="text-gray-500 block mb-0.5">Port</span>
-                <span className="text-gray-100 font-mono font-medium">25565</span>
+                <span className="text-gray-100 font-mono font-medium">{status?.port || 25565}</span>
               </div>
               <div className="bg-surface-800 rounded p-2.5">
                 <span className="text-gray-500 block mb-0.5">Mode</span>
@@ -231,7 +240,7 @@ export default function Dashboard() {
             <p className="text-[11px] text-gray-500 mt-2">
               <strong className="text-gray-400">Local:</strong> Use <code className="text-minecraft-400">localhost</code> on this PC &nbsp;·&nbsp;
               <strong className="text-gray-400">Friends:</strong> Use the Public IP above (requires port forwarding on router) &nbsp;·&nbsp;
-              Minecraft version: <strong className="text-gray-300">1.21.1</strong>
+              Minecraft version: <strong className="text-gray-300">{status?.serverVersion || 'Unknown'}</strong>
             </p>
           </div>
         </div>

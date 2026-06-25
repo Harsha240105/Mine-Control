@@ -793,13 +793,31 @@ function StepNetwork({ data, update }: { data: WizardData; update: (p: Partial<W
             {data.network === 'local' && `localhost:${data.port}`}
             {data.network === 'lan' && `192.168.x.x:${data.port}`}
             {data.network === 'internet' && `your-ip:${data.port}`}
-            {data.network === 'tunnel' && `example.playit.gg`}
+            {data.network === 'tunnel' && `your-tunnel.playit.gg`}
           </code>
           <button className="p-2 text-gray-400 hover:text-gray-200 transition-colors">
             <Copy size={14} />
           </button>
         </div>
       </div>
+
+      {data.network === 'tunnel' && (
+        <div className="mt-4 p-4 rounded-lg bg-pink-500/5 border border-pink-500/20">
+          <h4 className="text-xs font-semibold text-pink-400 mb-2 flex items-center gap-1.5">
+            <ExternalLink size={12} />
+            Setting up Playit.gg
+          </h4>
+          <ol className="space-y-1.5 text-xs text-gray-400 list-decimal list-inside">
+            <li>Sign up at <span className="text-pink-400">playit.gg</span> (free)</li>
+            <li>Download &amp; run the Playit.gg agent on this PC</li>
+            <li>Create a tunnel pointing to <code className="text-minecraft-400 bg-surface-900 px-1 rounded">localhost:{data.port}</code></li>
+            <li>Copy the tunnel address and enter it in Settings &rarr; Connection</li>
+          </ol>
+          <p className="text-[11px] text-gray-500 mt-2">
+            No port forwarding required! You can configure the address later in the Connection page.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
