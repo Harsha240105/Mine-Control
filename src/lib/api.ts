@@ -94,8 +94,6 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
-  deleteServer: (id: string) =>
-    request<{ success: boolean }>(`/servers/${id}`, { method: 'DELETE' }),
   selectServer: (id: string) =>
     request<any>(`/servers/${id}/select`, { method: 'POST' }),
 

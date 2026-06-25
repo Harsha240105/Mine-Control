@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Server, Plus, Trash2, Settings, Play, Square,
+  Server, Plus, Settings, Play, Square,
   Globe, Wifi, Database, Cpu, HardDrive, RefreshCw,
   AlertTriangle, CheckCircle, XCircle, ChevronRight,
 } from 'lucide-react';
@@ -71,25 +71,6 @@ export default function Servers() {
       setActiveId(id);
       toast.success(`Switched to ${server.name}`);
       setTimeout(() => window.location.reload(), 1000);
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    const server = servers.find(s => s.id === id);
-    if (!server) return;
-    if (!window.confirm(`Delete server "${server.name}"?\nThis will NOT remove the server files from disk.`)) return;
-
-    try {
-      const result = await api.deleteServer(id) as any;
-      if (result.switchedTo) {
-        toast.success(`Deleted ${server.name}. Switched to ${result.switchedTo.name}`);
-        setTimeout(() => window.location.reload(), 1000);
-      } else {
-        setServers(prev => prev.filter(s => s.id !== id));
-        toast.success(`Deleted ${server.name}`);
-      }
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -229,13 +210,6 @@ export default function Servers() {
                       title="Switch to this server"
                     >
                       <Play size={14} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(server.id)}
-                      className="p-1.5 rounded-lg text-red-400/70 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                      title="Delete server"
-                    >
-                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>

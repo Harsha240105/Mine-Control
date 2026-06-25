@@ -152,39 +152,4 @@ router.put('/:id', authMiddleware, requirePermission('server.start'), (req: Auth
   res.json({ success: true, server: updated });
 });
 
-// Delete server
-router.delete('/:id', authMiddleware, requirePermission('server.start'), async (req: AuthRequest, res) => {
-  const db = getDatabase();
-  const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(req.params.id) as any;
-  if (!server) return res.status(404).json({ error: 'Server not found' });
-
-  if (minecraftServer.isRunning || minecraftServer.isStarting) {
-    return res.status(400).json({ error: 'Stop the running server before deleting' });
-  }
-
-  const allServers = db.prepare('SELECT id FROM servers ORDER BY created_at ASC').all() as any[];
-  if (allServers.length <= 1) {
-    return res.status(400).json({ error: 'Cannot delete the only server. Create another one first.' });
-  }
-
-  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value || '';
-  const isActive = server.id === activeId;
-
-  db.prepare('DELETE FROM servers WHERE id = ?').run(server.id);
-
-  // If we deleted the active server, switch to the next available one
-  if (isActive) {
-    const remaining = db.prepare('SELECT id, name FROM servers ORDER BY created_at ASC LIMIT 1').get() as any;
-    if (remaining) {
-      db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('active_server_id', ?)").run(remaining.id);
-      const { setMinecraftDir } = require('../paths');
-      setMinecraftDir(remaining.directory);
-      res.json({ success: true, deletedId: server.id, deletedName: server.name, switchedTo: { id: remaining.id, name: remaining.name } });
-      return;
-    }
-  }
-
-  res.json({ success: true, deletedId: server.id, deletedName: server.name });
-});
-
 export default router;

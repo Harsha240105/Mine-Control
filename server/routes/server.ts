@@ -91,6 +91,14 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
   const config = minecraftServer.getConfig();
   const mcMaxRam = parseInt(config.maxRam) * 1024 || 8192;
 
+  // Read version from servers table
+  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+  let serverVersion = 'Unknown';
+  if (activeId) {
+    const srv = db.prepare('SELECT version FROM servers WHERE id = ?').get(activeId) as any;
+    if (srv?.version) serverVersion = srv.version;
+  }
+
   let publicIp = '';
   try { publicIp = (await httpsGet('https://api.ipify.org?format=json')).match(/"ip":"([^"]+)"/)?.[1] || ''; } catch {}
 
@@ -100,7 +108,7 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
     serverName: config.motd || 'MineControl OS',
     port: config.port || 25565,
     publicIp,
-    serverVersion: (config.jarFile || '').replace('paper-', '').replace('vanilla-', '').replace('.jar', '') || 'Unknown',
+    serverVersion,
     onlinePlayers: onlinePlayers?.count || 0,
     totalPlayers: totalPlayers?.count || 0,
     maxPlayers: config.maxPlayers,
