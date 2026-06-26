@@ -506,12 +506,19 @@ function StepVersion({ data, update, versions, loading, search, setSearch }: {
   data: WizardData; update: (p: Partial<WizardData>) => void;
   versions: any[]; loading: boolean; search: string; setSearch: (s: string) => void;
 }) {
-  const filtered = search
+  const filteredBySearch = search
     ? versions.filter(v => v.version.toLowerCase().includes(search.toLowerCase()))
     : versions;
-  const releases = filtered.filter(v => v.type === 'Release');
-  const snapshots = filtered.filter(v => v.type === 'Snapshot');
-  const old = filtered.filter(v => v.type !== 'Release' && v.type !== 'Snapshot');
+    
+  const filtered = filteredBySearch.filter(v => {
+    if (data.software === 'paper') return v.source === 'PaperMC';
+    if (data.software === 'vanilla') return v.source === 'Mojang';
+    return true; 
+  });
+
+  const releases = filtered.filter(v => v.type.toLowerCase() === 'release');
+  const snapshots = filtered.filter(v => v.type.toLowerCase() === 'snapshot');
+  const old = filtered.filter(v => v.type.toLowerCase() !== 'release' && v.type.toLowerCase() !== 'snapshot');
 
   return (
     <div className="animate-fade-in">

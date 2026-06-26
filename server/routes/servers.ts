@@ -169,6 +169,23 @@ router.put('/:id', authMiddleware, requirePermission('server.start'), (req: Auth
   }
 
   const updated = db.prepare('SELECT * FROM servers WHERE id = ?').get(req.params.id) as any;
+
+  // Sync onlineMode to server.properties
+  if (onlineMode !== undefined && updated && updated.directory) {
+    const propsPath = path.join(updated.directory, 'server.properties');
+    if (fs.existsSync(propsPath)) {
+      let content = fs.readFileSync(propsPath, 'utf-8');
+      const regex = /^online-mode=.*$/m;
+      const newVal = `online-mode=${onlineMode ? 'true' : 'false'}`;
+      if (regex.test(content)) {
+        content = content.replace(regex, newVal);
+      } else {
+        content += `\n${newVal}`;
+      }
+      fs.writeFileSync(propsPath, content, 'utf-8');
+    }
+  }
+
   res.json({ success: true, server: updated });
 });
 

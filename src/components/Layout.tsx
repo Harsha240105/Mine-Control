@@ -70,6 +70,10 @@ export default function Layout() {
       try {
         const data = await api.getServers();
         setServerList(data.servers);
+        if (data.servers.length === 0) {
+          navigate('/wizard', { replace: true });
+          return;
+        }
         const active = data.servers.find((s: any) => s.id === data.activeServerId);
         setActiveServerName(active?.name || '');
       } catch {}
@@ -77,7 +81,7 @@ export default function Layout() {
     fetchServers();
     const interval = setInterval(fetchServers, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {

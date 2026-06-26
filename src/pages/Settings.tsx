@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Settings as SettingsIcon, Save, Key, Shield, Server, RefreshCw,
   Eye, EyeOff, Globe, Users, Wifi, Download, CheckCircle, AlertCircle,
-  ChevronDown, ChevronRight, Search, Cpu
+  ChevronDown, ChevronRight, Search, Cpu, Trash2
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
@@ -10,6 +11,7 @@ import toast from 'react-hot-toast';
 
 export default function Settings() {
   const { user, isOwner } = useAuth();
+  const navigate = useNavigate();
   const [config, setConfig] = useState<any>({});
   const [props, setProps] = useState<any>({});
   const [loading, setLoading] = useState(true);
@@ -31,9 +33,25 @@ export default function Settings() {
     'Alpha': false,
   });
 
+  const [activeServerId, setActiveServerId] = useState<string | null>(null);
+  const [serverName, setServerName] = useState('');
+  const [onlineMode, setOnlineMode] = useState(true);
+
   useEffect(() => {
-    Promise.all([fetchConfig(), fetchProps()]).finally(() => setLoading(false));
+    Promise.all([fetchConfig(), fetchProps(), fetchActiveServer()]).finally(() => setLoading(false));
   }, []);
+
+  const fetchActiveServer = async () => {
+    try {
+      const data = await api.getServers();
+      setActiveServerId(data.activeServerId);
+      const active = data.servers.find((s: any) => s.id === data.activeServerId);
+      if (active) {
+        setServerName(active.name);
+        setOnlineMode(active.onlineMode);
+      }
+    } catch {}
+  };
 
   useEffect(() => {
     if (!loading) fetchVersions();
@@ -60,9 +78,15 @@ export default function Settings() {
 
   const handleSave = async () => {
     try {
+      if (activeServerId) {
+        await api.put(`/servers/${activeServerId}`, {
+          name: serverName,
+          onlineMode,
+        });
+      }
       await api.updateServerConfig(config);
       await api.updateServerProperties({
-        'online-mode': props['online-mode'],
+        'online-mode': onlineMode ? 'true' : 'false',
         'level-seed': props['level-seed'],
         motd: props.motd || config.motd,
         'max-players': props['max-players'] || config.maxPlayers,
@@ -99,6 +123,23 @@ export default function Settings() {
       toast.error(err.message);
     }
     setSwitchingVersion(null);
+  };
+
+  const handleDeleteServer = async () => {
+    if (!activeServerId) return;
+    const confirmName = prompt(`Are you absolutely sure you want to delete this server? This will WIPE all world data, plugins, and settings. Type "${serverName}" to confirm.`);
+    if (confirmName !== serverName) {
+      if (confirmName !== null) toast.error('Server name did not match. Deletion cancelled.');
+      return;
+    }
+    
+    try {
+      await api.deleteServer(activeServerId);
+      toast.success('Server deleted successfully.');
+      window.location.href = '/';
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to delete server');
+    }
   };
 
   const toggleType = (type: string) => {
@@ -152,7 +193,18 @@ export default function Settings() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Server Name (MOTD)</label>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Server Name</label>
+            <input
+              type="text"
+              value={serverName}
+              onChange={(e) => setServerName(e.target.value)}
+              className="input"
+            />
+            <p className="text-xs text-gray-500 mt-1">Name shown in the MineControl dashboard</p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">MOTD</label>
             <input
               type="text"
               value={props.motd || config.motd || ''}
@@ -263,6 +315,19 @@ export default function Settings() {
 
         {/* Toggles */}
         <div className="mt-4 space-y-3">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={onlineMode}
+              onChange={(e) => setOnlineMode(e.target.checked)}
+              className="rounded bg-surface-800 border-surface-600 text-minecraft-500 focus:ring-minecraft-500"
+            />
+            <div>
+              <span className="text-sm text-gray-200">Online Mode (Premium)</span>
+              <p className="text-xs text-gray-500">Require players to have a paid Minecraft account</p>
+            </div>
+          </label>
+
           <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
@@ -383,6 +448,26 @@ export default function Settings() {
             <span className="text-gray-500">Java:</span>
             <span className="ml-2 text-gray-300 font-mono text-xs">{config.javaPath || 'java'}</span>
           </div>
+        </div>
+      </div>
+
+      <div className="card border border-red-500/20 bg-red-500/5">
+        <h3 className="text-sm font-medium text-red-400 mb-4 flex items-center gap-2">
+          <AlertCircle size={16} />
+          Danger Zone
+        </h3>
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-medium text-gray-200">Delete Server</h4>
+            <p className="text-xs text-gray-500 mt-1">Permanently delete this server and all its files.</p>
+          </div>
+          <button
+            onClick={handleDeleteServer}
+            className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors border border-red-500/20 flex items-center gap-2"
+          >
+            <Trash2 size={16} />
+            Delete Server
+          </button>
         </div>
       </div>
     </div>

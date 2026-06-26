@@ -28,8 +28,8 @@ export function Scheduler() {
 
   const fetchSchedules = async () => {
     try {
-      const { data } = await api.get('/schedules');
-      setSchedules(data);
+      const data = await api.get('/schedules');
+      setSchedules(Array.isArray(data) ? data : []);
     } catch (err) {
       toast.error('Failed to load schedules');
     } finally {

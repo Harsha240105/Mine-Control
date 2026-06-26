@@ -16,7 +16,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 ## 📊 Project Completion Summary
 *This section is dynamically updated by the development team after every feature sprint.*
 
-* **Overall Progress:** 85% Completed
+* **Overall Progress:** 90% Completed
 * **Current Sprint Phase:** Phase 3 (Core Stabilization & UX Overhaul)
 * **Target Deadline:** July 10, 2026
 * **Last Updated:** June 26, 2026
@@ -27,12 +27,16 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 - [x] Server creation dashboard overhauled into a multi-step Aternos-style wizard.
 - [x] The Ghost Server Bug fixed: Database now populates and triggers a state update via real API calls.
 - [x] Deletion Constraint Fault fixed: SQLite `ON DELETE CASCADE` applied.
+- [x] **Zero-State Server Fix**: Dashboard dynamically redirects to wizard when zero servers are present.
+- [x] **Dynamic Version APIs**: Replaced mock data with real-time Mojang/PaperMC API version fetching.
+- [x] **CRUD Capabilities UI**: Settings tab now supports renaming, online-mode premium toggles, and deletion.
+- [x] **Scheduler Crash Patch**: Fixed fatal UI crash during scheduler unboxing.
 
 ### ⏳ Current Focus / Active Task
-- Finalizing the auto-updater release deployment pipeline (`v1.0.19`).
+- Stabilizing UI components for multi-server runtime controls.
 
 ### ❌ Known Bugs & Active Blockers
-*(No active blockers! The ghost server bug and deletion constraint fault were successfully patched.)*
+*(No active blockers! The core CRUD operations, dynamic APIs, and state hydration issues are successfully patched.)*
 
 ---
 
