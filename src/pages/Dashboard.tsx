@@ -26,6 +26,7 @@ interface StatusData {
   port: number;
   publicIp: string;
   serverVersion: string;
+  osVersion?: string;
   onlinePlayers: number;
   maxPlayers: number;
   cpuUsage: number;

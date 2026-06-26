@@ -126,6 +126,16 @@ class MinecraftServerManager extends EventEmitter {
       const config = this.getConfig();
       const jarPath = path.join(this.serverDir, config.jarFile);
 
+      // Wait if the jar is currently being downloaded
+      let waitCount = 0;
+      while (fs.existsSync(jarPath + '.download') && waitCount < 120) {
+        if (waitCount === 0) {
+          this.emit('server:output', '[MineControl] Waiting for jar download to finish...\n');
+        }
+        await new Promise(r => setTimeout(r, 2000));
+        waitCount++;
+      }
+
       if (!fs.existsSync(jarPath)) {
         this.starting = false;
         throw new Error(`Server jar not found at ${jarPath}. Please place the PaperMC server jar in the minecraft directory.`);
@@ -497,8 +507,15 @@ class MinecraftServerManager extends EventEmitter {
       server = db.prepare('SELECT * FROM servers WHERE id = ?').get(activeId) as any;
     }
 
+    const rows = db.prepare('SELECT key, value FROM server_config').all() as any[];
+    const config: Record<string, string> = {};
+    for (const row of rows) {
+      config[row.key] = row.value;
+    }
+
     if (server) {
       return {
+        name: server.name || 'MineControl OS',
         javaPath: server.javaPath || 'java',
         jarFile: server.jarFile || 'server.jar',
         minRam: server.minRam || '2G',
@@ -514,17 +531,14 @@ class MinecraftServerManager extends EventEmitter {
         gamemode: server.gamemode || 'survival',
         pvp: !!server.pvp,
         maxPlayers: server.maxPlayers || 4,
+        discordToken: config.discordToken || '',
+        discordChannel: config.discordChannel || '',
       };
     }
 
     // Fallback to legacy server_config
-    const config: Record<string, string> = {};
-    const rows = db.prepare('SELECT key, value FROM server_config').all() as any[];
-    for (const row of rows) {
-      config[row.key] = row.value;
-    }
-
     return {
+      name: config.name || 'MineControl OS',
       javaPath: config.javaPath || 'java',
       jarFile: config.jarFile || 'server.jar',
       minRam: config.minRam || '2G',
@@ -540,6 +554,8 @@ class MinecraftServerManager extends EventEmitter {
       gamemode: config.gamemode || 'survival',
       pvp: config.pvp !== 'false',
       maxPlayers: parseInt(config.maxPlayers || '4'),
+      discordToken: config.discordToken || '',
+      discordChannel: config.discordChannel || '',
     };
   }
 

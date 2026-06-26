@@ -44,26 +44,43 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
   }
 
   if (downloadUrl) {
-    // Download from URL
+    // Download from URL with redirect support
     const https = require('https');
     const http = require('http');
+    const tempPath = path.join(PLUGINS_DIR, `${name}.jar.download`);
     const jarPath = path.join(PLUGINS_DIR, `${name}.jar`);
 
-    const client = downloadUrl.startsWith('https') ? https : http;
-    client.get(downloadUrl, (response: any) => {
-      if (response.statusCode !== 200) {
-        return res.status(400).json({ error: `Failed to download: HTTP ${response.statusCode}` });
-      }
-      const file = fs.createWriteStream(jarPath);
-      response.pipe(file);
-      file.on('finish', () => {
-        file.close();
-        registerPluginInDb(name);
-        res.json({ success: true, name });
+    const getWithRedirects = (requestUrl: string) => {
+      const client = requestUrl.startsWith('https') ? https : http;
+      client.get(requestUrl, (response: any) => {
+        if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+          let newUrl = response.headers.location;
+          if (!newUrl.startsWith('http')) {
+            const urlObj = new URL(requestUrl);
+            newUrl = `${urlObj.protocol}//${urlObj.host}${newUrl}`;
+          }
+          getWithRedirects(newUrl);
+          return;
+        }
+        if (response.statusCode !== 200) {
+          if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+          return res.status(400).json({ error: `Failed to download: HTTP ${response.statusCode}` });
+        }
+        const file = fs.createWriteStream(tempPath);
+        response.pipe(file);
+        file.on('finish', () => {
+          file.close();
+          if (fs.existsSync(jarPath)) fs.unlinkSync(jarPath);
+          fs.renameSync(tempPath, jarPath);
+          registerPluginInDb(name);
+          res.json({ success: true, name });
+        });
+      }).on('error', (err: Error) => {
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+        res.status(400).json({ error: err.message });
       });
-    }).on('error', (err: Error) => {
-      res.status(400).json({ error: err.message });
-    });
+    };
+    getWithRedirects(downloadUrl);
   } else {
     // Placeholder - user should manually place the .jar in plugins directory
     registerPluginInDb(name);

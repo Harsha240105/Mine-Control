@@ -408,3 +408,10 @@ MIT
   <br/>
   <sub>100% Free. No paid tiers. No subscriptions. Self-hosted on your hardware.</sub>
 </p>
+
+## Changelog
+
+### v1.0.25
+- **Bug Fixes**: Fixed jar download race condition, resolved plugin download 404s, synchronized dashboard server name, and optimized background performance.
+- **New Features**: Added Aternos-style Software tab for seamless version hot-swapping.
+- **Discord Integration**: Complete integration to sync game chat, logs, and events to Discord.

@@ -37,6 +37,7 @@ import toast from 'react-hot-toast';
 
 const navItems = [
   { path: '/dashboard', label: 'Server', icon: LayoutDashboard },
+  { path: '/software', label: 'Software', icon: Cpu },
   { path: '/settings', label: 'Options', icon: Settings },
   { path: '/console', label: 'Console', icon: Terminal },
   { path: '/players', label: 'Players', icon: Users },

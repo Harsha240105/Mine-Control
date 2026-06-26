@@ -29,6 +29,7 @@ import scheduleRoutes from './routes/schedules';
 import marketplaceRoutes from './routes/marketplace';
 import analyticsRoutes from './routes/analytics';
 import { SchedulerService } from './services/scheduler';
+import { discordService } from './services/discord';
 
 const app = express();
 const server = http.createServer(app);
@@ -239,9 +240,14 @@ server.listen(portToUse, () => {
   } catch (err) {
     console.error('[Server] Failed to initialize schedules:', err);
   }
+  
+  // Initialize Discord
+  discordService.initialize().catch(err => console.error('[Discord] Init failed:', err));
+
+  const osVersion = require('../package.json').version;
   console.log(`
   ╔══════════════════════════════════════════╗
-  ║         MineControl OS v1.0.15          ║
+  ║         MineControl OS v${osVersion.padEnd(16, ' ')} ║
   ║     Minecraft Server Management         ║
   ║══════════════════════════════════════════║
   ║  Server:  http://localhost:${PORT}         ║

@@ -6,6 +6,7 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Welcome from './pages/Welcome';
 import Wizard from './pages/Wizard';
+import Software from './pages/Software';
 import Dashboard from './pages/Dashboard';
 import Players from './pages/Players';
 import Console from './pages/Console';
@@ -93,6 +94,7 @@ export default function App() {
             }
           >
             <Route path="dashboard" element={<Dashboard />} />
+            <Route path="software" element={<Software />} />
             <Route path="servers" element={<Servers />} />
             <Route path="players" element={<Players />} />
             <Route path="console" element={<Console />} />

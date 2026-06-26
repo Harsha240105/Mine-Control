@@ -55,48 +55,73 @@ router.get('/java/scan', authMiddleware, async (_req, res) => {
   }
 });
 
+let cachedSysStats = { systemRamTotal: 0, systemRamUsed: 0, diskTotal: 0, diskUsed: 0, mcDirSize: 0 };
+let cachedPublicIp = '';
+
+// Update stats in the background to prevent lagging the React dashboard
+setInterval(async () => {
+  try {
+    const si = require('systeminformation');
+    const os = require('os');
+    
+    let systemRamTotal = 0, systemRamUsed = 0;
+    try {
+      const mem = await si.mem();
+      systemRamTotal = Math.round(mem.total / 1024 / 1024);
+      systemRamUsed = Math.round(mem.used / 1024 / 1024);
+    } catch {
+      systemRamTotal = Math.round(os.totalmem() / 1024 / 1024);
+      systemRamUsed = Math.round((os.totalmem() - os.freemem()) / 1024 / 1024);
+    }
+
+    let diskTotal = 0, diskUsed = 0;
+    try {
+      const disk = await si.fsSize();
+      if (disk.length > 0) {
+        const root = disk.find((d: any) => d.mount === '/') || disk[0];
+        diskTotal = Math.round(root.size / 1024 / 1024 / 1024);
+        diskUsed = Math.round(root.used / 1024 / 1024 / 1024);
+      }
+    } catch {}
+
+    let mcDirSize = 0;
+    try {
+      const mcDir = resolveMinecraftDir();
+      if (fs.existsSync(mcDir)) {
+        const getSize = (dir: string): number => {
+          let total = 0;
+          try {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const e of entries) {
+              const p = path.join(dir, e.name);
+              if (e.isFile()) total += fs.statSync(p).size;
+              else if (e.isDirectory()) total += getSize(p);
+            }
+          } catch {}
+          return total;
+        };
+        mcDirSize = Math.round(getSize(mcDir) / 1024 / 1024);
+      }
+    } catch {}
+
+    cachedSysStats = { systemRamTotal, systemRamUsed, diskTotal, diskUsed, mcDirSize };
+  } catch {}
+}, 10000);
+
+// Background IP fetcher
+setInterval(async () => {
+  try {
+    const ip = (await httpsGet('https://api.ipify.org?format=json')).match(/"ip":"([^"]+)"/)?.[1];
+    if (ip) cachedPublicIp = ip;
+  } catch {}
+}, 600000); // 10 minutes
+
 router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
   const db = getDatabase();
   const onlinePlayers = db.prepare('SELECT COUNT(*) as count FROM players WHERE status = ?').get('online') as any;
   const totalPlayers = db.prepare('SELECT COUNT(*) as count FROM players').get() as any;
 
   const latestStats = db.prepare('SELECT * FROM system_stats ORDER BY timestamp DESC LIMIT 1').get() as any;
-
-  let systemRamTotal = 0, systemRamUsed = 0, diskTotal = 0, diskUsed = 0;
-  try {
-    const si = require('systeminformation');
-    const [mem, disk] = await Promise.all([
-      si.mem().catch(() => ({ total: 0, used: 0 })),
-      si.fsSize().catch(() => []),
-    ]);
-    systemRamTotal = Math.round(mem.total / 1024 / 1024);
-    systemRamUsed = Math.round(mem.used / 1024 / 1024);
-    if (disk.length > 0) {
-      const root = disk.find((d: any) => d.mount === '/') || disk[0];
-      diskTotal = Math.round(root.size / 1024 / 1024 / 1024);
-      diskUsed = Math.round(root.used / 1024 / 1024 / 1024);
-    }
-  } catch {}
-
-  let mcDirSize = 0;
-  try {
-    const mcDir = resolveMinecraftDir();
-    if (fs.existsSync(mcDir)) {
-      const getSize = (dir: string): number => {
-        let total = 0;
-        try {
-          const entries = fs.readdirSync(dir, { withFileTypes: true });
-          for (const e of entries) {
-            const p = path.join(dir, e.name);
-            if (e.isFile()) total += fs.statSync(p).size;
-            else if (e.isDirectory()) total += getSize(p);
-          }
-        } catch {}
-        return total;
-      };
-      mcDirSize = Math.round(getSize(mcDir) / 1024 / 1024);
-    }
-  } catch {}
 
   const config = minecraftServer.getConfig();
   const mcMaxRam = parseInt(config.maxRam) * 1024 || 8192;
@@ -109,16 +134,22 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
     if (srv?.version) serverVersion = srv.version;
   }
 
-  let publicIp = '';
-  try { publicIp = (await httpsGet('https://api.ipify.org?format=json')).match(/"ip":"([^"]+)"/)?.[1] || ''; } catch {}
+  // Kickstart IP fetch if empty
+  if (!cachedPublicIp) {
+    httpsGet('https://api.ipify.org?format=json')
+      .then(d => {
+         const match = d.match(/"ip":"([^"]+)"/);
+         if (match) cachedPublicIp = match[1];
+      }).catch(()=>{});
+  }
 
   const status = {
     serverId: activeId,
     running: minecraftServer.isRunning,
     starting: minecraftServer.isStarting,
-    serverName: config.motd || 'MineControl OS',
+    serverName: config.name || 'MineControl OS',
     port: config.port || 25565,
-    publicIp,
+    publicIp: cachedPublicIp,
     serverVersion,
     onlinePlayers: onlinePlayers?.count || 0,
     totalPlayers: totalPlayers?.count || 0,
@@ -126,14 +157,15 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
     cpuUsage: latestStats?.cpu || 0,
     ramUsage: latestStats?.ram || 0,
     ramTotal: mcMaxRam,
-    systemRamTotal,
-    systemRamUsed,
+    systemRamTotal: cachedSysStats.systemRamTotal,
+    systemRamUsed: cachedSysStats.systemRamUsed,
     tps: latestStats?.tps || 20,
-    diskTotal,
-    diskUsed,
-    mcDirSize,
+    diskTotal: cachedSysStats.diskTotal,
+    diskUsed: cachedSysStats.diskUsed,
+    mcDirSize: cachedSysStats.mcDirSize,
     uptime: minecraftServer.uptime,
     startedAt: minecraftServer.startedAtISO,
+    osVersion: require('../../package.json').version,
   };
 
   res.json(status);
@@ -679,7 +711,18 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
       }
     }
 
+    const oldJarFile = minecraftServer.getConfig().jarFile;
+    const oldJarPath = oldJarFile ? path.join(mcDir, oldJarFile) : null;
+
     minecraftServer.updateConfig('jarFile', jarFile);
+    
+    // Delete old jar if it exists and is different from the new one
+    if (oldJarPath && oldJarFile !== jarFile && fs.existsSync(oldJarPath)) {
+      try {
+        fs.unlinkSync(oldJarPath);
+      } catch (e) {}
+    }
+
     // Also save version info to servers table
     const db = getDatabase();
     const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
@@ -763,18 +806,41 @@ async function downloadVanillaVersion(version: string, jarPath: string): Promise
 
 function downloadFile(url: string, destPath: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destPath);
-    https.get(url, (resp) => {
-      if (resp.statusCode !== 200) {
-        reject(new Error(`Failed to download: HTTP ${resp.statusCode}`));
-        return;
-      }
-      resp.pipe(file);
-      file.on('finish', () => { file.close(); resolve(); });
-    }).on('error', (err) => {
-      file.close();
-      reject(err);
-    });
+    const tempPath = destPath + '.download';
+    const file = fs.createWriteStream(tempPath);
+
+    const getWithRedirects = (requestUrl: string) => {
+      const client = requestUrl.startsWith('https') ? https : require('http');
+      client.get(requestUrl, (resp: any) => {
+        if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
+          let newUrl = resp.headers.location;
+          if (!newUrl.startsWith('http')) {
+             const urlObj = new URL(requestUrl);
+             newUrl = `${urlObj.protocol}//${urlObj.host}${newUrl}`;
+          }
+          getWithRedirects(newUrl);
+          return;
+        }
+        if (resp.statusCode !== 200) {
+          file.close();
+          if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+          reject(new Error(`Failed to download: HTTP ${resp.statusCode}`));
+          return;
+        }
+        resp.pipe(file);
+        file.on('finish', () => { 
+          file.close(); 
+          if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
+          fs.renameSync(tempPath, destPath);
+          resolve(); 
+        });
+      }).on('error', (err: any) => {
+        file.close();
+        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+        reject(err);
+      });
+    };
+    getWithRedirects(url);
   });
 }
 
