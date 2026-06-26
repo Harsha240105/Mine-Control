@@ -36,21 +36,20 @@ import UpdateBanner from './UpdateBanner';
 import toast from 'react-hot-toast';
 
 const navItems = [
-  { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { path: '/servers', label: 'Servers', icon: Layers },
-  { path: '/players', label: 'Players', icon: Users },
+  { path: '/dashboard', label: 'Server', icon: LayoutDashboard },
+  { path: '/settings', label: 'Options', icon: Settings },
   { path: '/console', label: 'Console', icon: Terminal },
-  { path: '/worlds', label: 'Worlds', icon: Globe },
+  { path: '/players', label: 'Players', icon: Users },
   { path: '/plugins', label: 'Plugins', icon: Puzzle },
+  { path: '/worlds', label: 'Worlds', icon: Globe },
   { path: '/backups', label: 'Backups', icon: HardDrive },
   { path: '/scheduler', label: 'Scheduler', icon: Clock },
   { path: '/connection', label: 'Connection', icon: Wifi },
-  { path: '/compatibility', label: 'Compatibility', icon: Cable },
-  { path: '/map', label: 'World Map', icon: Map },
+];
+
+const bottomNavItems = [
   { path: '/diagnostics', label: 'Diagnostics', icon: Stethoscope },
   { path: '/guide', label: 'Guide', icon: BookOpen },
-  { path: '/github', label: 'GitHub', icon: Github },
-  { path: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export default function Layout() {
@@ -297,6 +296,26 @@ export default function Layout() {
               {!collapsed && <span>{item.label}</span>}
             </NavLink>
           ))}
+
+          {/* Bottom Nav Items */}
+          <div className="mt-auto mb-2 pt-4 px-2">
+            {bottomNavItems.map((item) => (
+              <NavLink
+                key={item.path}
+                to={item.path}
+                className={({ isActive }) =>
+                  `flex items-center gap-3 px-4 py-2 rounded-lg text-sm transition-colors ${
+                    isActive
+                      ? 'bg-minecraft-600/20 text-minecraft-400 border border-minecraft-500/20'
+                      : 'text-gray-500 hover:text-gray-300 hover:bg-surface-800'
+                  }`
+                }
+              >
+                <item.icon className="w-4.5 h-4.5 flex-shrink-0" size={16} />
+                {!collapsed && <span>{item.label}</span>}
+              </NavLink>
+            ))}
+          </div>
         </nav>
 
         {/* Bottom */}

@@ -10,8 +10,8 @@ import {
 import toast from 'react-hot-toast';
 
 const STEPS = [
-  'Server Name', 'Software', 'Version', 'Settings', 'Java',
-  'Plugins', 'Network', 'Summary', 'Create',
+  'Identification', 'Software', 'Version', 'World', 'Settings', 'Java',
+  'Plugins', 'Summary', 'Create',
 ];
 
 const SERVER_SOFTWARE = [
@@ -184,40 +184,51 @@ export default function Wizard() {
     setCreateProgress(0);
 
     const statuses = [
-      'Downloading Server...', 'Installing Server...',
-      'Generating World...', 'Creating Configuration...',
-      'Installing Plugins...', 'Preparing Dashboard...',
+      'Preparing Server...', 'Saving Configuration...', 'Readying Dashboard...'
     ];
 
-    for (let i = 0; i <= 100; i++) {
-      setCreateProgress(i);
-      const idx = Math.min(Math.floor(i / 17), statuses.length - 1);
-      setCreateStatus(statuses[idx]);
-      await new Promise(r => setTimeout(r, 60));
-    }
-
-    setCreateStatus('Server Ready!');
-    await new Promise(r => setTimeout(r, 800));
-
-    // Save to recent servers
-    const serverData = {
-      name: data.name,
-      path: data.path,
-      software: data.software,
-      version: data.version,
-      players: 0,
-      created: new Date().toISOString(),
-    };
     try {
-      const existing = JSON.parse(localStorage.getItem('mc_servers') || '[]');
-      existing.unshift(serverData);
-      localStorage.setItem('mc_servers', JSON.stringify(existing.slice(0, 10)));
-      localStorage.setItem('mc_wizard_complete', 'true');
-    } catch {}
+      for (let i = 0; i <= 100; i += 25) {
+        setCreateProgress(i);
+        const idx = Math.min(Math.floor(i / 34), statuses.length - 1);
+        setCreateStatus(statuses[idx]);
+        await new Promise(r => setTimeout(r, 100));
+      }
 
-    setCreating(false);
-    toast.success('Server created!');
-    navigate('/dashboard');
+      const { api } = await import('../lib/api');
+      const res = await api.createServer({
+        name: data.name,
+        port: data.port,
+        javaPath: data.javaPath,
+        minRam: data.minRam,
+        maxRam: data.maxRam,
+        gamemode: data.gamemode,
+        difficulty: data.difficulty,
+        maxPlayers: data.maxPlayers,
+        viewDistance: data.viewDistance,
+        onlineMode: data.onlineMode,
+        software: data.software,
+        version: data.version,
+        seed: data.seed,
+        network: data.network,
+        pvp: data.pvp,
+      });
+
+      if (res.server?.id) {
+        await api.selectServer(res.server.id);
+      }
+
+      setCreateProgress(100);
+      setCreateStatus('Server Ready!');
+      await new Promise(r => setTimeout(r, 500));
+
+      toast.success('Server created successfully!');
+      localStorage.setItem('mc_wizard_complete', 'true');
+      navigate('/dashboard');
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create server');
+      setCreating(false);
+    }
   };
 
   const progressPercent = Math.round(((step + 1) / STEPS.length) * 100);
@@ -376,24 +387,31 @@ function StepContent({
   togglePlugin: (n: string) => void; showPassword: boolean; setShowPassword: (b: boolean) => void;
 }) {
   switch (step) {
-    case 0: return <StepName data={data} update={update} />;
+    case 0: return <StepIdentification data={data} update={update} />;
     case 1: return <StepSoftware data={data} update={update} />;
     case 2: return <StepVersion data={data} update={update} versions={versions} loading={versionsLoading} search={versionSearch} setSearch={setVersionSearch} />;
-    case 3: return <StepSettings data={data} update={update} />;
-    case 4: return <StepJava data={data} update={update} ramSlider={ramSlider} setRamSlider={setRamSlider} />;
-    case 5: return <StepPlugins data={data} update={update} togglePlugin={togglePlugin} />;
-    case 6: return <StepNetwork data={data} update={update} />;
+    case 3: return <StepWorld data={data} update={update} />;
+    case 4: return <StepSettings data={data} update={update} />;
+    case 5: return <StepJava data={data} update={update} ramSlider={ramSlider} setRamSlider={setRamSlider} />;
+    case 6: return <StepPlugins data={data} update={update} togglePlugin={togglePlugin} />;
     case 7: return <StepSummary data={data} />;
     case 8: return <StepCreate data={data} />;
     default: return null;
   }
 }
 
-function StepName({ data, update }: { data: WizardData; update: (p: Partial<WizardData>) => void }) {
+function StepIdentification({ data, update }: { data: WizardData; update: (p: Partial<WizardData>) => void }) {
+  const options: { id: string; label: string; desc: string; icon: any; badge?: string }[] = [
+    { id: 'local', label: 'Local Only', desc: 'Play on the same computer', icon: Monitor },
+    { id: 'lan', label: 'LAN', desc: 'Play on your local network', icon: Wifi },
+    { id: 'internet', label: 'Internet', desc: 'Public IP with port forwarding', icon: Globe },
+    { id: 'tunnel', label: 'Playit Tunnel', desc: 'No port forwarding needed', icon: Shield, badge: 'Recommended' },
+  ];
+
   return (
     <div className="animate-fade-in">
-      <h2 className="text-2xl font-bold text-gray-100 mb-2">What would you like to name your server?</h2>
-      <p className="text-gray-500 mb-8">Choose a name that represents your world.</p>
+      <h2 className="text-2xl font-bold text-gray-100 mb-2">Identify Your Server</h2>
+      <p className="text-gray-500 mb-8">Choose a name and how players will connect.</p>
 
       <div className="space-y-6">
         <div>
@@ -405,31 +423,40 @@ function StepName({ data, update }: { data: WizardData; update: (p: Partial<Wiza
               value={data.name}
               onChange={(e) => update({ name: e.target.value })}
               className="input pl-10 text-lg py-3"
-              placeholder="e.g. Harsha SMP"
+              placeholder="e.g. My Awesome Server"
               autoFocus
             />
           </div>
-          <p className="text-xs text-gray-500 mt-2">Use a name that players will recognize.</p>
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-2">Server Location</label>
-          <div className="relative">
-            <HardDrive size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-            <input
-              type="text"
-              value={data.path}
-              onChange={(e) => update({ path: e.target.value })}
-              className="input pl-10"
-            />
+          <label className="block text-sm font-medium text-gray-300 mb-2">Network Preference</label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {options.map(opt => {
+              const selected = data.network === opt.id;
+              const Icon = opt.icon;
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => update({ network: opt.id as any })}
+                  className={`relative p-4 rounded-xl border-2 text-left transition-all ${
+                    selected
+                      ? 'border-minecraft-500 bg-minecraft-600/10'
+                      : 'border-surface-700 bg-surface-800/50 hover:border-surface-600'
+                  }`}
+                >
+                  {opt.badge && (
+                    <span className="absolute top-2 right-2 text-[10px] px-2 py-0.5 rounded-full bg-minecraft-500/20 text-minecraft-400 font-medium">
+                      {opt.badge}
+                    </span>
+                  )}
+                  <Icon className={`w-5 h-5 mb-2 ${selected ? 'text-minecraft-400' : 'text-gray-400'}`} />
+                  <h3 className="text-sm font-semibold text-gray-200">{opt.label}</h3>
+                  <p className="text-xs text-gray-500 mt-1">{opt.desc}</p>
+                </button>
+              );
+            })}
           </div>
-          <p className="text-xs text-gray-500 mt-2">Where your server files will be stored.</p>
-        </div>
-
-        <div className="p-4 rounded-lg bg-surface-800/50 border border-surface-700/50">
-          <p className="text-xs text-gray-400">
-            <span className="text-gray-300 font-medium">Estimated storage:</span> ~500 MB (server) + world size
-          </p>
         </div>
       </div>
     </div>
@@ -598,10 +625,6 @@ function StepSettings({ data, update }: { data: WizardData; update: (p: Partial<
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-gray-400 mb-1">World Seed (optional)</label>
-          <input type="text" value={data.seed} onChange={(e) => update({ seed: e.target.value })} className="input text-sm" placeholder="Leave empty for random" />
-        </div>
-        <div>
           <label className="block text-xs font-medium text-gray-400 mb-1">Max Players</label>
           <input type="number" value={data.maxPlayers} onChange={(e) => update({ maxPlayers: parseInt(e.target.value) || 20 })} className="input text-sm" min={1} max={100} />
         </div>
@@ -746,78 +769,26 @@ function StepPlugins({ data, togglePlugin }: { data: WizardData; update: (p: Par
   );
 }
 
-function StepNetwork({ data, update }: { data: WizardData; update: (p: Partial<WizardData>) => void }) {
-  const options: { id: string; label: string; desc: string; icon: any; badge?: string }[] = [
-    { id: 'local', label: 'Local Only', desc: 'Play on the same computer', icon: Monitor },
-    { id: 'lan', label: 'LAN', desc: 'Play on your local network', icon: Wifi },
-    { id: 'internet', label: 'Internet', desc: 'Public IP with port forwarding', icon: Globe },
-    { id: 'tunnel', label: 'Playit Tunnel', desc: 'No port forwarding needed (recommended)', icon: Shield, badge: 'Recommended' },
-  ];
-
+function StepWorld({ data, update }: { data: WizardData; update: (p: Partial<WizardData>) => void }) {
   return (
     <div className="animate-fade-in">
-      <h2 className="text-2xl font-bold text-gray-100 mb-2">Network Settings</h2>
-      <p className="text-gray-500 mb-6">Choose how players will connect to your server.</p>
+      <h2 className="text-2xl font-bold text-gray-100 mb-2">World Generation</h2>
+      <p className="text-gray-500 mb-6">Set up your world seed.</p>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {options.map(opt => {
-          const selected = data.network === opt.id;
-          const Icon = opt.icon;
-          return (
-            <button
-              key={opt.id}
-              onClick={() => update({ network: opt.id as any })}
-              className={`relative p-4 rounded-xl border-2 text-left transition-all ${
-                selected
-                  ? 'border-minecraft-500 bg-minecraft-600/10'
-                  : 'border-surface-700 bg-surface-800/50 hover:border-surface-600'
-              }`}
-            >
-              {opt.badge && (
-                <span className="absolute top-2 right-2 text-[10px] px-2 py-0.5 rounded-full bg-minecraft-500/20 text-minecraft-400 font-medium">
-                  {opt.badge}
-                </span>
-              )}
-              <Icon className={`w-6 h-6 mb-2 ${selected ? 'text-minecraft-400' : 'text-gray-400'}`} />
-              <h3 className="text-sm font-semibold text-gray-200">{opt.label}</h3>
-              <p className="text-xs text-gray-500 mt-1">{opt.desc}</p>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="mt-6 p-4 rounded-lg bg-surface-800/50 border border-surface-700/50">
-        <p className="text-xs font-medium text-gray-300 mb-2">Your join address will be:</p>
-        <div className="flex items-center gap-2">
-          <code className="flex-1 p-2 rounded bg-surface-900 text-sm text-minecraft-400 font-mono">
-            {data.network === 'local' && `localhost:${data.port}`}
-            {data.network === 'lan' && `192.168.x.x:${data.port}`}
-            {data.network === 'internet' && `your-ip:${data.port}`}
-            {data.network === 'tunnel' && `your-tunnel.playit.gg`}
-          </code>
-          <button className="p-2 text-gray-400 hover:text-gray-200 transition-colors">
-            <Copy size={14} />
-          </button>
+      <div className="max-w-md">
+        <label className="block text-sm font-medium text-gray-300 mb-2">World Seed (optional)</label>
+        <div className="relative">
+          <Map size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+          <input
+            type="text"
+            value={data.seed}
+            onChange={(e) => update({ seed: e.target.value })}
+            className="input pl-10"
+            placeholder="e.g. 123456789 or custom text"
+          />
         </div>
+        <p className="text-xs text-gray-500 mt-2">Leave blank for a random seed.</p>
       </div>
-
-      {data.network === 'tunnel' && (
-        <div className="mt-4 p-4 rounded-lg bg-pink-500/5 border border-pink-500/20">
-          <h4 className="text-xs font-semibold text-pink-400 mb-2 flex items-center gap-1.5">
-            <ExternalLink size={12} />
-            Setting up Playit.gg
-          </h4>
-          <ol className="space-y-1.5 text-xs text-gray-400 list-decimal list-inside">
-            <li>Sign up at <span className="text-pink-400">playit.gg</span> (free)</li>
-            <li>Download &amp; run the Playit.gg agent on this PC</li>
-            <li>Create a tunnel pointing to <code className="text-minecraft-400 bg-surface-900 px-1 rounded">localhost:{data.port}</code></li>
-            <li>Copy the tunnel address and enter it in Settings &rarr; Connection</li>
-          </ol>
-          <p className="text-[11px] text-gray-500 mt-2">
-            No port forwarding required! You can configure the address later in the Connection page.
-          </p>
-        </div>
-      )}
     </div>
   );
 }

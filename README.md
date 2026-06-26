@@ -37,6 +37,9 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 ## 🚀 Features
 
 ### v1.0.18 — New in this release
+- **Massive UX Overhaul** — Entire creation flow was redesigned to mirror Aternos-style wizards with centralized creation/import points.
+- **Critical Bug Fixes** — Fixed the "Ghost Server" bug where created servers didn't show up in the UI, and the server deletion constraints bug by adding ON DELETE CASCADE cascades to the SQLite database.
+- **Settings Menu Purge** — Removed Version Selection and Connection Mode from Settings, shifting these configurations natively into the Creation Wizard.
 - **Task Scheduler** — Automate server commands, backups, and state changes with a full `node-cron` system and a dedicated UI tab.
 - **Modrinth Marketplace Integration** — Search, browse, and install server plugins directly from Modrinth within the app.
 - **Java Runtime Detector** — Automatically scans your system (Windows/macOS/Linux) to find and list all installed Java versions.

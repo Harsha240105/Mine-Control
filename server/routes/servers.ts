@@ -55,7 +55,7 @@ router.get('/:id', authMiddleware, (req: AuthRequest, res) => {
 // Create server
 router.post('/', authMiddleware, requirePermission('server.start'), async (req: AuthRequest, res) => {
   const db = getDatabase();
-  const { name, port, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, pvp, maxPlayers, viewDistance, onlineMode } = req.body;
+  const { name, port, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, pvp, maxPlayers, viewDistance, onlineMode, software, version, seed, network } = req.body;
 
   if (!name) return res.status(400).json({ error: 'Server name is required' });
 
@@ -73,12 +73,14 @@ router.post('/', authMiddleware, requirePermission('server.start'), async (req: 
   }
 
   db.prepare(`
-    INSERT INTO servers (id, name, slug, port, directory, version, version_source, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, pvp, maxPlayers, viewDistance, onlineMode, autoRestart, autoBackup, whitelistEnabled, status)
-    VALUES (?, ?, ?, ?, ?, '', '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped')
+    INSERT INTO servers (id, name, slug, port, directory, version, version_source, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, pvp, maxPlayers, viewDistance, onlineMode, autoRestart, autoBackup, whitelistEnabled, status, seed, network)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?)
   `).run(
     id, name, slug,
     parseInt(port || '25565'),
     dir,
+    version || '',
+    software || '',
     javaPath || 'java',
     jarFile || 'server.jar',
     minRam || '2G',
@@ -87,11 +89,29 @@ router.post('/', authMiddleware, requirePermission('server.start'), async (req: 
     difficulty || 'normal',
     gamemode || 'survival',
     pvp !== false ? 1 : 0,
-    parseInt(maxPlayers || '4'),
+    parseInt(maxPlayers || '20'),
     parseInt(viewDistance || '10'),
     onlineMode ? 1 : 0,
     1, 1, 0,
+    seed || '',
+    network || 'local'
   );
+
+  // Write level-seed to server.properties if provided
+  if (seed) {
+    const propsPath = require('path').join(dir, 'server.properties');
+    if (fs.existsSync(propsPath)) {
+      let content = fs.readFileSync(propsPath, 'utf-8');
+      if (content.includes('level-seed=')) {
+        content = content.replace(/level-seed=.*/, `level-seed=${seed}`);
+      } else {
+        content += `\nlevel-seed=${seed}\n`;
+      }
+      fs.writeFileSync(propsPath, content);
+    } else {
+      fs.writeFileSync(propsPath, `level-seed=${seed}\n`);
+    }
+  }
 
   const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(id) as any;
   res.json({ success: true, server });
@@ -150,6 +170,43 @@ router.put('/:id', authMiddleware, requirePermission('server.start'), (req: Auth
 
   const updated = db.prepare('SELECT * FROM servers WHERE id = ?').get(req.params.id) as any;
   res.json({ success: true, server: updated });
+});
+
+// Delete server
+router.delete('/:id', authMiddleware, requirePermission('server.start'), (req: AuthRequest, res) => {
+  const db = getDatabase();
+  const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(req.params.id) as any;
+  if (!server) return res.status(404).json({ error: 'Server not found' });
+
+  // If this is the currently active server and it's running, don't allow deletion
+  if (minecraftServer.directory === server.directory && (minecraftServer.isRunning || minecraftServer.isStarting)) {
+    return res.status(400).json({ error: 'Stop the server before deleting' });
+  }
+
+  try {
+    // Perform robust wipe of local directory
+    if (fs.existsSync(server.directory)) {
+      fs.rmSync(server.directory, { recursive: true, force: true });
+    }
+
+    // Manual deletion of related schedules and notifications to ensure SQLite cascading if legacy constraint
+    db.prepare('DELETE FROM schedules WHERE server_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM notifications WHERE server_id = ?').run(req.params.id);
+    
+    // Delete the server record
+    db.prepare('DELETE FROM servers WHERE id = ?').run(req.params.id);
+
+    // If it was the active server, unset it
+    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+    if (activeId === req.params.id) {
+      db.prepare("DELETE FROM server_config WHERE key = 'active_server_id'").run();
+    }
+
+    res.json({ success: true });
+  } catch (err: any) {
+    console.error('Failed to delete server:', err);
+    res.status(500).json({ error: 'Failed to delete server completely: ' + err.message });
+  }
 });
 
 export default router;

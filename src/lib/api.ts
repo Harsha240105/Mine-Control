@@ -29,6 +29,11 @@ async function request<T>(
 }
 
 export const api = {
+  get: (endpoint: string) => request<any>(endpoint),
+  post: (endpoint: string, data?: any) => request<any>(endpoint, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
+  put: (endpoint: string, data?: any) => request<any>(endpoint, { method: 'PUT', body: data ? JSON.stringify(data) : undefined }),
+  delete: (endpoint: string) => request<any>(endpoint, { method: 'DELETE' }),
+
   // Auth
   login: (username: string, password: string) =>
     request<{ token: string; user: any }>('/auth/login', {
@@ -96,6 +101,8 @@ export const api = {
     }),
   selectServer: (id: string) =>
     request<any>(`/servers/${id}/select`, { method: 'POST' }),
+  deleteServer: (id: string) =>
+    request<{ success: boolean }>(`/servers/${id}`, { method: 'DELETE' }),
 
   // Connection Info
   getConnectionInfo: () => request<any>('/server/connection'),

@@ -211,6 +211,8 @@ function initializeSchema() {
       autoBackup INTEGER NOT NULL DEFAULT 1,
       whitelistEnabled INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'stopped',
+      seed TEXT DEFAULT '',
+      network TEXT NOT NULL DEFAULT 'local',
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
@@ -224,7 +226,7 @@ function initializeSchema() {
       command TEXT,
       enabled INTEGER NOT NULL DEFAULT 1,
       last_run TEXT,
-      FOREIGN KEY (server_id) REFERENCES servers(id)
+      FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS notifications (
@@ -235,7 +237,8 @@ function initializeSchema() {
       message TEXT NOT NULL,
       type TEXT NOT NULL DEFAULT 'info',
       read INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
     );
   `);
 
@@ -245,6 +248,8 @@ function initializeSchema() {
   // Add version columns to existing servers (schema migration)
   try { db.exec('ALTER TABLE servers ADD COLUMN version TEXT DEFAULT \'\''); } catch {}
   try { db.exec('ALTER TABLE servers ADD COLUMN version_source TEXT DEFAULT \'\''); } catch {}
+  try { db.exec('ALTER TABLE servers ADD COLUMN seed TEXT DEFAULT \'\''); } catch {}
+  try { db.exec('ALTER TABLE servers ADD COLUMN network TEXT DEFAULT \'local\''); } catch {}
   // Populate version/source from jarFile for existing rows
   db.exec("UPDATE servers SET version = REPLACE(REPLACE(REPLACE(jarFile, 'paper-', ''), 'vanilla-', ''), '.jar', ''), version_source = CASE WHEN jarFile LIKE 'paper-%' THEN 'PaperMC' WHEN jarFile LIKE 'vanilla-%' THEN 'Mojang' ELSE '' END WHERE version = '' OR version IS NULL");
 

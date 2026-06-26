@@ -45,6 +45,10 @@ class MinecraftServerManager extends EventEmitter {
     this.ensureDirectories();
   }
 
+  get directory() {
+    return this.serverDir;
+  }
+
   private ensureDirectories() {
     const dirs = ['plugins', 'worlds', 'backups', 'logs', 'config'];
     for (const dir of dirs) {
