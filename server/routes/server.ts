@@ -98,7 +98,7 @@ setInterval(async () => {
       try {
         const { execSync } = require('child_process');
         const out = execSync('wmic LogicalDisk where "DriveType=3" Get Size,FreeSpace /format:csv', { encoding: 'utf-8', timeout: 5000 });
-        const lines = out.trim().split('\n').filter(l => l.trim());
+        const lines = out.trim().split('\n').filter((l: string) => l.trim());
         for (const line of lines) {
           const parts = line.split(',');
           if (parts.length >= 3 && parts[1] && parts[2]) {
