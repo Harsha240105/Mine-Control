@@ -156,16 +156,16 @@ export default function Plugins() {
       {/* Safe Sources Info */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {SAFE_PLUGIN_SOURCES.map(src => (
-          <a key={src.name} href={src.url} target="_blank" rel="noopener noreferrer"
-            className="flex items-center gap-2 p-3 rounded-lg bg-surface-800/50 border border-surface-700/50 hover:border-surface-600 transition-all group"
+          <div key={src.name}
+            className="flex items-center gap-2 p-3 rounded-lg bg-surface-800/50 border border-surface-700/50 cursor-default"
           >
             <Shield size={14} className="text-green-400 shrink-0" />
             <div className="min-w-0">
               <p className="text-xs font-medium text-gray-200 truncate">{src.name}</p>
               <p className="text-[10px] text-gray-500 truncate">{src.desc}</p>
             </div>
-            <ExternalLink size={12} className="text-gray-600 group-hover:text-gray-400 shrink-0" />
-          </a>
+            <span className="text-[10px] text-gray-600 bg-surface-800 px-1.5 py-0.5 rounded shrink-0">{src.badge}</span>
+          </div>
         ))}
       </div>
 
@@ -356,13 +356,17 @@ export default function Plugins() {
                   </div>
                   <p className="text-xs text-gray-400 line-clamp-2 mb-3 h-8">{mod.description}</p>
                   <button
-                    onClick={() => {
-                      /* Just an example install, ideally we fetch the latest version jar url */
-                      toast.success(`Please install ${mod.title} manually for now.`);
+                    onClick={async () => {
+                      try {
+                        await api.installPlugin(mod.title, `modrinth:${mod.slug || mod.project_id}`);
+                        toast.success(`Installing ${mod.title}...`);
+                      } catch (err: any) {
+                        toast.error(err.message);
+                      }
                     }}
                     className="w-full btn-secondary py-1 text-xs"
                   >
-                    View / Install
+                    Download & Install
                   </button>
                 </div>
               ))}

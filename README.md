@@ -7,7 +7,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.33-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.34-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -62,7 +62,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 
 ## 📥 Download
 
-Latest version: **v1.0.33** — [Auto-updates from within the app]
+Latest version: **v1.0.34** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -358,6 +358,16 @@ The app checks GitHub for new releases on startup. When an update is found:
 ---
 
 ## 📋 Release History
+
+### v1.0.34
+- **Dashboard Live Stats Reliability** — Fixed CPU seeding to use a 100ms delay (not same-tick) so the first dashboard load shows real CPU, not NaN. Removed outer try-catch that silently killed all stats. Switched disk detection from deprecated `wmic` to PowerShell `Get-CimInstance`. Changed `\|\|` to `??` for CPU fallback to preserve legitimate zero values.
+- **Plugin Download Fixes** — Replaced Safe Sources external links (`<a target="_blank">`) with info cards so users stop downloading plugins to their browser's Downloads folder. Fixed the Modrinth Marketplace "View / Install" button to actually download via the backend API. Fixed hardcoded "60s" timeout message to show the actual 120s timeout.
+- **Settings Save Reliability** — `handleSave()` no longer fails entirely when `server.properties` doesn't exist (pre-first-start state); gracefully skips the properties write instead. Button text changed from "Save & Restart Server" to "Save Settings".
+- **viewDistance Persistence** — `getConfig()` now returns `viewDistance` from the database, so the Settings page loads your saved value instead of always falling back to 10.
+- **Java Version Detection** — `detectRequiredJava()` now scans ALL `.class` files in the jar and returns the highest class version, catching Fabric bundles where the main class is Java 21-compatible but `net/minecraft/bundler/Main` requires Java 25.
+- **Wizard Download Errors** — The silent `catch {}` around the server jar download in the wizard now shows an error toast when the download fails, instead of silently showing "Server Ready!" with no jar.
+- **Dashboard Software Badge** — Dashboard now shows the software source (Paper, Fabric, Purpur, etc.) alongside the Minecraft version in the connection info section.
+- **Multi-Server Management** — Server cards on the Servers page now have a delete button for quick deletion. The server list dropdown in the sidebar already supports switching between servers.
 
 ### v1.0.33
 - **Java Version Validation** — Server jar is now scanned for its class file version before starting. If the jar requires a newer Java (e.g. Java 25+ for Minecraft 1.21.11), a clear error is shown with the required version and a download link to Adoptium.

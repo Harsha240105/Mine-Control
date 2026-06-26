@@ -141,7 +141,7 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
         if (!isFinished) {
           req.destroy();
           if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-          if (!res.headersSent) res.status(400).json({ error: 'Download timed out after 60s' });
+          if (!res.headersSent) res.status(400).json({ error: 'Download timed out after 120s' });
         }
       });
     };

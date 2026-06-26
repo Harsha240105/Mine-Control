@@ -27,6 +27,7 @@ interface StatusData {
   port: number;
   publicIp: string;
   serverVersion: string;
+  serverSoftware: string;
   osVersion?: string;
   onlinePlayers: number;
   maxPlayers: number;
@@ -157,14 +158,18 @@ export default function Dashboard() {
     try {
       const data = await api.getServerStatus();
       setStatus(data);
-    } catch {}
+    } catch (e) {
+      console.error('fetchStatus error:', e);
+    }
   };
 
   const fetchStats = async () => {
     try {
       const data: StatPoint[] = await api.getStatsHistory(30);
       setStatsHistory(data);
-    } catch {}
+    } catch (e) {
+      console.error('fetchStats error:', e);
+    }
   };
 
   const formatUptime = (seconds: number) => {
@@ -265,6 +270,7 @@ export default function Dashboard() {
               <strong className="text-gray-400">Local:</strong> Use <code className="text-minecraft-400">localhost</code> on this PC &nbsp;·&nbsp;
               <strong className="text-gray-400">Friends:</strong> Use the Public IP above (requires port forwarding on router) &nbsp;·&nbsp;
               Minecraft version: <strong className="text-gray-300">{status?.serverVersion || 'Unknown'}</strong>
+              {status?.serverSoftware ? <span className="ml-1 text-[10px] bg-minecraft-500/20 text-minecraft-400 px-1.5 py-0.5 rounded">{status.serverSoftware}</span> : null}
             </p>
           </div>
         </div>

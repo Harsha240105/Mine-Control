@@ -78,23 +78,34 @@ export default function Settings() {
   };
 
   const handleSave = async () => {
+    let saved = false;
     try {
       if (activeServerId) {
         await api.put(`/servers/${activeServerId}`, {
           name: serverName,
           onlineMode,
         });
+        saved = true;
       }
       await api.updateServerConfig(config);
-      await api.updateServerProperties({
-        'online-mode': onlineMode ? 'true' : 'false',
-        'level-seed': props['level-seed'],
-        motd: props.motd || config.motd,
-        'max-players': props['max-players'] || config.maxPlayers,
-        difficulty: props.difficulty || config.difficulty,
-        'view-distance': props['view-distance'] || config.viewDistance,
-        pvp: props.pvp !== 'false' ? 'true' : 'false',
-      });
+      saved = true;
+      try {
+        await api.updateServerProperties({
+          'online-mode': onlineMode ? 'true' : 'false',
+          'level-seed': props['level-seed'],
+          motd: props.motd || config.motd,
+          'max-players': props['max-players'] || config.maxPlayers,
+          difficulty: props.difficulty || config.difficulty,
+          'view-distance': props['view-distance'] || config.viewDistance,
+          pvp: props.pvp !== 'false' ? 'true' : 'false',
+        });
+      } catch (propsErr: any) {
+        if (propsErr.message?.includes('server.properties not found')) {
+          // Server not yet started — properties file will be generated on first start
+        } else {
+          throw propsErr;
+        }
+      }
       toast.success('Saved. Restart server for changes to take effect.');
     } catch (err: any) {
       toast.error(err.message);
@@ -388,7 +399,7 @@ export default function Settings() {
         <div className="mt-6 flex justify-end">
           <button onClick={handleSave} className="btn-primary flex items-center gap-2">
             <Save size={16} />
-            Save & Restart Server
+            Save Settings
           </button>
         </div>
       </div>

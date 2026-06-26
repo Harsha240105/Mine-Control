@@ -224,7 +224,9 @@ export default function Wizard() {
         await new Promise(r => setTimeout(r, 300));
         try {
           await api.setServerVersion(data.version, data.software);
-        } catch {}
+        } catch (downloadErr: any) {
+          toast.error(`Failed to download server jar: ${downloadErr.message}. Server record was created. You can download later from Settings.`);
+        }
       }
 
       setCreateProgress(100);

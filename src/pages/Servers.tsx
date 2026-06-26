@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Server, Plus, Settings, Play, Square,
+  Server, Plus, Settings, Play, Square, Trash2,
   Globe, Wifi, Database, Cpu, HardDrive, RefreshCw,
   AlertTriangle, CheckCircle, XCircle, ChevronRight,
 } from 'lucide-react';
@@ -218,6 +218,27 @@ export default function Servers() {
                       title="Switch to this server"
                     >
                       <Play size={14} />
+                    </button>
+                    <button
+                      onClick={async () => {
+                        if (!window.confirm(`Delete "${server.name}" permanently? This cannot be undone.`)) return;
+                        try {
+                          await api.deleteServer(server.id);
+                          toast.success(`Server "${server.name}" deleted`);
+                          fetchServers();
+                        } catch (err: any) {
+                          toast.error(err.message);
+                        }
+                      }}
+                      disabled={isActive}
+                      className={`p-1.5 rounded-lg text-xs transition-colors ${
+                        isActive
+                          ? 'text-gray-600 cursor-not-allowed'
+                          : 'text-gray-500 hover:text-red-400 hover:bg-red-500/10'
+                      }`}
+                      title="Delete server"
+                    >
+                      <Trash2 size={14} />
                     </button>
                   </div>
                 </div>

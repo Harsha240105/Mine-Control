@@ -112,25 +112,20 @@ class MinecraftServerManager extends EventEmitter {
     return this.startedAt ? this.startedAt.toISOString() : null;
   }
 
-  // Reads the major class version from the server jar to detect Java requirement
+  // Scans ALL .class files in the jar and returns the highest major class version
   private async detectRequiredJava(jarPath: string): Promise<number | null> {
     try {
       const directory = await unzipper.Open.file(jarPath);
-      // Find the main class from MANIFEST.MF
-      const manifestEntry = directory.files.find(f => f.path === 'META-INF/MANIFEST.MF');
-      if (!manifestEntry) return null;
-      const manifestContent = (await manifestEntry.buffer()).toString('utf-8');
-      const mainClassMatch = manifestContent.match(/Main-Class:\s*(\S+)/);
-      if (!mainClassMatch) return null;
-      const mainClassPath = mainClassMatch[1].replace(/\./g, '/') + '.class';
-      // Find the .class entry in the jar
-      const classEntry = directory.files.find(f => f.path === mainClassPath);
-      if (!classEntry) return null;
-      const classBytes = await classEntry.buffer();
-      // Class file format: bytes 6-7 = major version (big-endian)
-      if (classBytes.length < 8) return null;
-      const majorVersion = classBytes.readUInt16BE(6);
-      return majorVersion;
+      let maxVersion = 0;
+      for (const file of directory.files) {
+        if (!file.path.endsWith('.class')) continue;
+        const buf = await file.buffer();
+        if (buf.length >= 8) {
+          const ver = buf.readUInt16BE(6);
+          if (ver > maxVersion) maxVersion = ver;
+        }
+      }
+      return maxVersion > 0 ? maxVersion : null;
     } catch {
       return null;
     }
@@ -571,6 +566,7 @@ class MinecraftServerManager extends EventEmitter {
         backupInterval: parseInt('60'),
         backupEncryption: false,
         whitelistEnabled: !!server.whitelistEnabled,
+        viewDistance: server.viewDistance || 10,
         motd: server.motd || '§bMineControl OS §7- §fMinecraft Server',
         difficulty: server.difficulty || 'normal',
         gamemode: server.gamemode || 'survival',

@@ -74,72 +74,70 @@ let previousCpuTimes = { idle: 0, total: 0 };
 
 // Update live system stats (no systeminformation dependency needed)
 function collectSystemStats() {
-  try {
-    const totalMem = os.totalmem();
-    const freeMem = os.freemem();
-    const systemRamTotal = Math.round(totalMem / 1024 / 1024);
-    const systemRamUsed = Math.round((totalMem - freeMem) / 1024 / 1024);
+  const totalMem = os.totalmem();
+  const freeMem = os.freemem();
+  const systemRamTotal = Math.round(totalMem / 1024 / 1024);
+  const systemRamUsed = Math.round((totalMem - freeMem) / 1024 / 1024);
 
-    // CPU: delta between two samples
-    const cpus = os.cpus();
-    let idle = 0;
-    let total = 0;
-    for (const cpu of cpus) {
-      idle += cpu.times.idle;
-      total += cpu.times.user + cpu.times.nice + cpu.times.sys + cpu.times.idle + cpu.times.irq;
-    }
-    if (previousCpuTimes.total > 0) {
-      const idleDelta = idle - previousCpuTimes.idle;
-      const totalDelta = total - previousCpuTimes.total;
+  // CPU: delta between two samples
+  const cpus = os.cpus();
+  let idle = 0;
+  let total = 0;
+  for (const cpu of cpus) {
+    idle += cpu.times.idle;
+    total += cpu.times.user + cpu.times.nice + cpu.times.sys + cpu.times.idle + cpu.times.irq;
+  }
+  if (previousCpuTimes.total > 0) {
+    const idleDelta = idle - previousCpuTimes.idle;
+    const totalDelta = total - previousCpuTimes.total;
+    if (totalDelta > 0) {
       cachedCpuPercent = Math.min(100, Math.round((1 - idleDelta / totalDelta) * 100));
     }
-    previousCpuTimes = { idle, total };
+  }
+  previousCpuTimes = { idle, total };
 
-    let diskTotal = 0, diskUsed = 0;
-    try {
-      const { execSync } = require('child_process');
-      const out = execSync('wmic LogicalDisk where "DriveType=3" Get Size,FreeSpace /format:csv', { encoding: 'utf-8', timeout: 5000 });
-      const lines = out.trim().split('\n').filter((l: string) => l.trim());
-      for (const line of lines) {
-        if (line.startsWith('Node')) continue;
-        const parts = line.split(',');
-        if (parts.length >= 3 && parts[1] && parts[2]) {
-          const total = parseInt(parts[1]);
-          const free = parseInt(parts[2]);
-          if (!isNaN(total) && total > 0) {
-            diskTotal = Math.round(total / 1024 / 1024 / 1024);
-            diskUsed = Math.round((total - free) / 1024 / 1024 / 1024);
-            break;
-          }
+  let diskTotal = 0, diskUsed = 0;
+  try {
+    const { execSync } = require('child_process');
+    const out = execSync('powershell "Get-CimInstance Win32_LogicalDisk -Filter DriveType=3 | Select-Object Size,FreeSpace | ConvertTo-Csv -NoHeader"', { encoding: 'utf-8', timeout: 5000 });
+    const lines = out.trim().split('\n').filter((l: string) => l.trim());
+    for (const line of lines) {
+      const parts = line.split(',');
+      if (parts.length >= 2 && parts[0] && parts[1]) {
+        const totalBytes = parseInt(parts[0]);
+        const freeBytes = parseInt(parts[1]);
+        if (!isNaN(totalBytes) && totalBytes > 0) {
+          diskTotal = Math.round(totalBytes / 1024 / 1024 / 1024);
+          diskUsed = Math.round((totalBytes - freeBytes) / 1024 / 1024 / 1024);
+          break;
         }
       }
-    } catch {}
+    }
+  } catch (e) { console.error('Disk stats error:', e); }
 
-    let mcDirSize = 0;
-    try {
-      const mcDir = resolveMinecraftDir();
-      if (fs.existsSync(mcDir)) {
-        const getSize = (dir: string): number => {
-          let total = 0;
-          try {
-            const entries = fs.readdirSync(dir, { withFileTypes: true });
-            for (const e of entries) {
-              const p = path.join(dir, e.name);
-              if (e.isFile()) total += fs.statSync(p).size;
-              else if (e.isDirectory()) total += getSize(p);
-            }
-          } catch {}
-          return total;
-        };
-        mcDirSize = Math.round(getSize(mcDir) / 1024 / 1024);
-      }
-    } catch {}
+  let mcDirSize = 0;
+  try {
+    const mcDir = resolveMinecraftDir();
+    if (fs.existsSync(mcDir)) {
+      const getSize = (dir: string): number => {
+        let total = 0;
+        try {
+          const entries = fs.readdirSync(dir, { withFileTypes: true });
+          for (const e of entries) {
+            const p = path.join(dir, e.name);
+            if (e.isFile()) total += fs.statSync(p).size;
+            else if (e.isDirectory()) total += getSize(p);
+          }
+        } catch {}
+        return total;
+      };
+      mcDirSize = Math.round(getSize(mcDir) / 1024 / 1024);
+    }
+  } catch (e) { console.error('mcDirSize error:', e); }
 
-    cachedSysStats = { systemRamTotal, systemRamUsed, diskTotal, diskUsed, mcDirSize };
-  } catch {}
+  cachedSysStats = { systemRamTotal, systemRamUsed, diskTotal, diskUsed, mcDirSize };
 }
-// Run immediately on startup so Dashboard gets values on first request, then every 5s
-// Seed previousCpuTimes so the first collectSystemStats call computes a real CPU delta
+// Seed CPU times and collect stats after a small delay so the first measurement has a real delta
 const seedCpus = os.cpus();
 let seedIdle = 0, seedTotal = 0;
 for (const cpu of seedCpus) {
@@ -147,7 +145,7 @@ for (const cpu of seedCpus) {
   seedTotal += cpu.times.user + cpu.times.nice + cpu.times.sys + cpu.times.idle + cpu.times.irq;
 }
 previousCpuTimes = { idle: seedIdle, total: seedTotal };
-collectSystemStats();
+setTimeout(collectSystemStats, 100);
 setInterval(collectSystemStats, 5000);
 
 // Background IP fetcher
@@ -171,6 +169,7 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
   // Read server details from servers table
   const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
   let serverVersion = 'Unknown';
+  let serverSoftware = '';
   let serverNameFromDb = '';
   let serverPortFromDb = 0;
   if (activeId) {
@@ -178,6 +177,7 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
     if (srv) {
       serverNameFromDb = srv.name || '';
       serverPortFromDb = srv.port || 0;
+      serverSoftware = srv.version_source || '';
       if (srv.version) serverVersion = srv.version;
       else if (srv.version_source) serverVersion = `${srv.version_source} (select version)`;
     }
@@ -200,10 +200,11 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
     port: config.port || serverPortFromDb || 25565,
     publicIp: cachedPublicIp,
     serverVersion,
+    serverSoftware,
     onlinePlayers: onlinePlayers?.count || 0,
     totalPlayers: totalPlayers?.count || 0,
     maxPlayers: config.maxPlayers,
-    cpuUsage: minecraftServer.isRunning ? (latestStats?.cpu || cachedCpuPercent) : cachedCpuPercent,
+    cpuUsage: minecraftServer.isRunning ? (latestStats?.cpu ?? cachedCpuPercent) : cachedCpuPercent,
     ramUsage: minecraftServer.isRunning ? (latestStats?.ram || 0) : 0,
     ramTotal: mcMaxRam,
     systemRamTotal: cachedSysStats.systemRamTotal,
