@@ -52,3 +52,4 @@ publish:
   provider: github
   owner: Harsha240105
   repo: Mine-Control
+  releaseType: release
