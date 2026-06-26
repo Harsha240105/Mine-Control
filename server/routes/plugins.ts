@@ -137,7 +137,7 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
         if (!res.headersSent) res.status(400).json({ error: err.message });
       });
 
-      req.setTimeout(60000, () => {
+      req.setTimeout(120000, () => {
         if (!isFinished) {
           req.destroy();
           if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);

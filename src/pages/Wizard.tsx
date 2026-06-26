@@ -218,6 +218,15 @@ export default function Wizard() {
         await api.selectServer(res.server.id);
       }
 
+      // Download the selected server version
+      if (data.version && data.software) {
+        setCreateStatus('Downloading Server Jar...');
+        await new Promise(r => setTimeout(r, 300));
+        try {
+          await api.setServerVersion(data.version, data.software);
+        } catch {}
+      }
+
       setCreateProgress(100);
       setCreateStatus('Server Ready!');
       await new Promise(r => setTimeout(r, 500));
@@ -510,10 +519,21 @@ function StepVersion({ data, update, versions, loading, search, setSearch }: {
     ? versions.filter(v => v.version.toLowerCase().includes(search.toLowerCase()))
     : versions;
     
+  const SOFTWARE_SOURCE_MAP: Record<string, string> = {
+    paper: 'PaperMC',
+    purpur: 'Purpur',
+    fabric: 'Fabric',
+    forge: 'Forge',
+    neoforge: 'NeoForge',
+    vanilla: 'Mojang',
+    spigot: 'PaperMC',
+    bukkit: 'PaperMC',
+  };
+
   const filtered = filteredBySearch.filter(v => {
-    if (data.software === 'paper') return v.source === 'PaperMC';
-    if (data.software === 'vanilla') return v.source === 'Mojang';
-    return true; 
+    const expectedSource = SOFTWARE_SOURCE_MAP[data.software];
+    if (!expectedSource) return true;
+    return v.source === expectedSource;
   });
 
   const releases = filtered.filter(v => v.type.toLowerCase() === 'release');
@@ -591,7 +611,7 @@ function VersionCard({ v, selected, onSelect }: { v: any; selected: string; onSe
     >
       <span className="font-mono text-xs">{v.version}</span>
       <span className={`block text-[10px] mt-0.5 ${isSelected ? 'text-minecraft-400/70' : 'text-gray-600'}`}>
-        {v.source === 'PaperMC' ? 'Paper' : 'Vanilla'}
+        {v.source}
       </span>
     </button>
   );

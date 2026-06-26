@@ -69,50 +69,51 @@ router.get('/java/scan', authMiddleware, async (_req, res) => {
 
 let cachedSysStats = { systemRamTotal: 0, systemRamUsed: 0, diskTotal: 0, diskUsed: 0, mcDirSize: 0 };
 let cachedPublicIp = '';
+let cachedCpuPercent = 0;
+let previousCpuTimes = { idle: 0, total: 0 };
 
-// Update stats in the background to prevent lagging the React dashboard
-setInterval(async () => {
+// Update live system stats every 5s (no systeminformation dependency needed)
+setInterval(() => {
   try {
-    const si = require('systeminformation');
-    const os = require('os');
-    
-    let systemRamTotal = 0, systemRamUsed = 0;
-    try {
-      const mem = await si.mem();
-      systemRamTotal = Math.round(mem.total / 1024 / 1024);
-      systemRamUsed = Math.round(mem.used / 1024 / 1024);
-    } catch {
-      systemRamTotal = Math.round(os.totalmem() / 1024 / 1024);
-      systemRamUsed = Math.round((os.totalmem() - os.freemem()) / 1024 / 1024);
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const systemRamTotal = Math.round(totalMem / 1024 / 1024);
+    const systemRamUsed = Math.round((totalMem - freeMem) / 1024 / 1024);
+
+    // CPU: delta between two samples
+    const cpus = os.cpus();
+    let idle = 0;
+    let total = 0;
+    for (const cpu of cpus) {
+      idle += cpu.times.idle;
+      total += cpu.times.user + cpu.times.nice + cpu.times.sys + cpu.times.idle + cpu.times.irq;
     }
+    if (previousCpuTimes.total > 0) {
+      const idleDelta = idle - previousCpuTimes.idle;
+      const totalDelta = total - previousCpuTimes.total;
+      cachedCpuPercent = Math.min(100, Math.round((1 - idleDelta / totalDelta) * 100));
+    }
+    previousCpuTimes = { idle, total };
 
     let diskTotal = 0, diskUsed = 0;
     try {
-      const disk = await si.fsSize();
-      if (disk.length > 0) {
-        const root = disk.find((d: any) => d.mount === '/' || d.mount.match(/^[A-Z]:\\?$/)) || disk[0];
-        diskTotal = Math.round(root.size / 1024 / 1024 / 1024);
-        diskUsed = Math.round(root.used / 1024 / 1024 / 1024);
-      }
-    } catch {
-      try {
-        const { execSync } = require('child_process');
-        const out = execSync('wmic LogicalDisk where "DriveType=3" Get Size,FreeSpace /format:csv', { encoding: 'utf-8', timeout: 5000 });
-        const lines = out.trim().split('\n').filter((l: string) => l.trim());
-        for (const line of lines) {
-          const parts = line.split(',');
-          if (parts.length >= 3 && parts[1] && parts[2]) {
-            const total = parseInt(parts[1]);
-            const free = parseInt(parts[2]);
-            if (!isNaN(total) && total > 0) {
-              diskTotal = Math.round(total / 1024 / 1024 / 1024);
-              diskUsed = Math.round((total - free) / 1024 / 1024 / 1024);
-              break;
-            }
+      const { execSync } = require('child_process');
+      const out = execSync('wmic LogicalDisk where "DriveType=3" Get Size,FreeSpace /format:csv', { encoding: 'utf-8', timeout: 5000 });
+      const lines = out.trim().split('\n').filter((l: string) => l.trim());
+      for (const line of lines) {
+        if (line.startsWith('Node')) continue;
+        const parts = line.split(',');
+        if (parts.length >= 3 && parts[1] && parts[2]) {
+          const total = parseInt(parts[1]);
+          const free = parseInt(parts[2]);
+          if (!isNaN(total) && total > 0) {
+            diskTotal = Math.round(total / 1024 / 1024 / 1024);
+            diskUsed = Math.round((total - free) / 1024 / 1024 / 1024);
+            break;
           }
         }
-      } catch {}
-    }
+      }
+    } catch {}
 
     let mcDirSize = 0;
     try {
@@ -136,7 +137,7 @@ setInterval(async () => {
 
     cachedSysStats = { systemRamTotal, systemRamUsed, diskTotal, diskUsed, mcDirSize };
   } catch {}
-}, 10000);
+}, 5000);
 
 // Background IP fetcher
 setInterval(async () => {
@@ -160,8 +161,9 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
   const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
   let serverVersion = 'Unknown';
   if (activeId) {
-    const srv = db.prepare('SELECT version FROM servers WHERE id = ?').get(activeId) as any;
+    const srv = db.prepare('SELECT version, version_source FROM servers WHERE id = ?').get(activeId) as any;
     if (srv?.version) serverVersion = srv.version;
+    else if (srv?.version_source) serverVersion = `${srv.version_source} (select version)`;
   }
 
   // Kickstart IP fetch if empty
@@ -184,8 +186,8 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
     onlinePlayers: onlinePlayers?.count || 0,
     totalPlayers: totalPlayers?.count || 0,
     maxPlayers: config.maxPlayers,
-    cpuUsage: latestStats?.cpu || 0,
-    ramUsage: latestStats?.ram || 0,
+    cpuUsage: minecraftServer.isRunning ? (latestStats?.cpu || cachedCpuPercent) : cachedCpuPercent,
+    ramUsage: minecraftServer.isRunning ? (latestStats?.ram || 0) : 0,
     ramTotal: mcMaxRam,
     systemRamTotal: cachedSysStats.systemRamTotal,
     systemRamUsed: cachedSysStats.systemRamUsed,
@@ -990,7 +992,7 @@ async function downloadVanillaVersion(version: string, jarPath: string): Promise
   }
 }
 
-function downloadFile(url: string, destPath: string, timeoutMs = 60000): Promise<void> {
+function downloadFile(url: string, destPath: string, timeoutMs = 120000): Promise<void> {
   return new Promise((resolve, reject) => {
     const tempPath = destPath + '.download';
     const file = fs.createWriteStream(tempPath);

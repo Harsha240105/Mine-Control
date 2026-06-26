@@ -69,7 +69,7 @@ router.post('/', authMiddleware, requirePermission('server.start'), async (req: 
 
   // Create directories
   for (const sub of ['plugins', 'worlds', 'backups', 'logs', 'config']) {
-    const p = require('path').join(dir, sub);
+      const p = path.join(dir, sub);
     if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
   }
 
@@ -100,7 +100,7 @@ router.post('/', authMiddleware, requirePermission('server.start'), async (req: 
 
   // Write level-seed to server.properties if provided
   if (seed) {
-    const propsPath = require('path').join(dir, 'server.properties');
+    const propsPath = path.join(dir, 'server.properties');
     if (fs.existsSync(propsPath)) {
       let content = fs.readFileSync(propsPath, 'utf-8');
       if (content.includes('level-seed=')) {

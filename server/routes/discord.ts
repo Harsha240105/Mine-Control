@@ -9,13 +9,14 @@ router.get('/', authMiddleware, requirePermission('settings.view'), (req: AuthRe
   const db = getDatabase();
   const token = (db.prepare("SELECT value FROM server_config WHERE key = 'discordToken'").get() as any)?.value || '';
   const channel = (db.prepare("SELECT value FROM server_config WHERE key = 'discordChannel'").get() as any)?.value || '';
+  const voiceChannel = (db.prepare("SELECT value FROM server_config WHERE key = 'discordVoiceChannelId'").get() as any)?.value || '';
   const voiceUrl = (db.prepare("SELECT value FROM server_config WHERE key = 'discordVoiceUrl'").get() as any)?.value || '';
   
-  res.json({ token, channelId: channel, voiceUrl });
+  res.json({ token, channelId: channel, voiceChannelId: voiceChannel, voiceUrl });
 });
 
 router.post('/', authMiddleware, requirePermission('settings.edit'), async (req: AuthRequest, res) => {
-  const { token, channelId, voiceUrl } = req.body;
+  const { token, channelId, voiceChannelId, voiceUrl } = req.body;
   const db = getDatabase();
 
   if (token !== undefined) {
@@ -24,6 +25,10 @@ router.post('/', authMiddleware, requirePermission('settings.edit'), async (req:
   
   if (channelId !== undefined) {
     db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('discordChannel', ?)").run(channelId);
+  }
+
+  if (voiceChannelId !== undefined) {
+    db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('discordVoiceChannelId', ?)").run(voiceChannelId);
   }
 
   if (voiceUrl !== undefined) {

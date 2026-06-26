@@ -7,7 +7,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.31-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.32-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -62,7 +62,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 
 ## 📥 Download
 
-Latest version: **v1.0.31** — [Auto-updates from within the app]
+Latest version: **v1.0.32** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -359,6 +359,14 @@ The app checks GitHub for new releases on startup. When an update is found:
 
 ## 📋 Release History
 
+### v1.0.32
+- **Wizard Version Filtering** — Server creation wizard now correctly filters versions by selected software type (Paper, Fabric, Purpur, Forge, Vanilla, etc.) instead of showing all versions regardless of selection.
+- **Live Dashboard Telemetry** — Dashboard now shows live CPU usage from `os.cpus()` even when the Minecraft server is offline, eliminating 0% CPU / 0GB RAM / 0GB DISK readings.
+- **Auto-Download on Creation** — Server jar is now automatically downloaded immediately after the wizard creates a server, eliminating the "Server jar not found" error on first start.
+- **Discord Voice Channel ID** — Added separate Voice Channel ID field alongside Chat Channel ID in Discord settings, enabling independent chat and voice channel configuration.
+- **Download Timeout Increased** — Increased download timeout from 60s to 120s for server jars and plugins, preventing timeout failures on slow connections.
+- **Path Import Cleanup** — Replaced dynamic `require('path')` calls with static imports in server creation route.
+
 ### v1.0.31
 - **Path Resolution Fix** — Fixed `resolveMinecraftDir()` to prefer the active server directory over the `MINECRAFT_DIR` env var, resolving the "Server jar not found" error when starting servers on Windows.
 - **Forge Download Support** — Added `downloadForgeVersion()` handler for automatic Forge server jar downloads via the Forge maven repository.
@@ -448,6 +456,13 @@ MIT
 - **Discord Voice Link**: Added Discord Voice Invite Link appending to Server Start messages.
 - **Purpur & Expanded Catalog**: Fully integrated Purpur API fetching and prepared placeholders for Bedrock, Pocketmine, NeoForge, and Quilt.
 - **Portable Executable Pathing**: Fixed roaming AppData issue by forcing the server structure directly into the executable installation path.
+
+### v1.0.32
+- **Wizard Version Filtering**: Wizard now filters versions by selected software type.
+- **Live Dashboard Telemetry**: CPU/RAM/DISK now show live OS stats when server is offline.
+- **Auto-Download on Creation**: Server jar auto-downloaded after wizard finishes.
+- **Discord Voice Channel ID**: Added separate voice channel ID field in Discord settings.
+- **Download Timeout Increased**: 60s → 120s for jars and plugins.
 
 ### v1.0.31
 - **Path Resolution Fix**: Fixed resolveMinecraftDir() to prefer the active server directory, fixing "Server jar not found" errors.
