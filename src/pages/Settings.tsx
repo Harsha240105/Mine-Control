@@ -125,11 +125,13 @@ export default function Settings() {
     setSwitchingVersion(null);
   };
 
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = useState('');
+
   const handleDeleteServer = async () => {
     if (!activeServerId) return;
-    const confirmName = prompt(`Are you absolutely sure you want to delete this server? This will WIPE all world data, plugins, and settings. Type "${serverName}" to confirm.`);
-    if (confirmName !== serverName) {
-      if (confirmName !== null) toast.error('Server name did not match. Deletion cancelled.');
+    if (deleteConfirmName !== serverName) {
+      toast.error('Server name did not match. Deletion cancelled.');
       return;
     }
     
@@ -139,6 +141,7 @@ export default function Settings() {
       window.location.href = '/';
     } catch (err: any) {
       toast.error(err.message || 'Failed to delete server');
+      setShowDeleteModal(false);
     }
   };
 
@@ -462,7 +465,10 @@ export default function Settings() {
             <p className="text-xs text-gray-500 mt-1">Permanently delete this server and all its files.</p>
           </div>
           <button
-            onClick={handleDeleteServer}
+            onClick={() => {
+              setDeleteConfirmName('');
+              setShowDeleteModal(true);
+            }}
             className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors border border-red-500/20 flex items-center gap-2"
           >
             <Trash2 size={16} />
@@ -470,6 +476,49 @@ export default function Settings() {
           </button>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-[#0f172a] border border-red-500/30 rounded-xl p-6 max-w-md w-full shadow-2xl">
+            <div className="flex items-center gap-3 text-red-400 mb-4">
+              <AlertCircle size={24} />
+              <h3 className="text-lg font-bold">Delete Server</h3>
+            </div>
+            <p className="text-sm text-gray-300 mb-4">
+              Are you absolutely sure you want to delete this server? This will WIPE all world data, plugins, and settings permanently.
+            </p>
+            <div className="mb-6">
+              <label className="block text-xs font-medium text-gray-400 mb-2">
+                Type <span className="font-bold text-white">"{serverName}"</span> to confirm
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmName}
+                onChange={(e) => setDeleteConfirmName(e.target.value)}
+                className="w-full bg-[#1e293b] border border-[#334155] rounded-lg px-3 py-2 text-sm text-gray-200 focus:outline-none focus:border-red-500/50 focus:ring-1 focus:ring-red-500/50 placeholder-gray-600 transition-all"
+                placeholder={serverName}
+                autoFocus
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteServer}
+                disabled={deleteConfirmName !== serverName}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                Yes, Delete Server
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

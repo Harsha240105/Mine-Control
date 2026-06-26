@@ -204,7 +204,11 @@ router.delete('/:id', authMiddleware, requirePermission('server.start'), (req: A
   try {
     // Perform robust wipe of local directory
     if (fs.existsSync(server.directory)) {
-      fs.rmSync(server.directory, { recursive: true, force: true });
+      try {
+        fs.rmSync(server.directory, { recursive: true, force: true });
+      } catch (rmErr) {
+        console.error('Failed to wipe directory on disk (locked/EPERM), skipping:', rmErr);
+      }
     }
 
     // Manual deletion of related schedules and notifications to ensure SQLite cascading if legacy constraint
