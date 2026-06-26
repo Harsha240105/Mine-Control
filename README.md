@@ -62,7 +62,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 
 ## 📥 Download
 
-Latest version: **v1.0.24** — [Auto-updates from within the app]
+Latest version: **v1.0.30** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -433,3 +433,11 @@ MIT
 - **Forge Integration**: Expanded server software versions to fetch and support Forge dynamically.
 - **Import Scanning**: Import flow now scans existing files to automatically detect `server.properties` and EULA acceptance.
 - **Reliability**: Implemented magic-byte verification on downloads to prevent JAR corruption, and added timeout fallbacks.
+
+ # # #   v 1 . 0 . 3 0 
+ -   * * M o d r i n t h   T r a n s i t i o n * * :   R e p l a c e d   b r o k e n   H a n g a r   e n d p o i n t s   w i t h   M o d r i n t h   A P I   f o r   s e a m l e s s   p l u g i n   d o w n l o a d s . 
+ -   * * U I   O p t i m i z a t i o n * * :   M e m o i z e d   t h e   D a s h b o a r d   t e l e m e t r y   p i p e l i n e   t o   e l i m i n a t e   l a g   s p i k e s   d u r i n g   c o n t i n u o u s   u p d a t e s . 
+ -   * * D i s c o r d   V o i c e   L i n k * * :   A d d e d   D i s c o r d   V o i c e   I n v i t e   L i n k   a p p e n d i n g   t o   S e r v e r   S t a r t   m e s s a g e s . 
+ -   * * P u r p u r   &   E x p a n d e d   C a t a l o g * * :   F u l l y   i n t e g r a t e d   P u r p u r   A P I   f e t c h i n g   a n d   p r e p a r e d   p l a c e h o l d e r s   f o r   B e d r o c k ,   P o c k e t m i n e ,   N e o F o r g e ,   a n d   Q u i l t . 
+ -   * * P o r t a b l e   E x e c u t a b l e   P a t h i n g * * :   F i x e d   r o a m i n g   A p p D a t a   i s s u e   b y   f o r c i n g   t h e   s e r v e r   s t r u c t u r e   d i r e c t l y   i n t o   t h e   e x e c u t a b l e   i n s t a l l a t i o n   p a t h .  
+ 
