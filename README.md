@@ -3,9 +3,8 @@
 <p align="center">
   <a href="https://github.com/Harsha240105/Mine-Control/releases/latest">
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
-  </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.18-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.19-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -21,7 +20,7 @@
 
 ## 📥 Download
 
-Latest version: **v1.0.18** — [Auto-updates from within the app]
+Latest version: **v1.0.19** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -36,7 +35,7 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 
 ## 🚀 Features
 
-### v1.0.18 — New in this release
+### v1.0.19 — New in this release
 - **Massive UX Overhaul** — Entire creation flow was redesigned to mirror Aternos-style wizards with centralized creation/import points.
 - **Critical Bug Fixes** — Fixed the "Ghost Server" bug where created servers didn't show up in the UI, and the server deletion constraints bug by adding ON DELETE CASCADE cascades to the SQLite database.
 - **Settings Menu Purge** — Removed Version Selection and Connection Mode from Settings, shifting these configurations natively into the Creation Wizard.
@@ -45,7 +44,7 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 - **Java Runtime Detector** — Automatically scans your system (Windows/macOS/Linux) to find and list all installed Java versions.
 - **Aikar's JVM Flags** — Automatically applies highly optimized garbage collection flags for maximum performance on Paper and Purpur servers.
 - **In-App Notifications** — Real-time event notifications (player joins, crashes, backups) stored in a new database-backed panel.
-- **Release & Documentation Refresh** — All version strings, badges, and docs aligned to v1.0.18.
+- **Release & Documentation Refresh** — All version strings, badges, and docs aligned to v1.0.19.
 - **CI/CD Ready** — GitHub Actions `release.yml` automatically builds Windows, macOS, and Linux binaries on every new tag.
 
 ### Server Control

@@ -358,7 +358,7 @@ export default function Layout() {
             <UpdateBanner />
             <NotificationPanel />
             <span className="text-xs text-gray-500">
-              v1.0.18
+              v1.0.19
             </span>
           </div>
         </header>
