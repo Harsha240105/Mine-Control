@@ -177,7 +177,7 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
     mcDirSize: cachedSysStats.mcDirSize,
     uptime: minecraftServer.uptime,
     startedAt: minecraftServer.startedAtISO,
-    osVersion: require('../../package.json').version,
+    osVersion: (() => { try { return require('../../package.json').version; } catch { return require('../../../package.json').version; } })(),
   };
 
   res.json(status);

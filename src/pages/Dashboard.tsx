@@ -220,10 +220,10 @@ export default function Dashboard() {
     ? 'Starting...'
     : 'Offline';
 
-  const ramPercent = status && status.ramUsage !== null && status.ramTotal > 0 ? Math.round((status.ramUsage / status.ramTotal) * 100) : null;
-  const sysRamPercent = status && status.systemRamTotal > 0 ? Math.round((status.systemRamUsed / status.systemRamTotal) * 100) : 0;
-  const cpuPercent = status?.cpuUsage !== null ? Math.round(status?.cpuUsage || 0) : null;
-  const diskPercent = status && status.diskTotal > 0 ? Math.round((status.diskUsed / status.diskTotal) * 100) : 0;
+  const ramPercent = status?.ramUsage != null && (status.ramTotal ?? 0) > 0 ? Math.round((status.ramUsage / status.ramTotal) * 100) : null;
+  const sysRamPercent = (status?.systemRamTotal ?? 0) > 0 ? Math.round((status.systemRamUsed / status.systemRamTotal) * 100) : 0;
+  const cpuPercent = status?.cpuUsage != null ? Math.round(status.cpuUsage) : null;
+  const diskPercent = (status?.diskTotal ?? 0) > 0 ? Math.round((status.diskUsed / status.diskTotal) * 100) : 0;
 
   if (startError) {
     return <RepairFlow error={startError} onDismiss={() => setStartError(null)} />;
@@ -235,6 +235,16 @@ export default function Dashboard() {
         <div className="text-center space-y-4">
           <div className="animate-spin rounded-full h-10 w-10 border-2 border-minecraft-500 border-t-transparent mx-auto" />
           <p className="text-gray-400 text-sm">Connecting to server...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!status) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <p className="text-gray-400 text-sm">Unable to connect to server. Retrying...</p>
         </div>
       </div>
     );
@@ -306,7 +316,7 @@ export default function Dashboard() {
         )}
         <div className="flex-1" />
         <span className="text-xs text-gray-500">
-          {status?.onlinePlayers !== null ? `${status.onlinePlayers}/${status.maxPlayers} players` : 'Server Offline'}
+          {status?.onlinePlayers != null ? `${status.onlinePlayers}/${status.maxPlayers} players` : 'Server Offline'}
         </span>
       </div>
 
@@ -430,7 +440,7 @@ export default function Dashboard() {
             <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">TPS</span>
             <Zap className="w-4 h-4 text-minecraft-500" />
           </div>
-          {status?.tps !== null ? (
+          {status?.tps != null ? (
             <>
               <div className={`text-3xl font-bold ${getTpsColor(status.tps)}`}>
                 {status.tps.toFixed(1)}

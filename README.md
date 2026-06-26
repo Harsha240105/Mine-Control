@@ -7,7 +7,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.36-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.37-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -64,7 +64,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 
 ## 📥 Download
 
-Latest version: **v1.0.36** — [Auto-updates from within the app]
+Latest version: **v1.0.37** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -360,6 +360,11 @@ The app checks GitHub for new releases on startup. When an update is found:
 ---
 
 ## 📋 Release History
+
+### v1.0.37
+- **Fixed Dashboard crash on null status** — When `/api/server/status` returns a 500 error (e.g., broken `require` path for package.json), the Dashboard no longer crashes with `Cannot read properties of null (reading 'onlinePlayers')`. Added a null-status guard that shows "Unable to connect to server. Retrying..." instead of crashing. All null guards changed from `!== null` (which fails for `undefined`) to `!= null` (which catches both).
+- **Fixed production `package.json` path resolution** — The `/api/server/status` endpoint used `require('../../package.json')` which resolves to `dist/package.json` in the production ASAR bundle, causing a 500 error. Added a try-catch fallback chain that works in both development (`tsx watch`) and production (Electron ASAR) environments.
+- **Null-safe Dashboard rendering** — All computed values (`cpuPercent`, `ramPercent`, `sysRamPercent`, `diskPercent`) now use optional chaining with `??` fallbacks, so they never crash when `status` is `null` or partially initialized.
 
 ### v1.0.36
 - **Automatic Java Version Detection** — `minecraftServer.start()` now scans all installed JDKs via `JavaDetector.scan()` when the configured Java is too old. If the server jar requires Java 25+ (class version 69.0) but the default `java` on PATH is only Java 21, MineControl will automatically find a compatible JDK among installed runtimes and use it. If none is found, the error message lists every installed JDK with versions and provides direct download links.

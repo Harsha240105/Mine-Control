@@ -265,7 +265,7 @@ server.listen(portToUse, () => {
   // Initialize Discord
   discordService.initialize().catch(err => console.error('[Discord] Init failed:', err));
 
-  const osVersion = require('../package.json').version;
+  const osVersion = (() => { try { return require('../package.json').version; } catch { return require('../../package.json').version; } })();
   console.log(`
   ╔══════════════════════════════════════════╗
   ║         MineControl OS v${osVersion.padEnd(16, ' ')} ║
