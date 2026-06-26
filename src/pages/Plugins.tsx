@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Puzzle, Plus, Trash2, Power, PowerOff, Download, ExternalLink, Search, Star, Shield, Wifi, Globe, BookOpen } from 'lucide-react';
+import { Puzzle, Plus, Trash2, Power, PowerOff, Download, ExternalLink, Search, Star, Shield, Wifi, Globe, BookOpen, Loader2 } from 'lucide-react';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 
@@ -65,6 +65,7 @@ export default function Plugins() {
   const [marketplaceSearch, setMarketplaceSearch] = useState('');
   const [modrinthResults, setModrinthResults] = useState<any[]>([]);
   const [loadingModrinth, setLoadingModrinth] = useState(false);
+  const [installingPlugins, setInstallingPlugins] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchPlugins();
@@ -94,6 +95,8 @@ export default function Plugins() {
     if (e) e.preventDefault();
     const name = pluginName || 'Custom Plugin';
     const url = pluginUrl || undefined;
+    if (installingPlugins.has(name)) return;
+    setInstallingPlugins(prev => new Set(prev).add(name));
     try {
       await api.installPlugin(name, url);
       toast.success(`Installing ${name}...`);
@@ -101,16 +104,30 @@ export default function Plugins() {
       setTimeout(fetchPlugins, 3000);
     } catch (err: any) {
       toast.error(err.message);
+    } finally {
+      setInstallingPlugins(prev => {
+        const next = new Set(prev);
+        next.delete(name);
+        return next;
+      });
     }
   };
 
   const handleQuickInstall = async (p: typeof POPULAR_PLUGINS[0]) => {
+    if (installingPlugins.has(p.name)) return;
+    setInstallingPlugins(prev => new Set(prev).add(p.name));
     try {
       await api.installPlugin(p.name, p.url);
       toast.success(`Installing ${p.name}...`);
       setTimeout(fetchPlugins, 3000);
     } catch (err: any) {
       toast.error(err.message);
+    } finally {
+      setInstallingPlugins(prev => {
+        const next = new Set(prev);
+        next.delete(p.name);
+        return next;
+      });
     }
   };
 
@@ -246,22 +263,33 @@ export default function Plugins() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
-          {filteredPopular.map(p => (
+          {filteredPopular.map(p => {
+            const installing = installingPlugins.has(p.name);
+            return (
             <button
               key={p.name}
               onClick={() => handleQuickInstall(p)}
-              className="flex items-center gap-3 p-2.5 rounded-lg bg-surface-800/30 border border-surface-700/30 hover:border-surface-600 hover:bg-surface-800/50 transition-all text-left group"
+              disabled={installing}
+              className={`flex items-center gap-3 p-2.5 rounded-lg border transition-all text-left group ${
+                installing ? 'bg-minecraft-500/10 border-minecraft-500/30 opacity-70 cursor-wait' :
+                'bg-surface-800/30 border-surface-700/30 hover:border-surface-600 hover:bg-surface-800/50'
+              }`}
             >
               <div className="w-8 h-8 rounded-lg bg-minecraft-600/20 flex items-center justify-center shrink-0">
-                <Download size={14} className="text-minecraft-400" />
+                {installing ? (
+                  <Loader2 size={14} className="text-minecraft-400 animate-spin" />
+                ) : (
+                  <Download size={14} className="text-minecraft-400" />
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-gray-200 truncate">{p.name}</p>
-                <p className="text-[10px] text-gray-500 truncate">{p.desc}</p>
+                <p className="text-[10px] text-gray-500 truncate">{installing ? 'Downloading...' : p.desc}</p>
               </div>
-              <span className="text-[10px] text-gray-600 bg-surface-800 px-1.5 py-0.5 rounded">{p.source}</span>
+              <span className="text-[10px] text-gray-600 bg-surface-800 px-1.5 py-0.5 rounded">{installing ? '...' : p.source}</span>
             </button>
-          ))}
+            );
+          })}
         </div>
         <p className="text-xs text-gray-500 mt-3">
           Plugins downloaded from Modrinth. Always verify plugin sources for safety.
@@ -357,16 +385,29 @@ export default function Plugins() {
                   <p className="text-xs text-gray-400 line-clamp-2 mb-3 h-8">{mod.description}</p>
                   <button
                     onClick={async () => {
+                      if (installingPlugins.has(mod.title)) return;
+                      setInstallingPlugins(prev => new Set(prev).add(mod.title));
                       try {
                         await api.installPlugin(mod.title, `modrinth:${mod.slug || mod.project_id}`);
                         toast.success(`Installing ${mod.title}...`);
                       } catch (err: any) {
                         toast.error(err.message);
+                      } finally {
+                        setInstallingPlugins(prev => {
+                          const next = new Set(prev);
+                          next.delete(mod.title);
+                          return next;
+                        });
                       }
                     }}
-                    className="w-full btn-secondary py-1 text-xs"
+                    disabled={installingPlugins.has(mod.title)}
+                    className="w-full btn-secondary py-1 text-xs flex items-center justify-center gap-2"
                   >
-                    Download & Install
+                    {installingPlugins.has(mod.title) ? (
+                      <><Loader2 size={12} className="animate-spin" /> Downloading...</>
+                    ) : (
+                      <>Download & Install</>
+                    )}
                   </button>
                 </div>
               ))}

@@ -7,7 +7,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.34-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.35-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -62,7 +62,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 
 ## 📥 Download
 
-Latest version: **v1.0.34** — [Auto-updates from within the app]
+Latest version: **v1.0.35** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -358,6 +358,18 @@ The app checks GitHub for new releases on startup. When an update is found:
 ---
 
 ## 📋 Release History
+
+### v1.0.35
+- **Atomic Server Provisioning** — Server creation now downloads the jar BEFORE creating the database record. If the download fails, no orphaned server record is created and the directory is cleaned up. The wizard sends all data in a single API call.
+- **Forge 404 Fix** — Forge download now returns "This Forge version is unavailable. Choose another version." when a version has no matching build in the Forge API, instead of a cryptic error.
+- **Dashboard Offline State** — Dashboard now shows "Server Offline" / "Not yet started" instead of fake zero values for CPU, RAM, TPS, and Players when the server is not running. The version display shows "Not configured" when no version is selected.
+- **Global JSON Error Handler** — Added JSON parse error middleware for malformed request bodies and an API 404 handler that returns `application/json` for unknown API routes. Existing global error handler now respects `err.status` for proper HTTP status codes.
+- **Software Installation Badges** — Software page now shows granular badges per version: "Active" (currently in use), "Downloaded" (on disk but not active), and "Install" button. Software type cards show "Active", "Downloaded", "Not Installed", or "Popular" as appropriate.
+- **Plugin Install Progress** — Plugin install buttons now show a spinner and "Downloading..." text during installation, with disabled state to prevent duplicate clicks. Works for both popular plugins and Modrinth marketplace.
+- **Plugin Directory Resolution** — Fixed `plugins.ts` to resolve the plugins directory at request time instead of module load time, ensuring plugins are always installed to the correct server directory when switching between servers.
+- **Expanded Diagnostics** — Added 8 new diagnostic checks: World Data, server.properties, Disk Space, Java Memory, Folder Permissions, Download Cache, Minecraft Version, and Server Software Type detection. All checks now include detailed messages.
+- **Download Service Refactor** — Extracted all download functions into a shared `server/services/download.ts` module, eliminating code duplication between `server.ts` and `servers.ts`. The module exports type-safe functions for Paper, Fabric, Purpur, Forge, and Vanilla downloads.
+- **Startup Jar Validation** — Improved `minecraftServer.start()` error message to show the exact missing jar filename and suggest running a Repair or downloading from the Software page, instead of hardcoding "PaperMC server jar".
 
 ### v1.0.34
 - **Dashboard Live Stats Reliability** — Fixed CPU seeding to use a 100ms delay (not same-tick) so the first dashboard load shows real CPU, not NaN. Removed outer try-catch that silently killed all stats. Switched disk detection from deprecated `wmic` to PowerShell `Get-CimInstance`. Changed `\|\|` to `??` for CPU fallback to preserve legitimate zero values.

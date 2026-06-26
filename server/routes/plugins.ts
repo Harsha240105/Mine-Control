@@ -6,9 +6,13 @@ import { authMiddleware, requirePermission, AuthRequest } from '../middleware/au
 import { resolveMinecraftDir } from '../paths';
 
 const router = Router();
-const PLUGINS_DIR = resolveMinecraftDir('plugins');
+
+function getPluginsDir(): string {
+  return resolveMinecraftDir('plugins');
+}
 
 router.get('/', authMiddleware, (_req: AuthRequest, res) => {
+  const PLUGINS_DIR = getPluginsDir();
   if (!fs.existsSync(PLUGINS_DIR)) {
     return res.json([]);
   }
@@ -18,7 +22,10 @@ router.get('/', authMiddleware, (_req: AuthRequest, res) => {
   const dbPluginNames = new Set(dbPlugins.map((p: any) => p.name));
 
   // Scan actual plugins directory
-  const jarPlugins = fs.readdirSync(PLUGINS_DIR).filter(f => f.endsWith('.jar'));
+  let jarPlugins: string[] = [];
+  try {
+    jarPlugins = fs.readdirSync(PLUGINS_DIR).filter(f => f.endsWith('.jar'));
+  } catch {}
 
   const plugins = jarPlugins.map((jarFile: string) => {
     const name = jarFile.replace(/\.jar$/, '');
@@ -43,13 +50,18 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
     return res.status(400).json({ error: 'Plugin name is required' });
   }
 
+  const PLUGINS_DIR = getPluginsDir();
+  // Ensure plugins directory exists
+  if (!fs.existsSync(PLUGINS_DIR)) {
+    fs.mkdirSync(PLUGINS_DIR, { recursive: true });
+  }
+
   if (downloadUrl) {
     // Download from URL with redirect support
     const https = require('https');
     const http = require('http');
     const tempPath = path.join(PLUGINS_DIR, `${name}.jar.download`);
     const jarPath = path.join(PLUGINS_DIR, `${name}.jar`);
-
     let isFinished = false;
 
     const getWithRedirects = (requestUrl: string) => {
@@ -155,6 +167,7 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
 });
 
 router.delete('/:name', authMiddleware, requirePermission('plugin.manage'), (req: AuthRequest, res) => {
+  const PLUGINS_DIR = getPluginsDir();
   const jarPath = path.join(PLUGINS_DIR, `${req.params.name}.jar`);
   if (fs.existsSync(jarPath)) {
     fs.unlinkSync(jarPath);
@@ -167,6 +180,7 @@ router.delete('/:name', authMiddleware, requirePermission('plugin.manage'), (req
 });
 
 router.post('/:name/toggle', authMiddleware, requirePermission('plugin.manage'), (req: AuthRequest, res) => {
+  const PLUGINS_DIR = getPluginsDir();
   const db = getDatabase();
   const plugin = db.prepare('SELECT * FROM plugins WHERE name = ?').get(req.params.name) as any;
 

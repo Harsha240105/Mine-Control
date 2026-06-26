@@ -9,54 +9,14 @@ import { authMiddleware, requirePermission, AuthRequest } from '../middleware/au
 import { getDatabase } from '../database';
 import { resolveMinecraftDir } from '../paths';
 import { JavaDetector } from '../services/JavaDetector';
+import {
+  cacheGet, cacheSet, httpsGet, downloadFile, isPaperAvailable,
+  downloadPaperVersion, downloadFabricVersion, downloadPurpurVersion,
+  downloadForgeVersion, downloadVanillaVersion, downloadVersion,
+  MojangVersion, PAPER_API, MOJANG_MANIFEST, FABRIC_API, FORGE_API, PURPUR_API
+} from '../services/download';
 
 const router = Router();
-
-const PAPER_API = 'https://api.papermc.io/v2/projects/paper';
-const MOJANG_MANIFEST = 'https://launchermeta.mojang.com/mc/game/version_manifest.json';
-const FABRIC_API = 'https://meta.fabricmc.net/v2';
-const FORGE_API = 'https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json';
-const PURPUR_API = 'https://api.purpurmc.org/v2/purpur/';
-
-interface MojangVersion {
-  id: string;
-  type: string;
-  url: string;
-  time: string;
-  releaseTime: string;
-}
-
-// Simple in-memory cache
-const cache: { [key: string]: { data: any; expiry: number } } = {};
-
-function cacheGet<T>(key: string): T | null {
-  const entry = cache[key];
-  if (entry && entry.expiry > Date.now()) return entry.data;
-  return null;
-}
-
-function cacheSet(key: string, data: any, ttlMs = 300000) {
-  cache[key] = { data, expiry: Date.now() + ttlMs };
-}
-
-function httpsGet(url: string, timeoutMs = 15000): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const req = https.get(url, (resp) => {
-      if (resp.statusCode && resp.statusCode >= 400) {
-        req.destroy();
-        return reject(new Error(`HTTP Error ${resp.statusCode}`));
-      }
-      let d = '';
-      resp.on('data', (chunk) => d += chunk);
-      resp.on('end', () => resolve(d));
-    }).on('error', reject);
-    
-    req.setTimeout(timeoutMs, () => {
-      req.destroy();
-      reject(new Error(`Request timed out after ${timeoutMs}ms`));
-    });
-  });
-}
 
 router.get('/java/scan', authMiddleware, async (_req, res) => {
   try {
@@ -192,24 +152,26 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
       }).catch(()=>{});
   }
 
+  const running = minecraftServer.isRunning;
   const status = {
     serverId: activeId,
-    running: minecraftServer.isRunning,
+    running,
     starting: minecraftServer.isStarting,
     serverName: config.name || serverNameFromDb || 'MineControl OS',
     port: config.port || serverPortFromDb || 25565,
     publicIp: cachedPublicIp,
     serverVersion,
     serverSoftware,
-    onlinePlayers: onlinePlayers?.count || 0,
-    totalPlayers: totalPlayers?.count || 0,
+    installationStatus: serverVersion && serverSoftware ? 'installed' : 'not_configured',
+    onlinePlayers: running ? (onlinePlayers?.count || 0) : null,
+    totalPlayers: running ? (totalPlayers?.count || 0) : null,
     maxPlayers: config.maxPlayers,
-    cpuUsage: minecraftServer.isRunning ? (latestStats?.cpu ?? cachedCpuPercent) : cachedCpuPercent,
-    ramUsage: minecraftServer.isRunning ? (latestStats?.ram || 0) : 0,
+    cpuUsage: running ? (latestStats?.cpu ?? cachedCpuPercent) : null,
+    ramUsage: running ? (latestStats?.ram || 0) : null,
     ramTotal: mcMaxRam,
     systemRamTotal: cachedSysStats.systemRamTotal,
     systemRamUsed: cachedSysStats.systemRamUsed,
-    tps: latestStats?.tps || 20,
+    tps: running ? (latestStats?.tps || 20) : null,
     diskTotal: cachedSysStats.diskTotal,
     diskUsed: cachedSysStats.diskUsed,
     mcDirSize: cachedSysStats.mcDirSize,
@@ -507,6 +469,94 @@ router.get('/diagnostics', authMiddleware, async (_req: AuthRequest, res) => {
     checks.push({ name: 'Server Status', status: 'info', message: 'Server is starting...' });
   } else {
     checks.push({ name: 'Server Status', status: 'info', message: 'Server is stopped' });
+  }
+
+  // World directory check
+  const worldDir = path.join(mcDir, 'world');
+  if (fs.existsSync(worldDir)) {
+    const worlds = fs.readdirSync(worldDir).filter(f => f.endsWith('.mca') || f === 'level.dat');
+    checks.push({ name: 'World Data', status: 'pass', message: `World directory found with ${worlds.length} region files` });
+  } else {
+    checks.push({ name: 'World Data', status: 'info', message: 'World directory not yet created. Will be generated on first start.' });
+  }
+
+  // server.properties check
+  if (fs.existsSync(propsPath)) {
+    const content = fs.readFileSync(propsPath, 'utf-8');
+    const lines = content.split('\n').filter(l => l.trim() && !l.startsWith('#')).length;
+    checks.push({ name: 'server.properties', status: 'pass', message: `Found with ${lines} configuration entries` });
+  } else {
+    checks.push({ name: 'server.properties', status: 'info', message: 'server.properties not found. Will be generated on first start.' });
+  }
+
+  // Disk space check
+  try {
+    const { execSync } = require('child_process');
+    const dfOut = execSync('wmic logicaldisk get size,freespace,caption 2>nul', { encoding: 'utf-8', timeout: 5000 });
+    const driveMatch = mcDir.match(/^([A-Za-z]):/);
+    if (driveMatch) {
+      const driveLetter = driveMatch[1];
+      const lines = dfOut.split('\n').filter((l: string) => l.trim().toUpperCase().startsWith(driveLetter.toUpperCase()));
+      if (lines.length > 0) {
+        const parts = lines[0].trim().split(/\s+/);
+        const freeBytes = parseInt(parts[1]);
+        const totalBytes = parseInt(parts[2]);
+        if (freeBytes && totalBytes) {
+          const freeGB = (freeBytes / 1024 / 1024 / 1024).toFixed(1);
+          const totalGB = (totalBytes / 1024 / 1024 / 1024).toFixed(1);
+          const pct = (freeBytes / totalBytes) * 100;
+          if (pct < 10) {
+            checks.push({ name: 'Disk Space', status: 'warn', message: `Low disk space: ${freeGB} GB free of ${totalGB} GB (${pct.toFixed(0)}%)` });
+          } else {
+            checks.push({ name: 'Disk Space', status: 'pass', message: `${freeGB} GB free of ${totalGB} GB (${pct.toFixed(0)}% free)` });
+          }
+        }
+      }
+    }
+  } catch {}
+
+  // Java memory check
+  const maxRam = parseInt(config.maxRam) || 8;
+  const totalMemGB = Math.round(os.totalmem() / 1024 / 1024 / 1024);
+  if (maxRam >= totalMemGB) {
+    checks.push({ name: 'Java Memory', status: 'warn', message: `Allocated ${maxRam}G but system only has ${totalMemGB}G total RAM. Reduce max RAM.` });
+  } else if (maxRam < 1) {
+    checks.push({ name: 'Java Memory', status: 'warn', message: `Allocated ${maxRam}G is very low for a server` });
+  } else {
+    checks.push({ name: 'Java Memory', status: 'pass', message: `${maxRam}G allocated to Java, ${totalMemGB}G total system RAM` });
+  }
+
+  // Folder permissions check
+  try {
+    const testFile = path.join(mcDir, '.write-test');
+    fs.writeFileSync(testFile, 'test');
+    fs.unlinkSync(testFile);
+    checks.push({ name: 'Folder Permissions', status: 'pass', message: 'Write permissions OK' });
+  } catch {
+    checks.push({ name: 'Folder Permissions', status: 'fail', message: `Cannot write to ${mcDir}. Check folder permissions.` });
+  }
+
+  // Download cache check
+  const cacheDir = path.join(mcDir, 'download.cache');
+  if (fs.existsSync(cacheDir)) {
+    try {
+      const cacheFiles = fs.readdirSync(cacheDir);
+      checks.push({ name: 'Download Cache', status: 'pass', message: `${cacheFiles.length} cached files` });
+    } catch {
+      checks.push({ name: 'Download Cache', status: 'info', message: 'Cache directory exists but is not accessible' });
+    }
+  } else {
+    checks.push({ name: 'Download Cache', status: 'info', message: 'No download cache directory' });
+  }
+
+  // Minecraft Version check
+  if (config.jarFile) {
+    const versionMatch = config.jarFile.match(/(?:paper|vanilla|fabric|purpur|forge)-(.+)\.jar$/);
+    if (versionMatch) {
+      checks.push({ name: 'Minecraft Version', status: 'pass', message: `Version ${versionMatch[1]} detected from jar file` });
+    } else {
+      checks.push({ name: 'Minecraft Version', status: 'info', message: `Using jar: ${config.jarFile}` });
+    }
   }
 
   res.json(checks);
@@ -899,198 +949,6 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
     res.status(400).json({ error: error.message });
   }
 });
-
-async function isPaperAvailable(version: string): Promise<boolean> {
-  let paperVersions: string[] = [];
-  const cached = cacheGet<string[]>('paperVersions');
-  if (cached) {
-    paperVersions = cached;
-  } else {
-    try {
-      const data = await httpsGet(PAPER_API);
-      const parsed = JSON.parse(data);
-      paperVersions = parsed.versions || [];
-      cacheSet('paperVersions', paperVersions);
-    } catch {
-      return false;
-    }
-  }
-  return paperVersions.includes(version);
-}
-
-async function downloadPaperVersion(version: string, jarPath: string): Promise<void> {
-  try {
-    const buildsData = await httpsGet(`${PAPER_API}/versions/${version}/builds`);
-    const builds = JSON.parse(buildsData);
-    const latestBuild = builds.builds && builds.builds[builds.builds.length - 1];
-    if (!latestBuild) {
-      throw new Error(`No builds found for Paper ${version}`);
-    }
-    const downloadUrl = `${PAPER_API}/versions/${version}/builds/${latestBuild.build}/downloads/${latestBuild.downloads.application.name}`;
-    await downloadFile(downloadUrl, jarPath);
-  } catch (err: any) {
-    throw new Error(`Failed to download Paper ${version}: ${err.message}`);
-  }
-}
-
-  async function downloadFabricVersion(version: string, jarPath: string): Promise<void> {
-    try {
-      const loadersData = await httpsGet(`${FABRIC_API}/versions/loader/${version}`);
-      const loaders = JSON.parse(loadersData);
-      if (!loaders || loaders.length === 0) {
-        throw new Error(`No Fabric loaders found for Minecraft ${version}`);
-      }
-      const loaderVersion = loaders[0].loader.version;
-      const downloadUrl = `${FABRIC_API}/versions/loader/${version}/${loaderVersion}/1.0.1/server/jar`;
-      await downloadFile(downloadUrl, jarPath);
-    } catch (err: any) {
-      throw new Error(`Failed to download Fabric ${version}: ${err.message}`);
-    }
-  }
-
-  async function downloadPurpurVersion(version: string, jarPath: string): Promise<void> {
-    try {
-      const buildsData = await httpsGet(`https://api.purpurmc.org/v2/purpur/${version}`);
-      const builds = JSON.parse(buildsData);
-      const latestBuild = builds.builds.latest;
-      const downloadUrl = `https://api.purpurmc.org/v2/purpur/${version}/${latestBuild}/download`;
-      await downloadFile(downloadUrl, jarPath);
-    } catch (err: any) {
-      throw new Error(`Failed to download Purpur ${version}: ${err.message}`);
-    }
-  }
-
-  async function downloadForgeVersion(version: string, jarPath: string): Promise<void> {
-    try {
-      const promosData = await httpsGet(FORGE_API);
-      const promos = JSON.parse(promosData).promos || {};
-      const buildKey = `${version}-recommended`;
-      const fallbackKey = `${version}-latest`;
-      const forgeVersion = promos[buildKey] || promos[fallbackKey];
-      if (!forgeVersion) {
-        throw new Error(`No Forge build found for Minecraft ${version}`);
-      }
-      const downloadUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${version}-${forgeVersion}/forge-${version}-${forgeVersion}-server.jar`;
-      await downloadFile(downloadUrl, jarPath);
-    } catch (err: any) {
-      throw new Error(`Failed to download Forge ${version}: ${err.message}`);
-    }
-  }
-
-async function downloadVanillaVersion(version: string, jarPath: string): Promise<void> {
-  try {
-    // Get manifest
-    let mojangVersions: MojangVersion[] = [];
-    const cached = cacheGet<MojangVersion[]>('mojangVersions');
-    if (cached) {
-      mojangVersions = cached;
-    } else {
-      const data = await httpsGet(MOJANG_MANIFEST);
-      const parsed = JSON.parse(data);
-      mojangVersions = parsed.versions || [];
-      cacheSet('mojangVersions', mojangVersions);
-    }
-
-    // Find the version entry
-    const versionEntry = mojangVersions.find(v => v.id === version);
-    if (!versionEntry) {
-      throw new Error(`Version ${version} not found in Mojang manifest`);
-    }
-
-    // Get version details (contains download URL)
-    const detailsData = await httpsGet(versionEntry.url);
-    const details = JSON.parse(detailsData);
-    const serverDownload = details.downloads?.server;
-    if (!serverDownload?.url) {
-      throw new Error(`No server download available for ${version}`);
-    }
-
-    await downloadFile(serverDownload.url, jarPath);
-  } catch (err: any) {
-    throw new Error(`Failed to download Minecraft ${version}: ${err.message}`);
-  }
-}
-
-function downloadFile(url: string, destPath: string, timeoutMs = 120000): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const tempPath = destPath + '.download';
-    const file = fs.createWriteStream(tempPath);
-
-    let isFinished = false;
-
-    const getWithRedirects = (requestUrl: string) => {
-      const client = requestUrl.startsWith('https') ? https : require('http');
-      const options = {
-        headers: {
-          'User-Agent': 'MineControl-OS/1.0.29 (contact@minecontrol.dev)'
-        }
-      };
-      const req = client.get(requestUrl, options, (resp: any) => {
-        if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
-          let newUrl = resp.headers.location;
-          if (!newUrl.startsWith('http')) {
-             const urlObj = new URL(requestUrl);
-             newUrl = `${urlObj.protocol}//${urlObj.host}${newUrl}`;
-          }
-          getWithRedirects(newUrl);
-          return;
-        }
-        if (resp.statusCode !== 200) {
-          file.close();
-          if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-          return reject(new Error(`Failed to download: HTTP ${resp.statusCode}`));
-        }
-        
-        resp.pipe(file);
-        
-        file.on('finish', () => { 
-          isFinished = true;
-          file.close(); 
-          
-          // Verify file if it's a jar or zip
-          if (destPath.endsWith('.jar') || destPath.endsWith('.zip')) {
-            try {
-              const buffer = Buffer.alloc(4);
-              const fd = fs.openSync(tempPath, 'r');
-              fs.readSync(fd, buffer, 0, 4, 0);
-              fs.closeSync(fd);
-              
-              if (buffer[0] !== 0x50 || buffer[1] !== 0x4B || buffer[2] !== 0x03 || buffer[3] !== 0x04) {
-                if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-                return reject(new Error('Downloaded file is not a valid ZIP/JAR archive.'));
-              }
-            } catch (err) {
-              if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-              return reject(new Error('Failed to verify downloaded file integrity.'));
-            }
-          }
-          
-          if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
-          fs.renameSync(tempPath, destPath);
-          resolve(); 
-        });
-      });
-
-      req.on('error', (err: any) => {
-        isFinished = true;
-        file.close();
-        if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-        reject(err);
-      });
-
-      req.setTimeout(timeoutMs, () => {
-        if (!isFinished) {
-          req.destroy();
-          file.close();
-          if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-          reject(new Error(`Download timed out after ${timeoutMs}ms`));
-        }
-      });
-    };
-
-    getWithRedirects(url);
-  });
-}
 
 // Game Mode Switch
 router.post('/gamemode', authMiddleware, requirePermission('server.start'), async (req: AuthRequest, res) => {

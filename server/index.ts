@@ -52,6 +52,13 @@ app.use(cors({
 }));
 app.use(compression());
 app.use(express.json({ limit: '50mb' }));
+// JSON parse error handler (malformed request bodies)
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  if (err instanceof SyntaxError && 'body' in err) {
+    return res.status(400).json({ error: 'Invalid JSON in request body' });
+  }
+  next(err);
+});
 app.use(morgan('dev'));
 app.use(rateLimiter(60000, 200));
 
@@ -72,13 +79,18 @@ app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/server', analyticsRoutes);
 app.use('/api/discord', discordRoutes);
 
+// API 404 handler (unknown API routes return JSON, not HTML)
+app.use('/api/*', (req, res) => {
+  res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
+});
+
 // Global error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error(`[Error] ${req.method} ${req.url}:`, err.stack || err.message || err);
   if (res.headersSent) {
     return next(err);
   }
-  res.status(500).json({ 
+  res.status(err.status || 500).json({ 
     error: err.message || 'Internal server error',
     code: err.code || 'INTERNAL_ERROR'
   });

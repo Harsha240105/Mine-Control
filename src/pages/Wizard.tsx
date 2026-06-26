@@ -184,18 +184,19 @@ export default function Wizard() {
     setCreateProgress(0);
 
     const statuses = [
-      'Preparing Server...', 'Saving Configuration...', 'Readying Dashboard...'
+      'Preparing Server...', 'Downloading Server Jar...', 'Saving Configuration...', 'Readying Dashboard...'
     ];
 
     try {
-      for (let i = 0; i <= 100; i += 25) {
-        setCreateProgress(i);
-        const idx = Math.min(Math.floor(i / 34), statuses.length - 1);
-        setCreateStatus(statuses[idx]);
-        await new Promise(r => setTimeout(r, 100));
-      }
-
       const { api } = await import('../lib/api');
+
+      setCreateProgress(25);
+      setCreateStatus(statuses[0]);
+      await new Promise(r => setTimeout(r, 200));
+
+      // Atomic create: backend downloads jar first, then creates DB record
+      setCreateProgress(50);
+      setCreateStatus(statuses[1]);
       const res = await api.createServer({
         name: data.name,
         port: data.port,
@@ -218,20 +219,13 @@ export default function Wizard() {
         await api.selectServer(res.server.id);
       }
 
-      // Download the selected server version
-      if (data.version && data.software) {
-        setCreateStatus('Downloading Server Jar...');
-        await new Promise(r => setTimeout(r, 300));
-        try {
-          await api.setServerVersion(data.version, data.software);
-        } catch (downloadErr: any) {
-          toast.error(`Failed to download server jar: ${downloadErr.message}. Server record was created. You can download later from Settings.`);
-        }
-      }
+      setCreateProgress(75);
+      setCreateStatus(statuses[2]);
+      await new Promise(r => setTimeout(r, 200));
 
       setCreateProgress(100);
-      setCreateStatus('Server Ready!');
-      await new Promise(r => setTimeout(r, 500));
+      setCreateStatus(statuses[3]);
+      await new Promise(r => setTimeout(r, 300));
 
       toast.success('Server created successfully!');
       localStorage.setItem('mc_wizard_complete', 'true');

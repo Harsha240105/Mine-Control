@@ -176,10 +176,20 @@ export default function Software() {
                   <h3 className="text-lg font-bold text-gray-100">{soft.name}</h3>
                   {data.currentSource === soft.id && (
                     <span className="flex items-center gap-1 text-xs text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full border border-green-500/20">
-                      <CheckCircle2 size={12} /> Installed
+                      <CheckCircle2 size={12} /> Active
                     </span>
                   )}
-                  {soft.popular && data.currentSource !== soft.id && (
+                  {data.currentSource !== soft.id && data.availableVersions?.some(v => v.source === soft.id && v.downloaded) && (
+                    <span className="flex items-center gap-1 text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
+                      <Download size={10} /> Downloaded
+                    </span>
+                  )}
+                  {data.currentSource !== soft.id && !data.availableVersions?.some(v => v.source === soft.id && v.downloaded) && !soft.popular && !soft.disabled && (
+                    <span className="text-xs text-gray-500 bg-surface-800 px-2 py-0.5 rounded border border-surface-700">
+                      Not Installed
+                    </span>
+                  )}
+                  {soft.popular && data.currentSource !== soft.id && !data.availableVersions?.some(v => v.source === soft.id && v.downloaded) && (
                     <span className="text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
                       Popular
                     </span>
@@ -223,24 +233,30 @@ export default function Software() {
       <div className="card">
         <div className="grid grid-cols-1 divide-y divide-surface-700/50 max-h-[600px] overflow-y-auto pr-2">
           {versionsList.map(v => {
-            const isInstalled = data.currentSource === selectedSoftware && data.currentVersion === v;
+            const isCurrent = data.currentSource === selectedSoftware && data.currentVersion === v;
+            const isDownloaded = data.availableVersions?.some(av => av.source === selectedSoftware && av.version === v && av.downloaded);
             return (
               <div key={v} className="flex items-center justify-between p-4 hover:bg-surface-800/30 transition-colors">
                 <div className="flex items-center gap-3">
                   <span className="font-medium text-gray-200">{v}</span>
-                  {isInstalled && (
+                  {isCurrent && (
                     <span className="flex items-center gap-1 text-xs text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full border border-green-500/20">
-                      <CheckCircle2 size={12} /> Current
+                      <CheckCircle2 size={12} /> Active
+                    </span>
+                  )}
+                  {isDownloaded && !isCurrent && (
+                    <span className="flex items-center gap-1 text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
+                      <Download size={10} /> Downloaded
                     </span>
                   )}
                 </div>
                 <button
                   onClick={() => handleInstall(v)}
-                  disabled={installing || isInstalled}
-                  className={`btn-secondary flex items-center gap-2 text-sm ${isInstalled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  disabled={installing || isCurrent}
+                  className={`btn-secondary flex items-center gap-2 text-sm ${isCurrent ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
                   <Download size={14} />
-                  {isInstalled ? 'Installed' : 'Install'}
+                  {isCurrent ? 'Active' : installing ? 'Installing...' : 'Install'}
                 </button>
               </div>
             );

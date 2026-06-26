@@ -6,6 +6,7 @@ import { authMiddleware, requirePermission, AuthRequest } from '../middleware/au
 import { getDatabase, generateSlug } from '../database';
 import { minecraftServer } from '../services/minecraftServer';
 import { setMinecraftDir, resolvePath } from '../paths';
+import { downloadVersion } from '../services/download';
 
 const router = Router();
 
@@ -53,7 +54,7 @@ router.get('/:id', authMiddleware, (req: AuthRequest, res) => {
   res.json({ server });
 });
 
-// Create server
+// Create server (atomic: download first, then create DB record)
 router.post('/', authMiddleware, requirePermission('server.start'), async (req: AuthRequest, res) => {
   const db = getDatabase();
   const { name, port, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, pvp, maxPlayers, viewDistance, onlineMode, software, version, seed, network } = req.body;
@@ -69,9 +70,41 @@ router.post('/', authMiddleware, requirePermission('server.start'), async (req: 
 
   // Create directories
   for (const sub of ['plugins', 'worlds', 'backups', 'logs', 'config']) {
-      const p = path.join(dir, sub);
+    const p = path.join(dir, sub);
     if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
   }
+
+  // Map software to download source
+  const softwareLower = (software || '').toLowerCase();
+  let downloadSource = '';
+  if (softwareLower === 'paper' || softwareLower === 'spigot') downloadSource = 'paper';
+  else if (softwareLower === 'purpur') downloadSource = 'purpur';
+  else if (softwareLower === 'fabric') downloadSource = 'fabric';
+  else if (softwareLower === 'forge' || softwareLower === 'neoforge') downloadSource = 'forge';
+  else downloadSource = 'vanilla';
+
+  let jarFileName = 'server.jar';
+  let sourceName = '';
+  let displaySource = '';
+
+  // If version and software provided, download the jar before creating DB record
+  if (version && software) {
+    try {
+      const prefix = softwareLower;
+      jarFileName = `${prefix}-${version}.jar`;
+      const jarPath = path.join(dir, jarFileName);
+      const result = await downloadVersion(version, downloadSource, jarPath);
+      sourceName = result.sourceName;
+      displaySource = result.displaySource;
+    } catch (downloadErr: any) {
+      // Clean up directory on download failure
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+      return res.status(500).json({ error: downloadErr.message || 'Failed to download server jar' });
+    }
+  }
+
+  const versionToStore = version || '';
+  const softwareToStore = sourceName || software || '';
 
   db.prepare(`
     INSERT INTO servers (id, name, slug, port, directory, version, version_source, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, pvp, maxPlayers, viewDistance, onlineMode, autoRestart, autoBackup, whitelistEnabled, status, seed, network)
@@ -80,10 +113,10 @@ router.post('/', authMiddleware, requirePermission('server.start'), async (req: 
     id, name, slug,
     parseInt(port || '25565'),
     dir,
-    version || '',
-    software || '',
+    versionToStore,
+    softwareToStore,
     javaPath || 'java',
-    jarFile || 'server.jar',
+    jarFileName,
     minRam || '2G',
     maxRam || '8G',
     motd || '§bMineControl OS §7- §fMinecraft Server',

@@ -28,15 +28,16 @@ interface StatusData {
   publicIp: string;
   serverVersion: string;
   serverSoftware: string;
+  installationStatus: string;
   osVersion?: string;
-  onlinePlayers: number;
+  onlinePlayers: number | null;
   maxPlayers: number;
-  cpuUsage: number;
-  ramUsage: number;
+  cpuUsage: number | null;
+  ramUsage: number | null;
   ramTotal: number;
   systemRamTotal: number;
   systemRamUsed: number;
-  tps: number;
+  tps: number | null;
   diskTotal: number;
   diskUsed: number;
   mcDirSize: number;
@@ -215,9 +216,9 @@ export default function Dashboard() {
     ? 'Starting...'
     : 'Offline';
 
-  const ramPercent = status && status.ramTotal > 0 ? Math.round((status.ramUsage / status.ramTotal) * 100) : 0;
+  const ramPercent = status && status.ramUsage !== null && status.ramTotal > 0 ? Math.round((status.ramUsage / status.ramTotal) * 100) : null;
   const sysRamPercent = status && status.systemRamTotal > 0 ? Math.round((status.systemRamUsed / status.systemRamTotal) * 100) : 0;
-  const cpuPercent = Math.round(status?.cpuUsage || 0);
+  const cpuPercent = status?.cpuUsage !== null ? Math.round(status?.cpuUsage || 0) : null;
   const diskPercent = status && status.diskTotal > 0 ? Math.round((status.diskUsed / status.diskTotal) * 100) : 0;
 
   if (startError) {
@@ -269,8 +270,11 @@ export default function Dashboard() {
             <p className="text-[11px] text-gray-500 mt-2">
               <strong className="text-gray-400">Local:</strong> Use <code className="text-minecraft-400">localhost</code> on this PC &nbsp;·&nbsp;
               <strong className="text-gray-400">Friends:</strong> Use the Public IP above (requires port forwarding on router) &nbsp;·&nbsp;
-              Minecraft version: <strong className="text-gray-300">{status?.serverVersion || 'Unknown'}</strong>
+              Minecraft version: <strong className="text-gray-300">
+                {status?.installationStatus === 'not_configured' ? 'Not configured' : (status?.serverVersion || 'Not configured')}
+              </strong>
               {status?.serverSoftware ? <span className="ml-1 text-[10px] bg-minecraft-500/20 text-minecraft-400 px-1.5 py-0.5 rounded">{status.serverSoftware}</span> : null}
+              {!status?.running && status?.serverVersion ? <span className="ml-2 text-[10px] text-gray-500">Server Offline</span> : null}
             </p>
           </div>
         </div>
@@ -288,7 +292,7 @@ export default function Dashboard() {
         )}
         <div className="flex-1" />
         <span className="text-xs text-gray-500">
-          {status?.onlinePlayers || 0}/{status?.maxPlayers || 4} players
+          {status?.onlinePlayers !== null ? `${status?.onlinePlayers || 0}/${status?.maxPlayers || 4} players` : 'Server Offline'}
         </span>
       </div>
 
@@ -306,7 +310,7 @@ export default function Dashboard() {
           </div>
           {status?.running && (
             <div className="mt-2 flex gap-4 text-xs text-gray-500">
-              <span className="flex items-center gap-1"><Activity size={12} /> TPS: <span className={getTpsColor(status.tps)}>{status.tps?.toFixed(1)}</span></span>
+              <span className="flex items-center gap-1"><Activity size={12} /> TPS: <span className={getTpsColor(status.tps || 20)}>{status.tps?.toFixed(1) || '20.0'}</span></span>
             </div>
           )}
         </div>
@@ -317,16 +321,22 @@ export default function Dashboard() {
             <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Online Players</span>
             <Users className="w-4 h-4 text-minecraft-500" />
           </div>
-          <div className="text-3xl font-bold">
-            {status?.onlinePlayers || 0}
-            <span className="text-lg text-gray-500 font-normal">/{status?.maxPlayers || 4}</span>
-          </div>
-          <div className="mt-2 w-full bg-surface-800 rounded-full h-1.5">
-            <div
-              className="bg-minecraft-500 h-1.5 rounded-full transition-all duration-500"
-              style={{ width: `${((status?.onlinePlayers || 0) / (status?.maxPlayers || 4)) * 100}%` }}
-            />
-          </div>
+          {status?.running ? (
+            <>
+              <div className="text-3xl font-bold">
+                {status?.onlinePlayers || 0}
+                <span className="text-lg text-gray-500 font-normal">/{status?.maxPlayers || 4}</span>
+              </div>
+              <div className="mt-2 w-full bg-surface-800 rounded-full h-1.5">
+                <div
+                  className="bg-minecraft-500 h-1.5 rounded-full transition-all duration-500"
+                  style={{ width: `${((status?.onlinePlayers || 0) / (status?.maxPlayers || 4)) * 100}%` }}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="text-lg font-medium text-gray-500">Not yet started</div>
+          )}
         </div>
 
         {/* CPU Usage */}
@@ -335,17 +345,23 @@ export default function Dashboard() {
             <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">CPU Usage</span>
             <Cpu className="w-4 h-4 text-minecraft-500" />
           </div>
-          <div className={`text-3xl font-bold ${getCpuColor(cpuPercent)}`}>
-            {cpuPercent}%
-          </div>
-          <div className="mt-2 w-full bg-surface-800 rounded-full h-1.5">
-            <div
-              className={`h-1.5 rounded-full transition-all duration-500 ${
-                cpuPercent < 50 ? 'bg-green-500' : cpuPercent < 80 ? 'bg-yellow-500' : 'bg-red-500'
-              }`}
-              style={{ width: `${cpuPercent}%` }}
-            />
-          </div>
+          {cpuPercent !== null ? (
+            <>
+              <div className={`text-3xl font-bold ${getCpuColor(cpuPercent)}`}>
+                {cpuPercent}%
+              </div>
+              <div className="mt-2 w-full bg-surface-800 rounded-full h-1.5">
+                <div
+                  className={`h-1.5 rounded-full transition-all duration-500 ${
+                    cpuPercent < 50 ? 'bg-green-500' : cpuPercent < 80 ? 'bg-yellow-500' : 'bg-red-500'
+                  }`}
+                  style={{ width: `${cpuPercent}%` }}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="text-lg font-medium text-gray-500">Server Offline</div>
+          )}
         </div>
 
         {/* RAM Usage (Minecraft) */}
@@ -354,18 +370,24 @@ export default function Dashboard() {
             <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">MC RAM</span>
             <MemoryStick className="w-4 h-4 text-minecraft-500" />
           </div>
-          <div className={`text-3xl font-bold ${getRamColor(ramPercent)}`}>
-            {Math.round((status?.ramUsage || 0) / 1024)} <span className="text-lg text-gray-500 font-normal">GB</span>
-          </div>
-          <div className="text-xs text-gray-500 mt-1">{ramPercent}% of {Math.round((status?.ramTotal || 8192) / 1024)} GB</div>
-          <div className="mt-2 w-full bg-surface-800 rounded-full h-1.5">
-            <div
-              className={`h-1.5 rounded-full transition-all duration-500 ${
-                ramPercent < 60 ? 'bg-green-500' : ramPercent < 85 ? 'bg-yellow-500' : 'bg-red-500'
-              }`}
-              style={{ width: `${ramPercent}%` }}
-            />
-          </div>
+          {status?.running ? (
+            <>
+              <div className={`text-3xl font-bold ${getRamColor(ramPercent || 0)}`}>
+                {Math.round((status?.ramUsage || 0) / 1024)} <span className="text-lg text-gray-500 font-normal">GB</span>
+              </div>
+              <div className="text-xs text-gray-500 mt-1">{ramPercent}% of {Math.round((status?.ramTotal || 8192) / 1024)} GB</div>
+              <div className="mt-2 w-full bg-surface-800 rounded-full h-1.5">
+                <div
+                  className={`h-1.5 rounded-full transition-all duration-500 ${
+                    (ramPercent || 0) < 60 ? 'bg-green-500' : (ramPercent || 0) < 85 ? 'bg-yellow-500' : 'bg-red-500'
+                  }`}
+                  style={{ width: `${ramPercent || 0}%` }}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="text-lg font-medium text-gray-500">Not yet started</div>
+          )}
         </div>
 
         {/* System RAM */}
@@ -394,18 +416,24 @@ export default function Dashboard() {
             <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">TPS</span>
             <Zap className="w-4 h-4 text-minecraft-500" />
           </div>
-          <div className={`text-3xl font-bold ${getTpsColor(status?.tps || 20)}`}>
-            {status?.tps?.toFixed(1) || '20.0'}
-          </div>
-          <div className="text-xs text-gray-500 mt-1">Target: 20.0</div>
-          <div className="mt-2 w-full bg-surface-800 rounded-full h-1.5">
-            <div
-              className={`h-1.5 rounded-full transition-all duration-500 ${
-                (status?.tps || 20) >= 19 ? 'bg-green-500' : (status?.tps || 20) >= 15 ? 'bg-yellow-500' : 'bg-red-500'
-              }`}
-              style={{ width: `${((status?.tps || 20) / 20) * 100}%` }}
-            />
-          </div>
+          {status?.tps !== null ? (
+            <>
+              <div className={`text-3xl font-bold ${getTpsColor(status?.tps || 20)}`}>
+                {status?.tps?.toFixed(1) || '20.0'}
+              </div>
+              <div className="text-xs text-gray-500 mt-1">Target: 20.0</div>
+              <div className="mt-2 w-full bg-surface-800 rounded-full h-1.5">
+                <div
+                  className={`h-1.5 rounded-full transition-all duration-500 ${
+                    (status?.tps || 20) >= 19 ? 'bg-green-500' : (status?.tps || 20) >= 15 ? 'bg-yellow-500' : 'bg-red-500'
+                  }`}
+                  style={{ width: `${((status?.tps || 20) / 20) * 100}%` }}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="text-lg font-medium text-gray-500">Server Offline</div>
+          )}
         </div>
 
         {/* Disk Storage */}
@@ -424,7 +452,7 @@ export default function Dashboard() {
               style={{ width: `${diskPercent}%` }}
             />
           </div>
-          {status && <div className="text-[10px] text-gray-600 mt-1">MC files: {status.mcDirSize} MB</div>}
+          {status && <div className="text-[10px] text-gray-600 mt-1">MC files: {status.mcDirSize || 0} MB</div>}
         </div>
       </div>
 
@@ -440,23 +468,23 @@ export default function Dashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
             <MemoGauge 
               id="cpu-gauge"
-              percent={cpuPercent / 100}
+              percent={cpuPercent !== null ? cpuPercent / 100 : 0}
               colors={["#22c55e", "#eab308", "#ef4444"]}
-              formatTextValue={formatPercent}
+              formatTextValue={cpuPercent !== null ? formatPercent : () => 'OFFLINE'}
               label="CPU Load"
             />
             <MemoGauge 
               id="ram-gauge"
-              percent={ramPercent / 100}
+              percent={ramPercent !== null ? ramPercent / 100 : 0}
               colors={["#3b82f6", "#8b5cf6", "#d946ef"]}
-              formatTextValue={formatPercent}
+              formatTextValue={ramPercent !== null ? formatPercent : () => 'OFFLINE'}
               label="RAM Load"
             />
             <MemoGauge 
               id="tps-gauge"
-              percent={Math.min((status?.tps || 0) / 20, 1)}
+              percent={status?.tps !== null ? Math.min((status?.tps || 0) / 20, 1) : 0}
               colors={["#ef4444", "#eab308", "#22c55e"]}
-              formatTextValue={formatTps}
+              formatTextValue={status?.tps !== null ? formatTps : () => 'OFFLINE'}
               label="Server TPS"
             />
             <MemoGauge 

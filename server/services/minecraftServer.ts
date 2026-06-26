@@ -144,7 +144,8 @@ class MinecraftServerManager extends EventEmitter {
 
     try {
       const config = this.getConfig();
-      const jarPath = path.join(this.serverDir, config.jarFile);
+      const jarFileName = config.jarFile || 'server.jar';
+      const jarPath = path.join(this.serverDir, jarFileName);
 
       // Wait if the jar is currently being downloaded
       let waitCount = 0;
@@ -158,7 +159,7 @@ class MinecraftServerManager extends EventEmitter {
 
       if (!fs.existsSync(jarPath)) {
         this.starting = false;
-        throw new Error(`Server jar not found at ${jarPath}. Please place the PaperMC server jar in the minecraft directory.`);
+        throw new Error(`Server jar not found: ${jarFileName} is missing. Run a Repair or download a server version from the Software page first.`);
       }
 
       const eulaPath = path.join(this.serverDir, 'eula.txt');
