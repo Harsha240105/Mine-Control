@@ -13,6 +13,7 @@ import {
   Power,
   PowerOff,
   RotateCcw,
+  Cpu,
   LogOut,
   ChevronLeft,
   ChevronRight,

@@ -7,7 +7,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.24-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.26-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -16,7 +16,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 ## 📊 Project Completion Summary
 *This section is dynamically updated by the development team after every feature sprint.*
 
-* **Overall Progress:** 90% Completed
+* **Overall Progress:** 92% Completed
 * **Current Sprint Phase:** Phase 3 (Core Stabilization & UX Overhaul)
 * **Target Deadline:** July 10, 2026
 * **Last Updated:** June 26, 2026
@@ -33,6 +33,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 - [x] **Scheduler Crash Patch**: Fixed fatal UI crash during scheduler unboxing.
 - [x] **Deep Player Analytics**: Engine to parse `.dat` and `.json` files for rich user analytics and player inventory tracking.
 - [x] **Aternos Dashboard Overhaul**: Live animated Speedometers for hardware metrics and a Connected Players panel.
+- [x] **Safe App Environment Fix**: Resolved unhandled `ReferenceError: Cpu is not defined` crash on launch. Implemented `ErrorBoundary` for application-wide crash resilience and updated software tab data maps to resolve `mojangVersions` errors.
 
 ### ⏳ Current Focus / Active Task
 - Stabilizing UI components for multi-server runtime controls.
