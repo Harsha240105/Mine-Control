@@ -290,7 +290,7 @@ export default function Settings() {
               onChange={(e) => setProps({ ...props, 'view-distance': e.target.value })}
               className="input"
               min={3}
-              max={32}
+              max={128}
             />
           </div>
 

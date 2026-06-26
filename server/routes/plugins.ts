@@ -57,12 +57,12 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
         const slug = requestUrl.split(':')[1];
         const apiReq = https.get(`https://api.modrinth.com/v2/project/${slug}/version`, {
           headers: { 'User-Agent': 'MineControl-OS/1.0.30 (contact@minecontrol.dev)' }
-        }, (res: any) => {
+        }, (modrinthRes: any) => {
           let data = '';
-          res.on('data', (c: string) => data += c);
-          res.on('end', () => {
+          modrinthRes.on('data', (c: string) => data += c);
+          modrinthRes.on('end', () => {
             try {
-              if (res.statusCode !== 200) throw new Error(`Modrinth API Error: ${res.statusCode}`);
+              if (modrinthRes.statusCode !== 200) throw new Error(`Modrinth API Error: ${modrinthRes.statusCode}`);
               const versions = JSON.parse(data);
               const release = versions.find((v: any) => v.version_type === 'release') || versions[0];
               const fileUrl = release?.files?.[0]?.url;

@@ -7,7 +7,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.32-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.33-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -62,7 +62,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 
 ## 📥 Download
 
-Latest version: **v1.0.32** — [Auto-updates from within the app]
+Latest version: **v1.0.33** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -358,6 +358,16 @@ The app checks GitHub for new releases on startup. When an update is found:
 ---
 
 ## 📋 Release History
+
+### v1.0.33
+- **Java Version Validation** — Server jar is now scanned for its class file version before starting. If the jar requires a newer Java (e.g. Java 25+ for Minecraft 1.21.11), a clear error is shown with the required version and a download link to Adoptium.
+- **Plugin Download Fix** — Fixed variable shadowing bug where the `https.get` callback parameter shadowed the Express response object, causing plugin downloads to silently fail and hang the frontend.
+- **Dashboard Server Name** — Dashboard now shows the wizard-configured server name even before the first server start, falling back to the `servers` database table when the runtime config is empty.
+- **Dashboard CPU on First Load** — Seeded the CPU stats baseline so the Dashboard shows real CPU usage on the very first page load, instead of 0% until the 5-second tick fires.
+- **Fabric Version Filtering** — Fabric version list now only shows Minecraft game versions (e.g. 1.21.11), excluding Fabric Loader version entries (e.g. 26.2) that were previously mixed in.
+- **Fabric Download Reliability** — Changed Fabric download to use the game-version-specific loader endpoint, ensuring the installed loader is compatible with the selected Minecraft version.
+- **View Distance Cap Raised** — Settings view distance input now supports values up to 128 (was capped at 32).
+- **Discord Field Cleanup** — Removed the spurious Voice Chat Invite Link field from Discord settings, leaving only Bot Token, Chat Channel ID, and Voice Channel ID.
 
 ### v1.0.32
 - **Wizard Version Filtering** — Server creation wizard now correctly filters versions by selected software type (Paper, Fabric, Purpur, Forge, Vanilla, etc.) instead of showing all versions regardless of selection.

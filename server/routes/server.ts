@@ -72,8 +72,8 @@ let cachedPublicIp = '';
 let cachedCpuPercent = 0;
 let previousCpuTimes = { idle: 0, total: 0 };
 
-// Update live system stats every 5s (no systeminformation dependency needed)
-setInterval(() => {
+// Update live system stats (no systeminformation dependency needed)
+function collectSystemStats() {
   try {
     const totalMem = os.totalmem();
     const freeMem = os.freemem();
@@ -137,7 +137,18 @@ setInterval(() => {
 
     cachedSysStats = { systemRamTotal, systemRamUsed, diskTotal, diskUsed, mcDirSize };
   } catch {}
-}, 5000);
+}
+// Run immediately on startup so Dashboard gets values on first request, then every 5s
+// Seed previousCpuTimes so the first collectSystemStats call computes a real CPU delta
+const seedCpus = os.cpus();
+let seedIdle = 0, seedTotal = 0;
+for (const cpu of seedCpus) {
+  seedIdle += cpu.times.idle;
+  seedTotal += cpu.times.user + cpu.times.nice + cpu.times.sys + cpu.times.idle + cpu.times.irq;
+}
+previousCpuTimes = { idle: seedIdle, total: seedTotal };
+collectSystemStats();
+setInterval(collectSystemStats, 5000);
 
 // Background IP fetcher
 setInterval(async () => {
@@ -157,13 +168,19 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
   const config = minecraftServer.getConfig();
   const mcMaxRam = parseInt(config.maxRam) * 1024 || 8192;
 
-  // Read version from servers table
+  // Read server details from servers table
   const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
   let serverVersion = 'Unknown';
+  let serverNameFromDb = '';
+  let serverPortFromDb = 0;
   if (activeId) {
-    const srv = db.prepare('SELECT version, version_source FROM servers WHERE id = ?').get(activeId) as any;
-    if (srv?.version) serverVersion = srv.version;
-    else if (srv?.version_source) serverVersion = `${srv.version_source} (select version)`;
+    const srv = db.prepare('SELECT name, port, version, version_source FROM servers WHERE id = ?').get(activeId) as any;
+    if (srv) {
+      serverNameFromDb = srv.name || '';
+      serverPortFromDb = srv.port || 0;
+      if (srv.version) serverVersion = srv.version;
+      else if (srv.version_source) serverVersion = `${srv.version_source} (select version)`;
+    }
   }
 
   // Kickstart IP fetch if empty
@@ -179,8 +196,8 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
     serverId: activeId,
     running: minecraftServer.isRunning,
     starting: minecraftServer.isStarting,
-    serverName: config.name || 'MineControl OS',
-    port: config.port || 25565,
+    serverName: config.name || serverNameFromDb || 'MineControl OS',
+    port: config.port || serverPortFromDb || 25565,
     publicIp: cachedPublicIp,
     serverVersion,
     onlinePlayers: onlinePlayers?.count || 0,
@@ -723,9 +740,10 @@ router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
     });
   }
 
-  // Add Fabric versions
+  // Add Fabric versions (only Minecraft game versions, skip loader-only entries)
   for (const v of fabricVersions) {
     const ver = v.version;
+    if (!/^\d+\.\d+/.test(ver)) continue;
     const jarPrefix = `fabric-${ver}`;
     combined.push({
       version: ver,
@@ -916,12 +934,12 @@ async function downloadPaperVersion(version: string, jarPath: string): Promise<v
 
   async function downloadFabricVersion(version: string, jarPath: string): Promise<void> {
     try {
-      const loadersData = await httpsGet(`${FABRIC_API}/versions/loader`);
+      const loadersData = await httpsGet(`${FABRIC_API}/versions/loader/${version}`);
       const loaders = JSON.parse(loadersData);
       if (!loaders || loaders.length === 0) {
-        throw new Error('No Fabric loaders found');
+        throw new Error(`No Fabric loaders found for Minecraft ${version}`);
       }
-      const loaderVersion = loaders[0].version;
+      const loaderVersion = loaders[0].loader.version;
       const downloadUrl = `${FABRIC_API}/versions/loader/${version}/${loaderVersion}/1.0.1/server/jar`;
       await downloadFile(downloadUrl, jarPath);
     } catch (err: any) {

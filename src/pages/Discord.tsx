@@ -7,7 +7,6 @@ export default function Discord() {
   const [token, setToken] = useState('');
   const [channelId, setChannelId] = useState('');
   const [voiceChannelId, setVoiceChannelId] = useState('');
-  const [voiceUrl, setVoiceUrl] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -18,7 +17,6 @@ export default function Discord() {
         if (data.token) setToken(data.token);
         if (data.channelId) setChannelId(data.channelId);
         if (data.voiceChannelId) setVoiceChannelId(data.voiceChannelId);
-        if (data.voiceUrl) setVoiceUrl(data.voiceUrl);
       } catch (err: any) {
         toast.error('Failed to load Discord settings: ' + err.message);
       } finally {
@@ -31,7 +29,7 @@ export default function Discord() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.post('/discord', { token, channelId, voiceChannelId, voiceUrl });
+      await api.post('/discord', { token, channelId, voiceChannelId });
       toast.success('Discord settings saved! Bot is restarting...');
     } catch (err: any) {
       toast.error('Failed to save settings: ' + err.message);
@@ -124,17 +122,6 @@ export default function Discord() {
               <p className="text-xs text-gray-500 mt-2">The bot will use this for voice integrations (e.g., channel status updates).</p>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">Voice Chat Invite Link</label>
-              <input
-                type="text"
-                value={voiceUrl}
-                onChange={(e) => setVoiceUrl(e.target.value)}
-                placeholder="https://discord.gg/..."
-                className="input-field font-mono text-sm"
-              />
-              <p className="text-xs text-gray-500 mt-2">The bot will append this invite link to the 'Server Started' message.</p>
-            </div>
           </div>
 
           <div className="mt-8 pt-6 border-t border-gray-800 flex justify-end">

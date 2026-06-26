@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import net from 'net';
 import { EventEmitter } from 'events';
+import unzipper from 'unzipper';
 import { getDatabase } from '../database';
 import { resolveMinecraftDir, setMinecraftDir } from '../paths';
 
@@ -111,6 +112,30 @@ class MinecraftServerManager extends EventEmitter {
     return this.startedAt ? this.startedAt.toISOString() : null;
   }
 
+  // Reads the major class version from the server jar to detect Java requirement
+  private async detectRequiredJava(jarPath: string): Promise<number | null> {
+    try {
+      const directory = await unzipper.Open.file(jarPath);
+      // Find the main class from MANIFEST.MF
+      const manifestEntry = directory.files.find(f => f.path === 'META-INF/MANIFEST.MF');
+      if (!manifestEntry) return null;
+      const manifestContent = (await manifestEntry.buffer()).toString('utf-8');
+      const mainClassMatch = manifestContent.match(/Main-Class:\s*(\S+)/);
+      if (!mainClassMatch) return null;
+      const mainClassPath = mainClassMatch[1].replace(/\./g, '/') + '.class';
+      // Find the .class entry in the jar
+      const classEntry = directory.files.find(f => f.path === mainClassPath);
+      if (!classEntry) return null;
+      const classBytes = await classEntry.buffer();
+      // Class file format: bytes 6-7 = major version (big-endian)
+      if (classBytes.length < 8) return null;
+      const majorVersion = classBytes.readUInt16BE(6);
+      return majorVersion;
+    } catch {
+      return null;
+    }
+  }
+
   async start(): Promise<void> {
     if (this.running || this.starting) {
       throw new Error('Server is already running or starting');
@@ -148,20 +173,31 @@ class MinecraftServerManager extends EventEmitter {
         this.emit('server:output', '[MineControl] EULA accepted automatically.\n');
       }
 
+      // Check Java version and jar requirements
+      let javaMajor = 0;
       try {
         const javaOut = execSync(`"${config.javaPath}" -version 2>&1`, { encoding: 'utf8', timeout: 10000 });
         const versionMatch = javaOut.match(/version "(\d+)/);
-        if (versionMatch) {
-          const major = parseInt(versionMatch[1], 10);
-          if (major < 21) {
-            this.starting = false;
-            throw new Error(`Java version ${major} is not supported. PaperMC 1.21.1 requires Java 21 or higher. Found Java at: "${config.javaPath}"\n\nPlease install Java 21+ and configure the path in Settings.`);
-          }
-        }
+        if (versionMatch) javaMajor = parseInt(versionMatch[1], 10);
       } catch (err: any) {
         this.starting = false;
-        if (err.message && err.message.includes('not supported')) throw err;
         throw new Error(`Java not found or failed to execute at "${config.javaPath}".\nError: ${err.message}\n\nPlease install Java 21+ and configure a custom Java path in Settings.`);
+      }
+
+      if (javaMajor > 0 && javaMajor < 21) {
+        this.starting = false;
+        throw new Error(`Java version ${javaMajor} is not supported. MineControl requires Java 21 or higher. Found Java at: "${config.javaPath}"\n\nPlease install Java 21+ and configure the path in Settings.`);
+      }
+
+      // Detect the class version from the server jar to verify Java compatibility
+      const classVersion = await this.detectRequiredJava(jarPath);
+      if (classVersion !== null) {
+        // Class version 61=Java17, 62=18, 63=19, 64=20, 65=21, 66=22, 67=23, 68=24, 69=25
+        const requiredJava = classVersion - 44;
+        if (javaMajor > 0 && requiredJava > javaMajor) {
+          this.starting = false;
+          throw new Error(`This server jar requires Java ${requiredJava}+ (class version ${classVersion}.0), but your Java only supports up to Java ${javaMajor} (class version ${javaMajor + 44}.0).\nFound Java at: "${config.javaPath}"\n\nPlease download and install Java ${requiredJava}+ from https://adoptium.net/ and configure the path in Settings.`);
+        }
       }
 
       // Check if server port is available
