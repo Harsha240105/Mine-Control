@@ -16,6 +16,7 @@ const PAPER_API = 'https://api.papermc.io/v2/projects/paper';
 const MOJANG_MANIFEST = 'https://launchermeta.mojang.com/mc/game/version_manifest.json';
 const FABRIC_API = 'https://meta.fabricmc.net/v2';
 const FORGE_API = 'https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json';
+const PURPUR_API = 'https://api.purpurmc.org/v2/purpur/';
 
 interface MojangVersion {
   id: string;
@@ -657,6 +658,21 @@ router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
     } catch {}
   }
 
+  // Fetch Purpur versions
+  let purpurVersions: string[] = [];
+  const cachedPurpur = cacheGet<string[]>('purpurVersions');
+  if (cachedPurpur) {
+    purpurVersions = cachedPurpur;
+  } else {
+    try {
+      const data = await httpsGet(PURPUR_API);
+      const parsed = JSON.parse(data);
+      purpurVersions = parsed.versions || [];
+      purpurVersions = purpurVersions.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+      cacheSet('purpurVersions', purpurVersions);
+    } catch {}
+  }
+
   // Build combined version list
   const versionSet = new Set<string>();
   const combined: any[] = [];
@@ -672,6 +688,18 @@ router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
       source: 'PaperMC',
       downloaded: downloadedJars.some(d => d === jarPrefix),
       current: currentVersion === v && currentSource === 'PaperMC',
+    });
+  }
+
+  // Add Purpur versions
+  for (const v of purpurVersions) {
+    const jarPrefix = `purpur-${v}`;
+    combined.push({
+      version: v,
+      type: 'release',
+      source: 'Purpur',
+      downloaded: downloadedJars.some(d => d === jarPrefix),
+      current: currentVersion === v && currentSource === 'Purpur',
     });
   }
 
@@ -773,13 +801,16 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
     const mcDir = resolveMinecraftDir();
     const usePaper = source === 'PaperMC' || (!source && await isPaperAvailable(version));
     const useFabric = source === 'Fabric';
-    const jarPrefix = useFabric ? 'fabric' : (usePaper ? 'paper' : 'vanilla');
+    const usePurpur = source === 'Purpur';
+    const jarPrefix = useFabric ? 'fabric' : (usePurpur ? 'purpur' : (usePaper ? 'paper' : 'vanilla'));
     const jarFile = `${jarPrefix}-${version}.jar`;
     const jarPath = path.join(mcDir, jarFile);
 
     if (!fs.existsSync(jarPath)) {
       if (useFabric) {
         await downloadFabricVersion(version, jarPath);
+      } else if (usePurpur) {
+        await downloadPurpurVersion(version, jarPath);
       } else if (usePaper) {
         // Download from PaperMC
         await downloadPaperVersion(version, jarPath);
@@ -860,6 +891,18 @@ async function downloadPaperVersion(version: string, jarPath: string): Promise<v
       await downloadFile(downloadUrl, jarPath);
     } catch (err: any) {
       throw new Error(`Failed to download Fabric ${version}: ${err.message}`);
+    }
+  }
+
+  async function downloadPurpurVersion(version: string, jarPath: string): Promise<void> {
+    try {
+      const buildsData = await httpsGet(`https://api.purpurmc.org/v2/purpur/${version}`);
+      const builds = JSON.parse(buildsData);
+      const latestBuild = builds.builds.latest;
+      const downloadUrl = `https://api.purpurmc.org/v2/purpur/${version}/${latestBuild}/download`;
+      await downloadFile(downloadUrl, jarPath);
+    } catch (err: any) {
+      throw new Error(`Failed to download Purpur ${version}: ${err.message}`);
     }
   }
 

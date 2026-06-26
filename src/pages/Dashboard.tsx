@@ -62,6 +62,21 @@ const MemoGauge = React.memo(({ id, percent, colors, formatTextValue, label }: a
   </div>
 ));
 
+const CurrentTimeDisplay = React.memo(() => {
+  const [currentTime, setCurrentTime] = useState(new Date());
+  useEffect(() => {
+    const timeInterval = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timeInterval);
+  }, []);
+  return (
+    <>
+      {currentTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+      {' '}·{' '}
+      {currentTime.toLocaleTimeString('en-US')}
+    </>
+  );
+});
+
 interface StatPoint {
   timestamp: number;
   cpu: number;
@@ -80,7 +95,6 @@ export default function Dashboard() {
   const [consoleInput, setConsoleInput] = useState('');
   const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
   const consoleEndRef = useRef<HTMLDivElement>(null);
-  const [currentTime, setCurrentTime] = useState(new Date());
   const [mockTemp] = useState(Math.random() * 0.3 + 0.3);
   const { socket } = useSocket();
 
@@ -92,10 +106,8 @@ export default function Dashboard() {
     fetchStatus();
     fetchStats();
     const interval = setInterval(fetchStatus, 5000);
-    const timeInterval = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => {
       clearInterval(interval);
-      clearInterval(timeInterval);
     };
   }, []);
 
@@ -220,9 +232,7 @@ export default function Dashboard() {
             {status?.serverName || 'Dashboard'}
           </h2>
           <p className="text-sm text-gray-500 mt-0.5">
-            {currentTime.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-            {' '}·{' '}
-            {currentTime.toLocaleTimeString('en-US')}
+            <CurrentTimeDisplay />
           </p>
         </div>
       </div>

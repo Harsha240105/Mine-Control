@@ -1,0 +1,18 @@
+- [ ] 1. Plugin Downloader: Transition to Modrinth
+  - [ ] Implement `modrinth:` URL resolving in `server/routes/plugins.ts`
+  - [ ] Update `POPULAR_PLUGINS` in `src/pages/Plugins.tsx` to use Modrinth links
+  - [ ] Run backend test script to verify Modrinth download works
+- [ ] 2. Discord Voice Invite Link
+  - [ ] Add `discordVoiceUrl` to `server/routes/discord.ts`
+  - [ ] Modify `Discord.tsx` UI to include the new field
+  - [ ] Update `minecraftServer.ts` / `discord.ts` to append the link to "Server Started" message
+- [ ] 3. Software Catalog Expansion
+  - [ ] Update `src/pages/Software.tsx` to include Purpur, NeoForge, Quilt, Bedrock
+  - [ ] Implement Purpur API fetcher in `server/routes/server.ts`
+- [ ] 4. Path Resolution Audit
+  - [ ] Fix `BASE_PATH` in `server/paths.ts` to strictly run in the user's selected directory instead of `AppData`
+- [ ] 5. Verification & Proof Generation
+  - [ ] Log API responses, file sizes, and commit hashes for the final report
+- [ ] 6. Build and Release v1.0.30
+  - [ ] Push to GitHub
+  - [ ] Run `npm run build:desktop:win`

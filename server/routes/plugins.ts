@@ -53,22 +53,47 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
     let isFinished = false;
 
     const getWithRedirects = (requestUrl: string) => {
-      const client = requestUrl.startsWith('https') ? https : http;
-      
-      const options = {
-        headers: {
-          'User-Agent': 'MineControl-OS/1.0.29 (contact@minecontrol.dev)'
-        }
-      };
+      if (requestUrl.startsWith('modrinth:')) {
+        const slug = requestUrl.split(':')[1];
+        const apiReq = https.get(`https://api.modrinth.com/v2/project/${slug}/version`, {
+          headers: { 'User-Agent': 'MineControl-OS/1.0.30 (contact@minecontrol.dev)' }
+        }, (res: any) => {
+          let data = '';
+          res.on('data', (c: string) => data += c);
+          res.on('end', () => {
+            try {
+              if (res.statusCode !== 200) throw new Error(`Modrinth API Error: ${res.statusCode}`);
+              const versions = JSON.parse(data);
+              const fileUrl = versions[0]?.files?.[0]?.url;
+              if (!fileUrl) throw new Error('No files found on Modrinth');
+              startDownload(fileUrl);
+            } catch (err: any) {
+              if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+              if (!res.headersSent) res.status(400).json({ error: err.message });
+            }
+          });
+        });
+        apiReq.on('error', (err: Error) => {
+          if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+          if (!res.headersSent) res.status(400).json({ error: err.message });
+        });
+        return;
+      }
+      startDownload(requestUrl);
+    };
 
-      const req = client.get(requestUrl, options, (response: any) => {
+    const startDownload = (urlToDownload: string) => {
+      const reqClient = urlToDownload.startsWith('https') ? https : http;
+      const req = reqClient.get(urlToDownload, {
+        headers: { 'User-Agent': 'MineControl-OS/1.0.30 (contact@minecontrol.dev)' }
+      }, (response: any) => {
         if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
           let newUrl = response.headers.location;
           if (!newUrl.startsWith('http')) {
-            const urlObj = new URL(requestUrl);
+            const urlObj = new URL(urlToDownload);
             newUrl = `${urlObj.protocol}//${urlObj.host}${newUrl}`;
           }
-          getWithRedirects(newUrl);
+          startDownload(newUrl);
           return;
         }
         if (response.statusCode !== 200) {
@@ -77,18 +102,18 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
         }
         const file = fs.createWriteStream(tempPath);
         response.pipe(file);
-        
+
         file.on('finish', () => {
           isFinished = true;
           file.close();
-          
+
           // Verify zip integrity
           try {
             const buffer = Buffer.alloc(4);
             const fd = fs.openSync(tempPath, 'r');
             fs.readSync(fd, buffer, 0, 4, 0);
             fs.closeSync(fd);
-            
+
             if (buffer[0] !== 0x50 || buffer[1] !== 0x4B || buffer[2] !== 0x03 || buffer[3] !== 0x04) {
               if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
               return res.status(400).json({ error: 'Downloaded file is not a valid plugin archive.' });
@@ -119,6 +144,7 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
         }
       });
     };
+
     getWithRedirects(downloadUrl);
   } else {
     // Placeholder - user should manually place the .jar in plugins directory

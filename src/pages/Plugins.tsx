@@ -33,21 +33,21 @@ const SAFE_PLUGIN_SOURCES = [
 ];
 
 const POPULAR_PLUGINS = [
-  { name: 'LuckPerms', desc: 'Best permissions plugin', url: 'https://hangar.papermc.io/api/v1/projects/LuckPerms/versions/latest/download', source: 'Hangar', category: 'Admin Tools' },
-  { name: 'EssentialsX', desc: 'Essential server commands & economy', url: 'https://hangar.papermc.io/api/v1/projects/EssentialsX/versions/latest/download', source: 'Hangar', category: 'Admin Tools' },
-  { name: 'WorldEdit', desc: 'Powerful in-game world editor', url: 'https://hangar.papermc.io/api/v1/projects/WorldEdit/versions/latest/download', source: 'Hangar', category: 'World Management' },
-  { name: 'BlueMap', desc: '3D web map viewer', url: 'https://hangar.papermc.io/api/v1/projects/BlueMap/versions/latest/download', source: 'Hangar', category: 'Map & Visualization' },
-  { name: 'CoreProtect', desc: 'Block logging & rollback system', url: 'https://hangar.papermc.io/api/v1/projects/CoreProtect/versions/latest/download', source: 'Hangar', category: 'Protection' },
-  { name: 'Geyser', desc: 'Allow Bedrock players to join', url: 'https://hangar.papermc.io/api/v1/projects/Geyser/versions/latest/download', source: 'Hangar', category: 'Cross-Platform' },
-  { name: 'ViaVersion', desc: 'Cross-version protocol support', url: 'https://hangar.papermc.io/api/v1/projects/ViaVersion/versions/latest/download', source: 'Hangar', category: 'Compatibility' },
-  { name: 'GriefPrevention', desc: 'Land claiming & grief protection', url: 'https://hangar.papermc.io/api/v1/projects/GriefPrevention/versions/latest/download', source: 'Hangar', category: 'Protection' },
-  { name: 'Dynmap', desc: 'Classic web map viewer', url: 'https://hangar.papermc.io/api/v1/projects/Dynmap/versions/latest/download', source: 'Hangar', category: 'Map & Visualization' },
-  { name: 'Vault', desc: 'Economy & permissions API layer', url: 'https://hangar.papermc.io/api/v1/projects/Vault/versions/latest/download', source: 'Hangar', category: 'API & Libraries' },
-  { name: 'PlaceholderAPI', desc: 'Placeholder expansion system', url: 'https://hangar.papermc.io/api/v1/projects/PlaceholderAPI/versions/latest/download', source: 'Hangar', category: 'API & Libraries' },
-  { name: 'AuthMe', desc: 'Login & authentication system', url: 'https://hangar.papermc.io/api/v1/projects/AuthMe/versions/latest/download', source: 'Hangar', category: 'Security' },
-  { name: 'WorldGuard', desc: 'Region protection & management', url: 'https://hangar.papermc.io/api/v1/projects/WorldGuard/versions/latest/download', source: 'Hangar', category: 'Protection' },
-  { name: 'Multiverse-Core', desc: 'Multi-world management', url: 'https://hangar.papermc.io/api/v1/projects/Multiverse-Core/versions/latest/download', source: 'Hangar', category: 'World Management' },
-  { name: 'ProtocolLib', desc: 'Packet handling library', url: 'https://hangar.papermc.io/api/v1/projects/ProtocolLib/versions/latest/download', source: 'Hangar', category: 'API & Libraries' },
+  { name: 'LuckPerms', desc: 'Best permissions plugin', url: 'modrinth:luckperms', source: 'Modrinth', category: 'Admin Tools' },
+  { name: 'EssentialsX', desc: 'Essential server commands & economy', url: 'modrinth:essentialsx', source: 'Modrinth', category: 'Admin Tools' },
+  { name: 'WorldEdit', desc: 'Powerful in-game world editor', url: 'modrinth:worldedit', source: 'Modrinth', category: 'World Management' },
+  { name: 'BlueMap', desc: '3D web map viewer', url: 'modrinth:bluemap', source: 'Modrinth', category: 'Map & Visualization' },
+  { name: 'CoreProtect', desc: 'Block logging & rollback system', url: 'modrinth:coreprotect', source: 'Modrinth', category: 'Protection' },
+  { name: 'Geyser', desc: 'Allow Bedrock players to join', url: 'modrinth:geyser', source: 'Modrinth', category: 'Cross-Platform' },
+  { name: 'ViaVersion', desc: 'Cross-version protocol support', url: 'modrinth:viaversion', source: 'Modrinth', category: 'Compatibility' },
+  { name: 'GriefPrevention', desc: 'Land claiming & grief protection', url: 'modrinth:griefprevention', source: 'Modrinth', category: 'Protection' },
+  { name: 'Dynmap', desc: 'Classic web map viewer', url: 'modrinth:dynmap', source: 'Modrinth', category: 'Map & Visualization' },
+  { name: 'Vault', desc: 'Economy & permissions API layer', url: 'modrinth:vault', source: 'Modrinth', category: 'API & Libraries' },
+  { name: 'PlaceholderAPI', desc: 'Placeholder expansion system', url: 'modrinth:placeholderapi', source: 'Modrinth', category: 'API & Libraries' },
+  { name: 'AuthMe', desc: 'Login & authentication system', url: 'modrinth:authmereloaded', source: 'Modrinth', category: 'Security' },
+  { name: 'WorldGuard', desc: 'Region protection & management', url: 'modrinth:worldguard', source: 'Modrinth', category: 'Protection' },
+  { name: 'Multiverse-Core', desc: 'Multi-world management', url: 'modrinth:multiverse', source: 'Modrinth', category: 'World Management' },
+  { name: 'ProtocolLib', desc: 'Packet handling library', url: 'modrinth:protocollib', source: 'Modrinth', category: 'API & Libraries' },
 ];
 
 const categories = [...new Set(POPULAR_PLUGINS.map(p => p.category))];
@@ -264,7 +264,7 @@ export default function Plugins() {
           ))}
         </div>
         <p className="text-xs text-gray-500 mt-3">
-          Plugins downloaded from Hangar (PaperMC's official repository). Always verify plugin sources for safety.
+          Plugins downloaded from Modrinth. Always verify plugin sources for safety.
         </p>
       </div>
 

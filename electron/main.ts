@@ -69,8 +69,9 @@ async function createWindow() {
   const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
 
   if (!isDev) {
-    process.env.APP_DATA_PATH = app.getPath('userData');
-    process.env.MINECRAFT_DIR = path.join(app.getPath('documents'), 'MineControl OS', 'minecraft');
+    const appRoot = path.dirname(app.getPath('exe'));
+    process.env.APP_DATA_PATH = appRoot;
+    process.env.MINECRAFT_DIR = path.join(appRoot, 'minecraft');
     try {
       require(path.join(__dirname, '../server/index.js'));
       await waitForPort(3001);

@@ -66,7 +66,15 @@ class DiscordService {
 
   private setupHooks() {
     minecraftServer.on('server:started', () => {
-      this.sendMessage('✅ Minecraft Server has started!');
+      const db = getDatabase();
+      const voiceRow = db.prepare("SELECT value FROM server_config WHERE key = 'discordVoiceUrl'").get() as any;
+      const voiceUrl = voiceRow?.value;
+      
+      let msg = '✅ Minecraft Server has started!';
+      if (voiceUrl) {
+        msg += `\n🎙️ Join the Voice Chat: ${voiceUrl}`;
+      }
+      this.sendMessage(msg);
     });
 
     minecraftServer.on('server:stopped', (code) => {
