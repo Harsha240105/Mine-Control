@@ -43,7 +43,7 @@ router.get('/:id/player/:uuid', authMiddleware, async (req: AuthRequest, res) =>
 
   try {
     const buffer = fs.readFileSync(playerDataPath);
-    const { parsed } = await parseNbt(buffer);
+    const { parsed } = (await parseNbt(buffer)) as any;
     const data = nbt.simplify(parsed);
 
     let stats = {};
@@ -54,15 +54,11 @@ router.get('/:id/player/:uuid', authMiddleware, async (req: AuthRequest, res) =>
     // Attempt to get live ping if online
     let ping = "N/A";
     if (minecraftServer.isRunning && minecraftServer.directory === server.directory) {
-      // In a real environment we'd query the server for ping (e.g. through a plugin or Spark API).
-      // Here we mock it or set it to N/A unless we can find it.
-      // If we implement a custom socket integration with the plugin, we could fetch it here.
-      const onlinePlayers = minecraftServer.getPlayers();
-      // Wait, minecraftServer.getPlayers() returns a list of strings (usernames).
-      // Let's just set ping to a random good value if they are online, or 0/N/A.
-      const isOnline = onlinePlayers.some(p => p.toLowerCase() === req.query.username?.toString().toLowerCase());
-      if (isOnline) {
-        ping = Math.floor(Math.random() * 30 + 15).toString() + "ms"; // Mocked ping for visualization
+      if (req.query.username) {
+        const playerDb = db.prepare('SELECT status FROM players WHERE username = ?').get(req.query.username.toString()) as any;
+        if (playerDb && playerDb.status === 'online') {
+          ping = Math.floor(Math.random() * 30 + 15).toString() + "ms"; // Mocked ping for visualization
+        }
       }
     }
 
