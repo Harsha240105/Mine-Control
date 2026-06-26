@@ -1,6 +1,6 @@
 {
   "name": "minecontrol-os",
-  "version": "1.0.23",
+  "version": "1.0.24",
   "description": "Self-hosted Minecraft Server Management Platform",
   "author": "Harsha <hsharshavardhanh@soundaryainstitutions.in>",
   "main": "dist/electron/main.js",
@@ -42,6 +42,8 @@
     "morgan": "^1.10.0",
     "node-cron": "^3.0.3",
     "pidusage": "^3.0.2",
+    "prismarine-nbt": "^2.8.0",
+    "react-gauge-chart": "^0.5.1",
     "socket.io": "^4.7.2",
     "systeminformation": "^5.21.0",
     "three": "^0.184.0",

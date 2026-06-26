@@ -7,7 +7,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.23-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.24-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -61,7 +61,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 
 ## 📥 Download
 
-Latest version: **v1.0.23** — [Auto-updates from within the app]
+Latest version: **v1.0.24** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -76,7 +76,8 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 
 ## 🚀 Features
 
-### v1.0.23 — New in this release
+### v1.0.24 — New in this release
+- **Missing Dependencies Fix** — Properly saved `prismarine-nbt` and `react-gauge-chart` to package.json to resolve Rollup build failures on GitHub Actions runner.
 - **TypeScript Build Fixes** — Resolved strict compilation errors preventing successful production builds of the backend analytics server.
 - **CI Build Fix** — Downgraded Node.js to v20 LTS in GitHub Actions to fix better-sqlite3 native build failures during app packaging.
 - **Deep Player Analytics Engine** — Extracts and visualizes raw NBT (`.dat`) and `.json` player data into a clean UI (Inventory, Health, Location, Statistics).
@@ -92,9 +93,7 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 - **Java Runtime Detector** — Automatically scans your system (Windows/macOS/Linux) to find and list all installed Java versions.
 - **Aikar's JVM Flags** — Automatically applies highly optimized garbage collection flags for maximum performance on Paper and Purpur servers.
 - **In-App Notifications** — Real-time event notifications (player joins, crashes, backups) stored in a new database-backed panel.
-- **Deep Player Analytics Engine** — Read real-time player data (Inventory, XYZ location, Health, Playtime) directly from NBT files.
-- **Speedometer Dashboard** — Visual hardware gauges and live connected player list.
-- **Release & Documentation Refresh** — All version strings, badges, and docs aligned to v1.0.23.
+- **Release & Documentation Refresh** — All version strings, badges, and docs aligned to v1.0.24.
 - **CI/CD Ready** — GitHub Actions `release.yml` automatically builds Windows, macOS, and Linux binaries on every new tag.
 
 ### Server Control
