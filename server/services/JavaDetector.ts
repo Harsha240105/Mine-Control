@@ -104,7 +104,7 @@ export class JavaDetector {
 
   private static async checkVersion(javaPath: string): Promise<{ version: string, majorVersion: number } | null> {
     try {
-      const command = javaPath === 'java' ? 'java -version' : \`"\${javaPath}" -version\`;
+      const command = javaPath === 'java' ? 'java -version' : `"${javaPath}" -version`;
       const { stderr } = await execAsync(command); // java -version outputs to stderr
       
       // Parse something like: openjdk version "17.0.1" 2021-10-19

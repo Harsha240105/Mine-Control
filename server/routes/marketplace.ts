@@ -1,13 +1,12 @@
 import { Router } from 'express';
-import axios from 'axios';
-import { requireAuth } from '../middleware/auth';
+import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
 
 const MODRINTH_API = 'https://api.modrinth.com/v2';
 
 // Search projects
-router.get('/search', requireAuth, async (req, res) => {
+router.get('/search', authMiddleware, async (req, res) => {
   try {
     const { q, loader, mc_version, page = 0 } = req.query;
     
@@ -18,44 +17,48 @@ router.get('/search', requireAuth, async (req, res) => {
     // We only want server-side plugins/mods
     facets.push('["server_side:required","server_side:optional"]');
     
-    const response = await axios.get(`${MODRINTH_API}/search`, {
-      params: {
-        query: q || '',
-        facets: `[${facets.join(',')}]`,
-        limit: 20,
-        offset: Number(page) * 20,
-      }
+    const params = new URLSearchParams({
+      query: (q as string) || '',
+      facets: `[${facets.join(',')}]`,
+      limit: '20',
+      offset: (Number(page) * 20).toString(),
     });
     
-    res.json(response.data);
+    const response = await fetch(`${MODRINTH_API}/search?${params.toString()}`);
+    if (!response.ok) throw new Error(`Modrinth API error: ${response.statusText}`);
+    const data = await response.json();
+    
+    res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // Get project details
-router.get('/project/:id', requireAuth, async (req, res) => {
+router.get('/project/:id', authMiddleware, async (req, res) => {
   try {
-    const response = await axios.get(`${MODRINTH_API}/project/${req.params.id}`);
-    res.json(response.data);
+    const response = await fetch(`${MODRINTH_API}/project/${req.params.id}`);
+    if (!response.ok) throw new Error(`Modrinth API error: ${response.statusText}`);
+    const data = await response.json();
+    res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // Get project versions
-router.get('/project/:id/versions', requireAuth, async (req, res) => {
+router.get('/project/:id/versions', authMiddleware, async (req, res) => {
   try {
     const { loader, mc_version } = req.query;
     
-    const params: any = {};
-    if (loader) params.loaders = `["${loader}"]`;
-    if (mc_version) params.game_versions = `["${mc_version}"]`;
+    const params = new URLSearchParams();
+    if (loader) params.append('loaders', `["${loader}"]`);
+    if (mc_version) params.append('game_versions', `["${mc_version}"]`);
     
-    const response = await axios.get(`${MODRINTH_API}/project/${req.params.id}/version`, {
-      params
-    });
-    res.json(response.data);
+    const response = await fetch(`${MODRINTH_API}/project/${req.params.id}/version?${params.toString()}`);
+    if (!response.ok) throw new Error(`Modrinth API error: ${response.statusText}`);
+    const data = await response.json();
+    res.json(data);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }

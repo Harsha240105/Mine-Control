@@ -1,13 +1,13 @@
 import { Router } from 'express';
 import { getDatabase } from '../database';
 import { SchedulerService, Schedule } from '../services/scheduler';
-import { requireAuth, requireRole } from '../middleware/auth';
+import { authMiddleware, requirePermission } from '../middleware/auth';
 import { v4 as uuidv4 } from 'uuid';
 
 const router = Router();
 
 // Get all schedules
-router.get('/', requireAuth, (req, res) => {
+router.get('/', authMiddleware, (req, res) => {
   try {
     const db = getDatabase();
     const serverId = req.query.serverId as string;
@@ -28,7 +28,7 @@ router.get('/', requireAuth, (req, res) => {
 });
 
 // Create schedule
-router.post('/', requireRole(['Owner', 'Admin']), (req, res) => {
+router.post('/', requirePermission('*'), (req, res) => {
   try {
     const db = getDatabase();
     const { server_id, name, cron, action, command, enabled } = req.body;
@@ -60,7 +60,7 @@ router.post('/', requireRole(['Owner', 'Admin']), (req, res) => {
 });
 
 // Update schedule
-router.put('/:id', requireRole(['Owner', 'Admin']), (req, res) => {
+router.put('/:id', requirePermission('*'), (req, res) => {
   try {
     const db = getDatabase();
     const { id } = req.params;
@@ -81,7 +81,7 @@ router.put('/:id', requireRole(['Owner', 'Admin']), (req, res) => {
 });
 
 // Delete schedule
-router.delete('/:id', requireRole(['Owner', 'Admin']), (req, res) => {
+router.delete('/:id', requirePermission('*'), (req, res) => {
   try {
     const db = getDatabase();
     const { id } = req.params;

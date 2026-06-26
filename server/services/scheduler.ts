@@ -57,7 +57,7 @@ export class SchedulerService {
             await minecraftServer.start();
             break;
           case 'backup':
-            await backupService.createBackup();
+            await backupService.createBackup(`Scheduled Backup - ${schedule.name}`, 'auto');
             break;
           case 'command':
             if (schedule.command) {
