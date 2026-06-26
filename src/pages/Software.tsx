@@ -38,6 +38,46 @@ const SOFTWARE_TYPES = [
     popular: false
   },
   {
+    id: 'NeoForge',
+    name: 'NeoForge',
+    description: 'A modern fork of Forge with improved performance and features.',
+    icon: <ShieldCheck className="w-8 h-8 text-green-400" />,
+    color: 'bg-green-500/10 border-green-500/30',
+    hover: 'hover:border-green-500/60',
+    popular: false,
+    disabled: false
+  },
+  {
+    id: 'Quilt',
+    name: 'Quilt',
+    description: 'A modern modding platform focused on stability and ease of use.',
+    icon: <Server className="w-8 h-8 text-indigo-400" />,
+    color: 'bg-indigo-500/10 border-indigo-500/30',
+    hover: 'hover:border-indigo-500/60',
+    popular: false,
+    disabled: false
+  },
+  {
+    id: 'Bedrock',
+    name: 'Bedrock',
+    description: 'The official Bedrock Edition server allowing cross-platform play.',
+    icon: <Globe className="w-8 h-8 text-blue-400" />,
+    color: 'bg-blue-500/10 border-blue-500/30',
+    hover: 'hover:border-blue-500/60',
+    popular: false,
+    disabled: false
+  },
+  {
+    id: 'Pocketmine',
+    name: 'Pocketmine-MP',
+    description: 'Custom server software for Minecraft: Bedrock Edition with enhanced features.',
+    icon: <Server className="w-8 h-8 text-pink-400" />,
+    color: 'bg-pink-500/10 border-pink-500/30',
+    hover: 'hover:border-pink-500/60',
+    popular: false,
+    disabled: false
+  },
+  {
     id: 'Mojang',
     name: 'Vanilla',
     description: 'The original Minecraft server software provided by Mojang.',
@@ -64,46 +104,6 @@ const SOFTWARE_TYPES = [
     hover: 'hover:border-red-500/60',
     popular: false
   },
-  {
-    id: 'NeoForge',
-    name: 'NeoForge',
-    description: 'A friendly fork of Forge. (Coming Soon)',
-    icon: <ShieldCheck className="w-8 h-8 text-amber-400" />,
-    color: 'bg-amber-500/10 border-amber-500/30',
-    hover: 'hover:border-amber-500/60',
-    popular: false,
-    disabled: true
-  },
-  {
-    id: 'Quilt',
-    name: 'Quilt',
-    description: 'An open, community-driven modding toolchain. (Coming Soon)',
-    icon: <Server className="w-8 h-8 text-indigo-400" />,
-    color: 'bg-indigo-500/10 border-indigo-500/30',
-    hover: 'hover:border-indigo-500/60',
-    popular: false,
-    disabled: true
-  },
-  {
-    id: 'Bedrock',
-    name: 'Bedrock',
-    description: 'Official Bedrock Dedicated Server. (Coming Soon)',
-    icon: <Globe className="w-8 h-8 text-blue-400" />,
-    color: 'bg-blue-500/10 border-blue-500/30',
-    hover: 'hover:border-blue-500/60',
-    popular: false,
-    disabled: true
-  },
-  {
-    id: 'Pocketmine',
-    name: 'Pocketmine-MP',
-    description: 'Custom server software for Bedrock Edition. (Coming Soon)',
-    icon: <Server className="w-8 h-8 text-pink-400" />,
-    color: 'bg-pink-500/10 border-pink-500/30',
-    hover: 'hover:border-pink-500/60',
-    popular: false,
-    disabled: true
-  }
 ];
 
 export default function Software() {

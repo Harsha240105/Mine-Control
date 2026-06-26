@@ -17,6 +17,6 @@ export function resolvePath(...segments: string[]): string {
 }
 
 export function resolveMinecraftDir(...segments: string[]): string {
-  const base = process.env.MINECRAFT_DIR || getMinecraftDir();
+  const base = getMinecraftDir() || process.env.MINECRAFT_DIR;
   return path.join(base, ...segments);
 }

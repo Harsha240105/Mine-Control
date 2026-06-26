@@ -64,7 +64,8 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
             try {
               if (res.statusCode !== 200) throw new Error(`Modrinth API Error: ${res.statusCode}`);
               const versions = JSON.parse(data);
-              const fileUrl = versions[0]?.files?.[0]?.url;
+              const release = versions.find((v: any) => v.version_type === 'release') || versions[0];
+              const fileUrl = release?.files?.[0]?.url;
               if (!fileUrl) throw new Error('No files found on Modrinth');
               startDownload(fileUrl);
             } catch (err: any) {

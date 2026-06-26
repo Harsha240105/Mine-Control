@@ -90,11 +90,29 @@ setInterval(async () => {
     try {
       const disk = await si.fsSize();
       if (disk.length > 0) {
-        const root = disk.find((d: any) => d.mount === '/') || disk[0];
+        const root = disk.find((d: any) => d.mount === '/' || d.mount.match(/^[A-Z]:\\?$/)) || disk[0];
         diskTotal = Math.round(root.size / 1024 / 1024 / 1024);
         diskUsed = Math.round(root.used / 1024 / 1024 / 1024);
       }
-    } catch {}
+    } catch {
+      try {
+        const { execSync } = require('child_process');
+        const out = execSync('wmic LogicalDisk where "DriveType=3" Get Size,FreeSpace /format:csv', { encoding: 'utf-8', timeout: 5000 });
+        const lines = out.trim().split('\n').filter(l => l.trim());
+        for (const line of lines) {
+          const parts = line.split(',');
+          if (parts.length >= 3 && parts[1] && parts[2]) {
+            const total = parseInt(parts[1]);
+            const free = parseInt(parts[2]);
+            if (!isNaN(total) && total > 0) {
+              diskTotal = Math.round(total / 1024 / 1024 / 1024);
+              diskUsed = Math.round((total - free) / 1024 / 1024 / 1024);
+              break;
+            }
+          }
+        }
+      } catch {}
+    }
 
     let mcDirSize = 0;
     try {
@@ -799,10 +817,17 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
     }
 
     const mcDir = resolveMinecraftDir();
-    const usePaper = source === 'PaperMC' || (!source && await isPaperAvailable(version));
-    const useFabric = source === 'Fabric';
-    const usePurpur = source === 'Purpur';
-    const jarPrefix = useFabric ? 'fabric' : (usePurpur ? 'purpur' : (usePaper ? 'paper' : 'vanilla'));
+    const sourceLower = (source || '').toLowerCase();
+    const usePaper = sourceLower === 'paper' || sourceLower === 'papermc' || (!source && await isPaperAvailable(version));
+    const useFabric = sourceLower === 'fabric';
+    const usePurpur = sourceLower === 'purpur';
+    const useForge = sourceLower === 'forge';
+    const useVanilla = sourceLower === 'vanilla' || sourceLower === 'mojang';
+    let jarPrefix = 'vanilla';
+    if (usePaper) jarPrefix = 'paper';
+    else if (useFabric) jarPrefix = 'fabric';
+    else if (usePurpur) jarPrefix = 'purpur';
+    else if (useForge) jarPrefix = 'forge';
     const jarFile = `${jarPrefix}-${version}.jar`;
     const jarPath = path.join(mcDir, jarFile);
 
@@ -811,11 +836,11 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
         await downloadFabricVersion(version, jarPath);
       } else if (usePurpur) {
         await downloadPurpurVersion(version, jarPath);
+      } else if (useForge) {
+        await downloadForgeVersion(version, jarPath);
       } else if (usePaper) {
-        // Download from PaperMC
         await downloadPaperVersion(version, jarPath);
       } else {
-        // Download from Mojang
         await downloadVanillaVersion(version, jarPath);
       }
     }
@@ -836,10 +861,18 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
     const db = getDatabase();
     const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
     if (activeId) {
-      const sourceName = usePaper ? 'PaperMC' : 'Mojang';
+      let sourceName = 'Mojang';
+      if (usePaper) sourceName = 'PaperMC';
+      else if (useFabric) sourceName = 'Fabric';
+      else if (usePurpur) sourceName = 'Purpur';
+      else if (useForge) sourceName = 'Forge';
       db.prepare("UPDATE servers SET version = ?, version_source = ?, updated_at = datetime('now') WHERE id = ?").run(version, sourceName, activeId);
     }
-    const displaySource = usePaper ? 'Paper' : 'Mojang';
+    let displaySource = 'Vanilla';
+    if (usePaper) displaySource = 'Paper';
+    else if (useFabric) displaySource = 'Fabric';
+    else if (usePurpur) displaySource = 'Purpur';
+    else if (useForge) displaySource = 'Forge';
     res.json({ success: true, message: `Switched to ${displaySource} ${version}. Start the server to apply.` });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
@@ -903,6 +936,23 @@ async function downloadPaperVersion(version: string, jarPath: string): Promise<v
       await downloadFile(downloadUrl, jarPath);
     } catch (err: any) {
       throw new Error(`Failed to download Purpur ${version}: ${err.message}`);
+    }
+  }
+
+  async function downloadForgeVersion(version: string, jarPath: string): Promise<void> {
+    try {
+      const promosData = await httpsGet(FORGE_API);
+      const promos = JSON.parse(promosData).promos || {};
+      const buildKey = `${version}-recommended`;
+      const fallbackKey = `${version}-latest`;
+      const forgeVersion = promos[buildKey] || promos[fallbackKey];
+      if (!forgeVersion) {
+        throw new Error(`No Forge build found for Minecraft ${version}`);
+      }
+      const downloadUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${version}-${forgeVersion}/forge-${version}-${forgeVersion}-server.jar`;
+      await downloadFile(downloadUrl, jarPath);
+    } catch (err: any) {
+      throw new Error(`Failed to download Forge ${version}: ${err.message}`);
     }
   }
 

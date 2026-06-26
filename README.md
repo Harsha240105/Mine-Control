@@ -7,7 +7,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.26-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.31-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -62,7 +62,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 
 ## 📥 Download
 
-Latest version: **v1.0.30** — [Auto-updates from within the app]
+Latest version: **v1.0.31** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -359,6 +359,14 @@ The app checks GitHub for new releases on startup. When an update is found:
 
 ## 📋 Release History
 
+### v1.0.31
+- **Path Resolution Fix** — Fixed `resolveMinecraftDir()` to prefer the active server directory over the `MINECRAFT_DIR` env var, resolving the "Server jar not found" error when starting servers on Windows.
+- **Forge Download Support** — Added `downloadForgeVersion()` handler for automatic Forge server jar downloads via the Forge maven repository.
+- **Software Catalog Unlocked** — All software types (NeoForge, Quilt, Bedrock, Pocketmine-MP) are now enabled and ready for selection, removing all "Coming Soon" placeholders.
+- **Plugin Download Reliability** — Fixed Modrinth plugin version selection to prefer `release` type versions over potentially unstable builds.
+- **Dashboard Telemetry** — Added Windows disk usage fallback via `wmic` when `systeminformation` fails, ensuring dashboard shows live hardware specs (CPU, RAM, DISK) without zeros.
+- **Version Source Mapping** — Fixed `/api/server/version` to correctly save the software source name (PaperMC, Fabric, Purpur, Forge, Mojang) instead of always defaulting to "PaperMC" or "Mojang".
+
 ### v1.0.17
 - **Import Existing Server UI** — Easily import existing Minecraft servers from ZIP files or uncompressed folders.
 - **GitHub Release Automation** — Full CI/CD pipeline with GitHub Actions for Windows, macOS, and Linux builds.
@@ -434,10 +442,17 @@ MIT
 - **Import Scanning**: Import flow now scans existing files to automatically detect `server.properties` and EULA acceptance.
 - **Reliability**: Implemented magic-byte verification on downloads to prevent JAR corruption, and added timeout fallbacks.
 
- # # #   v 1 . 0 . 3 0 
- -   * * M o d r i n t h   T r a n s i t i o n * * :   R e p l a c e d   b r o k e n   H a n g a r   e n d p o i n t s   w i t h   M o d r i n t h   A P I   f o r   s e a m l e s s   p l u g i n   d o w n l o a d s . 
- -   * * U I   O p t i m i z a t i o n * * :   M e m o i z e d   t h e   D a s h b o a r d   t e l e m e t r y   p i p e l i n e   t o   e l i m i n a t e   l a g   s p i k e s   d u r i n g   c o n t i n u o u s   u p d a t e s . 
- -   * * D i s c o r d   V o i c e   L i n k * * :   A d d e d   D i s c o r d   V o i c e   I n v i t e   L i n k   a p p e n d i n g   t o   S e r v e r   S t a r t   m e s s a g e s . 
- -   * * P u r p u r   &   E x p a n d e d   C a t a l o g * * :   F u l l y   i n t e g r a t e d   P u r p u r   A P I   f e t c h i n g   a n d   p r e p a r e d   p l a c e h o l d e r s   f o r   B e d r o c k ,   P o c k e t m i n e ,   N e o F o r g e ,   a n d   Q u i l t . 
- -   * * P o r t a b l e   E x e c u t a b l e   P a t h i n g * * :   F i x e d   r o a m i n g   A p p D a t a   i s s u e   b y   f o r c i n g   t h e   s e r v e r   s t r u c t u r e   d i r e c t l y   i n t o   t h e   e x e c u t a b l e   i n s t a l l a t i o n   p a t h .  
- 
+### v1.0.30
+- **Modrinth Transition**: Replaced broken Hangar endpoints with Modrinth API for seamless plugin downloads.
+- **UI Optimization**: Memoized the Dashboard telemetry pipeline to eliminate lag spikes during continuous updates.
+- **Discord Voice Link**: Added Discord Voice Invite Link appending to Server Start messages.
+- **Purpur & Expanded Catalog**: Fully integrated Purpur API fetching and prepared placeholders for Bedrock, Pocketmine, NeoForge, and Quilt.
+- **Portable Executable Pathing**: Fixed roaming AppData issue by forcing the server structure directly into the executable installation path.
+
+### v1.0.31
+- **Path Resolution Fix**: Fixed resolveMinecraftDir() to prefer the active server directory, fixing "Server jar not found" errors.
+- **Forge Download Support**: Added downloadForgeVersion() for automatic Forge server jar downloads.
+- **Software Catalog Unlocked**: All software types enabled (NeoForge, Quilt, Bedrock, Pocketmine-MP), no more "Coming Soon".
+- **Plugin Download Reliability**: Modrinth version selection now prefers release builds.
+- **Dashboard Telemetry**: Windows disk fallback via wmic when systeminformation fails; no more zeros.
+- **Version Source Mapping**: /api/server/version correctly saves the software source name.
