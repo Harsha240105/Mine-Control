@@ -29,6 +29,7 @@ import compatibilityRoutes from './routes/compatibility';
 import scheduleRoutes from './routes/schedules';
 import marketplaceRoutes from './routes/marketplace';
 import analyticsRoutes from './routes/analytics';
+import discordRoutes from './routes/discord';
 import { SchedulerService } from './services/scheduler';
 import { discordService } from './services/discord';
 
@@ -69,11 +70,18 @@ app.use('/api/compatibility', compatibilityRoutes);
 app.use('/api/schedules', scheduleRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/server', analyticsRoutes);
+app.use('/api/discord', discordRoutes);
 
 // Global error handler
-app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error('[Error]', err.stack || err.message || err);
-  res.status(500).json({ error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error' });
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error(`[Error] ${req.method} ${req.url}:`, err.stack || err.message || err);
+  if (res.headersSent) {
+    return next(err);
+  }
+  res.status(500).json({ 
+    error: err.message || 'Internal server error',
+    code: err.code || 'INTERNAL_ERROR'
+  });
 });
 
 // Serve static files

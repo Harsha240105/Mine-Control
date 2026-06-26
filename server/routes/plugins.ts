@@ -50,16 +50,18 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
     const tempPath = path.join(PLUGINS_DIR, `${name}.jar.download`);
     const jarPath = path.join(PLUGINS_DIR, `${name}.jar`);
 
+    let isFinished = false;
+
     const getWithRedirects = (requestUrl: string) => {
       const client = requestUrl.startsWith('https') ? https : http;
       
       const options = {
         headers: {
-          'User-Agent': 'MineControl-OS/1.0.27 (contact@minecontrol.dev)'
+          'User-Agent': 'MineControl-OS/1.0.29 (contact@minecontrol.dev)'
         }
       };
 
-      client.get(requestUrl, options, (response: any) => {
+      const req = client.get(requestUrl, options, (response: any) => {
         if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
           let newUrl = response.headers.location;
           if (!newUrl.startsWith('http')) {
@@ -75,16 +77,46 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
         }
         const file = fs.createWriteStream(tempPath);
         response.pipe(file);
+        
         file.on('finish', () => {
+          isFinished = true;
           file.close();
+          
+          // Verify zip integrity
+          try {
+            const buffer = Buffer.alloc(4);
+            const fd = fs.openSync(tempPath, 'r');
+            fs.readSync(fd, buffer, 0, 4, 0);
+            fs.closeSync(fd);
+            
+            if (buffer[0] !== 0x50 || buffer[1] !== 0x4B || buffer[2] !== 0x03 || buffer[3] !== 0x04) {
+              if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+              return res.status(400).json({ error: 'Downloaded file is not a valid plugin archive.' });
+            }
+          } catch (err) {
+            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+            return res.status(400).json({ error: 'Failed to verify downloaded plugin integrity.' });
+          }
+
           if (fs.existsSync(jarPath)) fs.unlinkSync(jarPath);
           fs.renameSync(tempPath, jarPath);
           registerPluginInDb(name);
           res.json({ success: true, name });
         });
-      }).on('error', (err: Error) => {
+      });
+
+      req.on('error', (err: Error) => {
+        isFinished = true;
         if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-        res.status(400).json({ error: err.message });
+        if (!res.headersSent) res.status(400).json({ error: err.message });
+      });
+
+      req.setTimeout(60000, () => {
+        if (!isFinished) {
+          req.destroy();
+          if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+          if (!res.headersSent) res.status(400).json({ error: 'Download timed out after 60s' });
+        }
       });
     };
     getWithRedirects(downloadUrl);

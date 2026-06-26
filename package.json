@@ -1,7 +1,7 @@
 {
   "name": "minecontrol-os",
   "private": true,
-  "version": "1.0.27",
+  "version": "1.0.29",
   "description": "Self-hosted Minecraft Server Management Platform",
   "author": "Harsha <hsharshavardhanh@soundaryainstitutions.in>",
   "main": "dist/electron/main.js",

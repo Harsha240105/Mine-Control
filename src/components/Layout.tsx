@@ -31,14 +31,14 @@ import {
   Clock,
   Bell,
   RefreshCw,
-  FolderOpen
+  FolderOpen,
+  MessageSquare
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
 import NotificationPanel from './NotificationPanel';
 import UpdateBanner from './UpdateBanner';
 import toast from 'react-hot-toast';
-import pkg from '../../package.json';
 
 const navItems = [
   { path: '/dashboard', label: 'Server', icon: LayoutDashboard },
@@ -51,6 +51,7 @@ const navItems = [
   { path: '/backups', label: 'Backups', icon: HardDrive },
   { path: '/scheduler', label: 'Scheduler', icon: Clock },
   { path: '/connection', label: 'Connection', icon: Wifi },
+  { path: '/discord', label: 'Discord', icon: MessageSquare },
 ];
 
 const bottomNavItems = [
@@ -67,9 +68,16 @@ export default function Layout() {
   const [serverList, setServerList] = useState<any[]>([]);
   const [activeServerName, setActiveServerName] = useState('');
   const [showServerDropdown, setShowServerDropdown] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>('Unknown');
   const { socket, connected } = useSocket();
   const lastSocketUpdate = useRef(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (window.electronAPI?.getVersion) {
+      window.electronAPI.getVersion().then(setAppVersion).catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     const fetchServers = async () => {
@@ -368,7 +376,7 @@ export default function Layout() {
             <UpdateBanner />
             <NotificationPanel />
             <span className="text-xs text-gray-500">
-              v{pkg.version}
+              v{appVersion}
             </span>
           </div>
         </header>

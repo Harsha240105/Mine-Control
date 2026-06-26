@@ -23,6 +23,7 @@ import GitHub from './pages/GitHub';
 import Servers from './pages/Servers';
 import Compatibility from './pages/Compatibility';
 import Import from './pages/Import';
+import Discord from './pages/Discord';
 import AutoUpdater from './components/AutoUpdater';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -104,6 +105,7 @@ export default function App() {
             <Route path="scheduler" element={<Scheduler />} />
             <Route path="connection" element={<Connection />} />
             <Route path="compatibility" element={<Compatibility />} />
+            <Route path="discord" element={<Discord />} />
             <Route path="map" element={<MapView />} />
             <Route path="diagnostics" element={<Diagnostics />} />
             <Route path="guide" element={<Guide />} />

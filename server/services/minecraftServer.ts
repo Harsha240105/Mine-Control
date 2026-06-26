@@ -149,10 +149,19 @@ class MinecraftServerManager extends EventEmitter {
       }
 
       try {
-        execSync(`"${config.javaPath}" -version 2>&1`, { stdio: 'pipe', timeout: 10000 });
-      } catch {
+        const javaOut = execSync(`"${config.javaPath}" -version 2>&1`, { encoding: 'utf8', timeout: 10000 });
+        const versionMatch = javaOut.match(/version "(\d+)/);
+        if (versionMatch) {
+          const major = parseInt(versionMatch[1], 10);
+          if (major < 21) {
+            this.starting = false;
+            throw new Error(`Java version ${major} is not supported. PaperMC 1.21.1 requires Java 21 or higher. Found Java at: "${config.javaPath}"\n\nPlease install Java 21+ and configure the path in Settings.`);
+          }
+        }
+      } catch (err: any) {
         this.starting = false;
-        throw new Error(`Java not found at "${config.javaPath}". Please install Java 21+ and set JAVA_HOME, or configure a custom Java path in Settings.`);
+        if (err.message && err.message.includes('not supported')) throw err;
+        throw new Error(`Java not found or failed to execute at "${config.javaPath}".\nError: ${err.message}\n\nPlease install Java 21+ and configure a custom Java path in Settings.`);
       }
 
       // Check if server port is available

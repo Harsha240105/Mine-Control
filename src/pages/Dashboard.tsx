@@ -202,6 +202,12 @@ export default function Dashboard() {
   const cpuPercent = Math.round(status?.cpuUsage || 0);
   const diskPercent = status && status.diskTotal > 0 ? Math.round((status.diskUsed / status.diskTotal) * 100) : 0;
 
+  if (startError) {
+    // Return the repair flow immediately rather than the normal dashboard
+    const RepairFlow = require('../components/RepairFlow').default;
+    return <RepairFlow error={startError} onDismiss={() => setStartError(null)} />;
+  }
+
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
@@ -220,35 +226,6 @@ export default function Dashboard() {
           </p>
         </div>
       </div>
-
-      {/* Start Error Banner */}
-      {startError && (
-        <div className="card border border-red-500/30 bg-red-500/5">
-          <div className="flex items-start gap-3">
-            <div className="w-5 h-5 rounded-full bg-red-500 flex items-center justify-center flex-shrink-0 mt-0.5">
-              <span className="text-white text-xs font-bold">!</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-semibold text-red-400 mb-1">Server Failed to Start</h3>
-              <div className="text-xs text-red-300/80 space-y-1">
-                {startError.split('\n').map((line, i) => (
-                  <p key={i}>{line || '\u00A0'}</p>
-                ))}
-              </div>
-              <p className="text-[11px] text-gray-500 mt-2">
-                Check the <strong className="text-gray-400">Console</strong> tab for full server output.
-                {' '}Verify you have a valid PaperMC 1.21.1 server.jar in your minecraft directory and Java 21+ installed.
-              </p>
-              <button
-                onClick={() => setStartError(null)}
-                className="mt-2 text-xs text-gray-500 hover:text-gray-300 transition-colors"
-              >
-                Dismiss
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Connection Info */}
       <div className="card border border-minecraft-500/20 bg-minecraft-500/5">

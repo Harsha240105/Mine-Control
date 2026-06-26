@@ -29,6 +29,7 @@ interface DetectionResult {
   size: number;
   javaVersion: string;
   saveVersion: number;
+  eulaAccepted: boolean;
 }
 
 const SOFTWARE_PATTERNS: { pattern: string; name: string }[] = [
@@ -67,6 +68,7 @@ export class ImportService {
       size: isDir ? this.getDirSize(sourcePath) : stats.size,
       javaVersion: 'Unknown',
       saveVersion: 0,
+      eulaAccepted: false,
     };
 
     if (!isDir) {
@@ -117,6 +119,14 @@ export class ImportService {
         const key = trimmed.slice(0, eq).trim();
         const val = trimmed.slice(eq + 1).trim();
         detection.serverProperties[key] = val;
+      }
+    }
+
+    const eulaPath = path.join(sourcePath, 'eula.txt');
+    if (fs.existsSync(eulaPath)) {
+      const content = fs.readFileSync(eulaPath, 'utf-8');
+      if (content.includes('eula=true')) {
+        detection.eulaAccepted = true;
       }
     }
 

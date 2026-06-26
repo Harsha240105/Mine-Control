@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
 contextBridge.exposeInMainWorld('electronAPI', {
+  getVersion: () => ipcRenderer.invoke('get-version'),
   getAppPath: () => ipcRenderer.invoke('get-app-path'),
   getDataPath: () => ipcRenderer.invoke('get-data-path'),
   selectDirectory: () => ipcRenderer.invoke('select-directory'),

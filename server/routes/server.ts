@@ -15,6 +15,7 @@ const router = Router();
 const PAPER_API = 'https://api.papermc.io/v2/projects/paper';
 const MOJANG_MANIFEST = 'https://launchermeta.mojang.com/mc/game/version_manifest.json';
 const FABRIC_API = 'https://meta.fabricmc.net/v2';
+const FORGE_API = 'https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json';
 
 interface MojangVersion {
   id: string;
@@ -37,13 +38,22 @@ function cacheSet(key: string, data: any, ttlMs = 300000) {
   cache[key] = { data, expiry: Date.now() + ttlMs };
 }
 
-function httpsGet(url: string): Promise<string> {
+function httpsGet(url: string, timeoutMs = 15000): Promise<string> {
   return new Promise((resolve, reject) => {
-    https.get(url, (resp) => {
+    const req = https.get(url, (resp) => {
+      if (resp.statusCode && resp.statusCode >= 400) {
+        req.destroy();
+        return reject(new Error(`HTTP Error ${resp.statusCode}`));
+      }
       let d = '';
       resp.on('data', (chunk) => d += chunk);
       resp.on('end', () => resolve(d));
     }).on('error', reject);
+    
+    req.setTimeout(timeoutMs, () => {
+      req.destroy();
+      reject(new Error(`Request timed out after ${timeoutMs}ms`));
+    });
   });
 }
 
@@ -626,6 +636,27 @@ router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
     } catch {}
   }
 
+  // Fetch Forge versions
+  let forgeVersions: string[] = [];
+  const cachedForge = cacheGet<string[]>('forgeVersions');
+  if (cachedForge) {
+    forgeVersions = cachedForge;
+  } else {
+    try {
+      const data = await httpsGet(FORGE_API);
+      const parsed = JSON.parse(data);
+      const promos = parsed.promos || {};
+      const uniqueVersions = new Set<string>();
+      for (const key of Object.keys(promos)) {
+        if (key.endsWith('-latest') || key.endsWith('-recommended')) {
+          uniqueVersions.add(key.split('-')[0]);
+        }
+      }
+      forgeVersions = Array.from(uniqueVersions).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+      cacheSet('forgeVersions', forgeVersions);
+    } catch {}
+  }
+
   // Build combined version list
   const versionSet = new Set<string>();
   const combined: any[] = [];
@@ -654,6 +685,18 @@ router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
       source: 'Fabric',
       downloaded: downloadedJars.some(d => d === jarPrefix),
       current: currentVersion === ver && currentSource === 'Fabric',
+    });
+  }
+
+  // Add Forge versions
+  for (const ver of forgeVersions) {
+    const jarPrefix = `forge-${ver}`;
+    combined.push({
+      version: ver,
+      type: 'release',
+      source: 'Forge',
+      downloaded: downloadedJars.some(d => d === jarPrefix),
+      current: currentVersion === ver && currentSource === 'Forge',
     });
   }
 
@@ -854,19 +897,21 @@ async function downloadVanillaVersion(version: string, jarPath: string): Promise
   }
 }
 
-function downloadFile(url: string, destPath: string): Promise<void> {
+function downloadFile(url: string, destPath: string, timeoutMs = 60000): Promise<void> {
   return new Promise((resolve, reject) => {
     const tempPath = destPath + '.download';
     const file = fs.createWriteStream(tempPath);
+
+    let isFinished = false;
 
     const getWithRedirects = (requestUrl: string) => {
       const client = requestUrl.startsWith('https') ? https : require('http');
       const options = {
         headers: {
-          'User-Agent': 'MineControl-OS/1.0.27 (contact@minecontrol.dev)'
+          'User-Agent': 'MineControl-OS/1.0.29 (contact@minecontrol.dev)'
         }
       };
-      client.get(requestUrl, options, (resp: any) => {
+      const req = client.get(requestUrl, options, (resp: any) => {
         if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
           let newUrl = resp.headers.location;
           if (!newUrl.startsWith('http')) {
@@ -879,22 +924,56 @@ function downloadFile(url: string, destPath: string): Promise<void> {
         if (resp.statusCode !== 200) {
           file.close();
           if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-          reject(new Error(`Failed to download: HTTP ${resp.statusCode}`));
-          return;
+          return reject(new Error(`Failed to download: HTTP ${resp.statusCode}`));
         }
+        
         resp.pipe(file);
+        
         file.on('finish', () => { 
+          isFinished = true;
           file.close(); 
+          
+          // Verify file if it's a jar or zip
+          if (destPath.endsWith('.jar') || destPath.endsWith('.zip')) {
+            try {
+              const buffer = Buffer.alloc(4);
+              const fd = fs.openSync(tempPath, 'r');
+              fs.readSync(fd, buffer, 0, 4, 0);
+              fs.closeSync(fd);
+              
+              if (buffer[0] !== 0x50 || buffer[1] !== 0x4B || buffer[2] !== 0x03 || buffer[3] !== 0x04) {
+                if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+                return reject(new Error('Downloaded file is not a valid ZIP/JAR archive.'));
+              }
+            } catch (err) {
+              if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+              return reject(new Error('Failed to verify downloaded file integrity.'));
+            }
+          }
+          
           if (fs.existsSync(destPath)) fs.unlinkSync(destPath);
           fs.renameSync(tempPath, destPath);
           resolve(); 
         });
-      }).on('error', (err: any) => {
+      });
+
+      req.on('error', (err: any) => {
+        isFinished = true;
         file.close();
         if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
         reject(err);
       });
+
+      req.setTimeout(timeoutMs, () => {
+        if (!isFinished) {
+          req.destroy();
+          file.close();
+          if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+          reject(new Error(`Download timed out after ${timeoutMs}ms`));
+        }
+      });
     };
+
     getWithRedirects(url);
   });
 }

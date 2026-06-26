@@ -425,3 +425,11 @@ MIT
 - **Performance**: Optimized dashboard gauges with React.memo() to prevent full-app UI lag.
 - **Software**: Fabric metadata parsing integrated into the backend versions API.
 - **UI**: Added Import Server button and dynamic app version display.
+
+### v1.0.29
+- **Stability**: Refactored server launch sequence with strict Java 21+, Port availability, and EULA validations.
+- **Repair Flow**: Introduced a dedicated UI to seamlessly handle and resolve startup errors (RepairFlow).
+- **Discord Settings**: Added dedicated Discord configuration UI for easily modifying the bot token and channel ID.
+- **Forge Integration**: Expanded server software versions to fetch and support Forge dynamically.
+- **Import Scanning**: Import flow now scans existing files to automatically detect `server.properties` and EULA acceptance.
+- **Reliability**: Implemented magic-byte verification on downloads to prevent JAR corruption, and added timeout fallbacks.
