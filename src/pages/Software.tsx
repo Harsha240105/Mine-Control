@@ -3,12 +3,19 @@ import { Cpu, Download, CheckCircle2, ChevronRight, Server, Globe, ShieldCheck }
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 
+interface VersionEntry {
+  version: string;
+  type: string;
+  source: string;
+  downloaded: boolean;
+  current: boolean;
+}
+
 interface VersionsData {
   currentVersion: string;
   currentSource: string;
   downloadedJars: string[];
-  paperVersions: string[];
-  mojangVersions: { id: string; type: string }[];
+  availableVersions: VersionEntry[];
 }
 
 const SOFTWARE_TYPES = [
@@ -148,10 +155,10 @@ export default function Software() {
   // Display Versions for Selected Software
   const software = SOFTWARE_TYPES.find(s => s.id === selectedSoftware);
   let versionsList: string[] = [];
-  if (selectedSoftware === 'PaperMC') {
-    versionsList = data.paperVersions;
-  } else if (selectedSoftware === 'Mojang') {
-    versionsList = data.mojangVersions.filter(v => v.type === 'release').map(v => v.id);
+  if (data?.availableVersions) {
+    versionsList = data.availableVersions
+      .filter(v => v.source === selectedSoftware && v.type === 'release')
+      .map(v => v.version);
   }
 
   return (

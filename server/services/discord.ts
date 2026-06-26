@@ -49,8 +49,10 @@ class DiscordService {
         this.initialized = true;
         this.setupHooks();
       } catch (err) {
-        console.error('[Discord] Failed to login:', err);
+        console.error('[Discord] Discord bot disabled/failed:', err);
       }
+    } else {
+      console.log('[Discord] Discord bot disabled/failed: No token or channel ID configured.');
     }
   }
 
