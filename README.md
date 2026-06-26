@@ -7,7 +7,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.38-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.39-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -63,7 +63,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 
 ## 📥 Download
 
-Latest version: **v1.0.38** — [Auto-updates from within the app]
+Latest version: **v1.0.39** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -359,6 +359,10 @@ The app checks GitHub for new releases on startup. When an update is found:
 ---
 
 ## 📋 Release History
+
+### v1.0.39
+- **Java 25 Support** — Confirmed compatibility with JDK 25 (class version 69.0). The `resolveJava()` auto-detection now correctly finds Java 25 installations from Eclipse Adoptium, Temurin, and standard paths. Servers using Fabric 1.21.4+ (which require Java 25 for the `net/minecraft/bundler/Main` class) are now fully supported.
+- **Updated documentation and version badges** for v1.0.39 release.
 
 ### v1.0.38
 - **Complete State Machine Rewrite** — The Minecraft server process manager (`minecraftServer.ts`) has been fully rewritten with a proper 5-state lifecycle (`STOPPED → STARTING → RUNNING → STOPPING → STOPPED`, with `FAILED` for error states). All old boolean `this.running`/`this.starting` flags have been removed. State transitions are now atomic, emit `server:state` events via Socket.IO, and are reflected in real-time on the Dashboard.
