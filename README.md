@@ -1,20 +1,55 @@
-# MineControl OS
+# 🎮 Mine-Control OS
+
+An automated, local desktop management ecosystem for Minecraft server runtimes, featuring an Aternos-inspired management workflow.
 
 <p align="center">
   <a href="https://github.com/Harsha240105/Mine-Control/releases/latest">
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
+  </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
     <img src="https://img.shields.io/badge/Latest_v1.0.19-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
-<p align="center">
-  <a href="https://github.com/Harsha240105/Mine-Control/releases/latest">
-    <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=600&size=24&duration=3000&pause=500&color=00FF41&center=true&vCenter=true&width=500&lines=MineControl+OS;Self-hosted+Minecraft+Server+Manager;Start+%E2%80%A2+Monitor+%E2%80%A2+Manage;100%25+Free+No+Paid+Tiers;Download+the+desktop+app+now!" alt="Typing SVG"/>
-  </a>
-</p>
+---
 
-> **100% Free Self-Hosted Minecraft Server Management Platform** — No paid tiers, no subscriptions. Run on your own laptop, desktop, or VPS.
+## 📊 Project Completion Summary
+*This section is dynamically updated by the development team after every feature sprint.*
+
+* **Overall Progress:** 85% Completed
+* **Current Sprint Phase:** Phase 3 (Core Stabilization & UX Overhaul)
+* **Target Deadline:** July 10, 2026
+* **Last Updated:** June 26, 2026
+
+### ✅ Completed Features
+- [x] Initial Electron window configuration wrapper.
+- [x] Base Node.js Express server framework setup.
+- [x] Server creation dashboard overhauled into a multi-step Aternos-style wizard.
+- [x] The Ghost Server Bug fixed: Database now populates and triggers a state update via real API calls.
+- [x] Deletion Constraint Fault fixed: SQLite `ON DELETE CASCADE` applied.
+
+### ⏳ Current Focus / Active Task
+- Finalizing the auto-updater release deployment pipeline (`v1.0.19`).
+
+### ❌ Known Bugs & Active Blockers
+*(No active blockers! The ghost server bug and deletion constraint fault were successfully patched.)*
+
+---
+
+## 🛠 Target Core Architecture
+
+### 1. Frontend Layer
+- **Framework:** React 18, TypeScript, Vite, Tailwind CSS
+- **State Management:** Isolated Context Providers for Socket connections and telemetry tracking.
+
+### 2. Backend Layer
+- **Runtime:** Node.js, Express, Socket.IO
+- **Database:** SQLite via `better-sqlite3` (Prepared statements enforced)
+- **Process Lifecycle:** Native `child_process.spawn` for intercepting PaperMC, Fabric, and Forge jar streams.
+
+### 3. Desktop Application Environment
+- **Container:** Electron 28 with strict `contextIsolation: true` and secure whitelisted IPC preload bridges.
+- **Resource Boundary:** Configured for low-overhead operation to guarantee stable development testing alongside heavy local Java instances.
 
 ---
 
