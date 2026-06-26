@@ -38,6 +38,7 @@ mac:
         - arm64
   artifactName: ${productName}-${version}-${arch}.${ext}
 linux:
+  maintainer: "Harsha <hsharshavardhanh@soundaryainstitutions.in>"
   target:
     - target: AppImage
       arch:

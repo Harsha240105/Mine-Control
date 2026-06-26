@@ -3,12 +3,6 @@
   "version": "1.0.18",
   "description": "Self-hosted Minecraft Server Management Platform",
   "author": "Harsha <hsharshavardhanh@soundaryainstitutions.in>",
-  "build": {
-    "linux": {
-      "target": ["AppImage", "deb"],
-      "maintainer": "Harsha <hsharshavardhanh@soundaryainstitutions.in>"
-    }
-  },
   "main": "dist/electron/main.js",
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
