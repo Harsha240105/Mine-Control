@@ -17,6 +17,7 @@ import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
 import toast from 'react-hot-toast';
 import PlayerDetails from '../components/PlayerDetails';
+import RepairFlow from '../components/RepairFlow';
 
 interface StatusData {
   serverId: string;
@@ -204,7 +205,6 @@ export default function Dashboard() {
 
   if (startError) {
     // Return the repair flow immediately rather than the normal dashboard
-    const RepairFlow = require('../components/RepairFlow').default;
     return <RepairFlow error={startError} onDismiss={() => setStartError(null)} />;
   }
 
