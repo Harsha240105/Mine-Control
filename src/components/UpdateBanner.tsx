@@ -59,7 +59,7 @@ export default function UpdateBanner() {
     if (api) api.installUpdate();
   }, [api]);
 
-  if (!api || dismissed) return null;
+  if (!api || dismissed || state === 'idle') return null;
 
   return (
     <div className="flex items-center gap-3 px-3 py-1.5 bg-minecraft-600/20 border border-minecraft-500/30 rounded-lg text-xs">
