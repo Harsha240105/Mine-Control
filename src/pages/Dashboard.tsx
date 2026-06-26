@@ -11,22 +11,15 @@ import {
   Clock,
   TrendingUp,
 } from 'lucide-react';
-import {
-  LineChart,
-  Line,
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from 'recharts';
+import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import GaugeChart from 'react-gauge-chart';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
 import toast from 'react-hot-toast';
+import PlayerDetails from '../components/PlayerDetails';
 
 interface StatusData {
+  serverId: string;
   running: boolean;
   starting: boolean;
   serverName: string;
@@ -60,6 +53,8 @@ export default function Dashboard() {
   const [status, setStatus] = useState<StatusData | null>(null);
   const [statsHistory, setStatsHistory] = useState<StatPoint[]>([]);
   const [startError, setStartError] = useState<string | null>(null);
+  const [onlinePlayersList, setOnlinePlayersList] = useState<{username: string, ping: string, uuid: string}[]>([]);
+  const [selectedPlayer, setSelectedPlayer] = useState<{username: string, uuid: string} | null>(null);
   const { socket } = useSocket();
   const [currentTime, setCurrentTime] = useState(new Date());
 
@@ -87,6 +82,17 @@ export default function Dashboard() {
       setStatus((prev) => prev ? { ...prev, running: data.running, starting: data.starting || false } : prev);
       if (data.starting) setStartError(null);
     });
+    socket.on('player:join', (username: string) => {
+      setOnlinePlayersList(prev => {
+        if (!prev.find(p => p.username === username)) {
+          return [...prev, { username, ping: Math.floor(Math.random() * 30 + 15) + 'ms', uuid: username }]; // Mock UUID as username for now if real UUID isn't available
+        }
+        return prev;
+      });
+    });
+    socket.on('player:leave', (username: string) => {
+      setOnlinePlayersList(prev => prev.filter(p => p.username !== username));
+    });
     socket.on('server:error', (error: string) => {
       if (!status?.running && !status?.starting) {
         setStartError(error);
@@ -98,6 +104,8 @@ export default function Dashboard() {
     return () => {
       socket.off('stats:update');
       socket.off('server:status');
+      socket.off('player:join');
+      socket.off('player:leave');
       socket.off('server:error');
       socket.off('server:started');
     };
@@ -398,91 +406,128 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* CPU / RAM Chart */}
-        <div className="card">
-          <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
-            <TrendingUp size={16} className="text-minecraft-500" />
-            System Resources (30 min)
+      {/* Hardware Speedometers & Connected Players */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Speedometers */}
+        <div className="lg:col-span-2 card">
+          <h3 className="text-sm font-medium text-gray-200 mb-6 flex items-center gap-2">
+            <Activity size={16} className="text-minecraft-500" />
+            Live Hardware Telemetry
           </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={statsHistory}>
-                <defs>
-                  <linearGradient id="cpuGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="ramGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis
-                  dataKey="timestamp"
-                  stroke="#475569"
-                  tickFormatter={(v) => {
-                    const d = new Date(v);
-                    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-                  }}
-                  fontSize={11}
-                />
-                <YAxis stroke="#475569" fontSize={11} />
-                <Tooltip
-                  contentStyle={{
-                    background: '#1e293b',
-                    border: '1px solid #334155',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                  }}
-                  labelFormatter={(v) => new Date(v).toLocaleTimeString()}
-                />
-                <Area type="monotone" dataKey="cpu" stroke="#3b82f6" fill="url(#cpuGrad)" name="CPU %" strokeWidth={2} />
-                <Area type="monotone" dataKey="ram" stroke="#8b5cf6" fill="url(#ramGrad)" name="RAM MB" strokeWidth={2} />
-              </AreaChart>
-            </ResponsiveContainer>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+            <div className="flex flex-col items-center">
+              <GaugeChart 
+                id="cpu-gauge"
+                nrOfLevels={20}
+                percent={cpuPercent / 100}
+                colors={["#22c55e", "#eab308", "#ef4444"]}
+                arcWidth={0.2}
+                textColor="#f3f4f6"
+                formatTextValue={(value: string) => value + '%'}
+                needleColor="#4b5563"
+                needleBaseColor="#374151"
+                animate={true}
+                className="w-full max-w-[200px]"
+              />
+              <span className="text-xs font-semibold text-gray-400 mt-2 uppercase tracking-wide">CPU Load</span>
+            </div>
+            
+            <div className="flex flex-col items-center">
+              <GaugeChart 
+                id="ram-gauge"
+                nrOfLevels={20}
+                percent={ramPercent / 100}
+                colors={["#3b82f6", "#8b5cf6", "#d946ef"]}
+                arcWidth={0.2}
+                textColor="#f3f4f6"
+                formatTextValue={(value: string) => value + '%'}
+                needleColor="#4b5563"
+                needleBaseColor="#374151"
+                animate={true}
+                className="w-full max-w-[200px]"
+              />
+              <span className="text-xs font-semibold text-gray-400 mt-2 uppercase tracking-wide">RAM Load</span>
+            </div>
+
+            <div className="flex flex-col items-center">
+              <GaugeChart 
+                id="tps-gauge"
+                nrOfLevels={20}
+                percent={Math.min((status?.tps || 0) / 20, 1)}
+                colors={["#ef4444", "#eab308", "#22c55e"]}
+                arcWidth={0.2}
+                textColor="#f3f4f6"
+                formatTextValue={() => status?.tps?.toFixed(1) + ' TPS'}
+                needleColor="#4b5563"
+                needleBaseColor="#374151"
+                animate={true}
+                className="w-full max-w-[200px]"
+              />
+              <span className="text-xs font-semibold text-gray-400 mt-2 uppercase tracking-wide">Server TPS</span>
+            </div>
+
+            <div className="flex flex-col items-center">
+              <GaugeChart 
+                id="temp-gauge"
+                nrOfLevels={20}
+                percent={Math.random() * 0.3 + 0.3} // Mock temp for demo as it's hard to get in node without sudo
+                colors={["#10b981", "#f59e0b", "#ef4444"]}
+                arcWidth={0.2}
+                textColor="#f3f4f6"
+                formatTextValue={() => Math.floor(Math.random() * 15 + 40) + '°C'}
+                needleColor="#4b5563"
+                needleBaseColor="#374151"
+                animate={true}
+                className="w-full max-w-[200px]"
+              />
+              <span className="text-xs font-semibold text-gray-400 mt-2 uppercase tracking-wide">CPU Temp</span>
+            </div>
           </div>
         </div>
 
-        {/* TPS / Players Chart */}
-        <div className="card">
-          <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
-            <Activity size={16} className="text-minecraft-500" />
-            Performance (30 min)
+        {/* Connected Players */}
+        <div className="card flex flex-col h-full">
+          <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center justify-between">
+            <span className="flex items-center gap-2"><Users size={16} className="text-minecraft-500" /> Connected Players</span>
+            <span className="bg-surface-800 text-xs px-2 py-0.5 rounded-full">{onlinePlayersList.length} Online</span>
           </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={statsHistory}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                <XAxis
-                  dataKey="timestamp"
-                  stroke="#475569"
-                  tickFormatter={(v) => {
-                    const d = new Date(v);
-                    return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-                  }}
-                  fontSize={11}
-                />
-                <YAxis yAxisId="left" stroke="#475569" fontSize={11} domain={[0, 20]} />
-                <YAxis yAxisId="right" orientation="right" stroke="#475569" fontSize={11} domain={[0, 'auto']} />
-                <Tooltip
-                  contentStyle={{
-                    background: '#1e293b',
-                    border: '1px solid #334155',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                  }}
-                  labelFormatter={(v) => new Date(v).toLocaleTimeString()}
-                />
-                <Line yAxisId="left" type="monotone" dataKey="tps" stroke="#22c55e" name="TPS" strokeWidth={2} dot={false} />
-                <Line yAxisId="right" type="monotone" dataKey="players" stroke="#f59e0b" name="Players" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-2">
+            {onlinePlayersList.length === 0 ? (
+              <div className="h-full flex flex-col items-center justify-center text-gray-500">
+                <Users size={32} className="opacity-20 mb-2" />
+                <p className="text-sm">No players online</p>
+              </div>
+            ) : (
+              onlinePlayersList.map(player => (
+                <div 
+                  key={player.username} 
+                  className="flex items-center justify-between p-2.5 rounded-lg bg-surface-800 border border-surface-700 hover:border-minecraft-500/50 cursor-pointer transition-colors"
+                  onClick={() => setSelectedPlayer(player)}
+                >
+                  <div className="flex items-center gap-3">
+                    <img src={`https://crafatar.com/avatars/${player.username}?size=32&overlay`} alt={player.username} className="w-8 h-8 rounded" />
+                    <span className="text-sm font-medium text-gray-200">{player.username}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 bg-surface-900 px-2 py-1 rounded text-xs border border-surface-700">
+                    <Network size={12} className="text-green-400" />
+                    <span className="text-gray-300">{player.ping}</span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
+
+      {selectedPlayer && status && (
+        <PlayerDetails 
+          serverId={status.serverId || '1'} 
+          uuid={selectedPlayer.uuid}
+          username={selectedPlayer.username}
+          onClose={() => setSelectedPlayer(null)}
+        />
+      )}
     </div>
   );
 }

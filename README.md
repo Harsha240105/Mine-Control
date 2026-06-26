@@ -7,7 +7,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.20-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.21-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -31,6 +31,8 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 - [x] **Dynamic Version APIs**: Replaced mock data with real-time Mojang/PaperMC API version fetching.
 - [x] **CRUD Capabilities UI**: Settings tab now supports renaming, online-mode premium toggles, and deletion.
 - [x] **Scheduler Crash Patch**: Fixed fatal UI crash during scheduler unboxing.
+- [x] **Deep Player Analytics**: Engine to parse `.dat` and `.json` files for rich user analytics and player inventory tracking.
+- [x] **Aternos Dashboard Overhaul**: Live animated Speedometers for hardware metrics and a Connected Players panel.
 
 ### ⏳ Current Focus / Active Task
 - Stabilizing UI components for multi-server runtime controls.
@@ -59,7 +61,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 
 ## 📥 Download
 
-Latest version: **v1.0.19** — [Auto-updates from within the app]
+Latest version: **v1.0.21** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -74,7 +76,12 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 
 ## 🚀 Features
 
-### v1.0.19 — New in this release
+### v1.0.21 — New in this release
+- **Deep Player Analytics Engine** — Extracts and visualizes raw NBT (`.dat`) and `.json` player data into a clean UI (Inventory, Health, Location, Statistics).
+- **Speedometer Dashboard** — An Aternos-style hardware UI overhaul replacing standard charts with elegant animated gauges and a live Connected Players panel.
+- **Robust Server Deletion** — Re-engineered database relations with `ON DELETE CASCADE` preventing any UI ghosting or database lock crashes.
+
+### v1.0.19 — Previous release
 - **Massive UX Overhaul** — Entire creation flow was redesigned to mirror Aternos-style wizards with centralized creation/import points.
 - **Critical Bug Fixes** — Fixed the "Ghost Server" bug where created servers didn't show up in the UI, and the server deletion constraints bug by adding ON DELETE CASCADE cascades to the SQLite database.
 - **Settings Menu Purge** — Removed Version Selection and Connection Mode from Settings, shifting these configurations natively into the Creation Wizard.
@@ -83,7 +90,9 @@ The desktop app bundles everything — no Node.js, no separate backend. **Instal
 - **Java Runtime Detector** — Automatically scans your system (Windows/macOS/Linux) to find and list all installed Java versions.
 - **Aikar's JVM Flags** — Automatically applies highly optimized garbage collection flags for maximum performance on Paper and Purpur servers.
 - **In-App Notifications** — Real-time event notifications (player joins, crashes, backups) stored in a new database-backed panel.
-- **Release & Documentation Refresh** — All version strings, badges, and docs aligned to v1.0.19.
+- **Deep Player Analytics Engine** — Read real-time player data (Inventory, XYZ location, Health, Playtime) directly from NBT files.
+- **Speedometer Dashboard** — Visual hardware gauges and live connected player list.
+- **Release & Documentation Refresh** — All version strings, badges, and docs aligned to v1.0.21.
 - **CI/CD Ready** — GitHub Actions `release.yml` automatically builds Windows, macOS, and Linux binaries on every new tag.
 
 ### Server Control

@@ -97,7 +97,7 @@ export default function Welcome() {
                 <Plus size={14} /> New Server
               </button>
             </div>
-            
+
             <div className="space-y-3">
               {servers.map((server: any) => (
                 <button

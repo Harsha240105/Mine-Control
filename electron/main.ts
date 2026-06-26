@@ -50,11 +50,18 @@ function setupAutoUpdater() {
   });
 
   autoUpdater.on('error', (err) => {
-    mainWindow?.webContents.send('update:error', err.message);
+    console.error('AutoUpdater error:', err);
+    mainWindow?.webContents.send('update:error', 'Failed to check for updates. Please try again later.');
   });
 
   setTimeout(() => {
-    autoUpdater.checkForUpdates().catch(() => {});
+    try {
+      autoUpdater.checkForUpdates().catch((err) => {
+        console.error('Failed during autoUpdater.checkForUpdates():', err);
+      });
+    } catch (err) {
+      console.error('Synchronous error in autoUpdater:', err);
+    }
   }, 5000);
 }
 
@@ -270,11 +277,19 @@ ipcMain.handle('select-file', async (_event, filters?: { name: string; extension
 
 // Auto-update IPC handlers
 ipcMain.handle('check-for-updates', () => {
-  autoUpdater.checkForUpdates().catch(() => {});
+  try {
+    autoUpdater.checkForUpdates().catch((err) => {
+      console.error('Failed to manually check for updates:', err);
+    });
+  } catch (err) {
+    console.error('Synchronous error checking for updates:', err);
+  }
 });
 
 ipcMain.handle('download-update', () => {
-  autoUpdater.downloadUpdate().catch(() => {});
+  autoUpdater.downloadUpdate().catch((err) => {
+    console.error('Failed to download update:', err);
+  });
 });
 
 ipcMain.handle('install-update', () => {

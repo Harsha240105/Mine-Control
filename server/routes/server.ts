@@ -113,6 +113,7 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
   try { publicIp = (await httpsGet('https://api.ipify.org?format=json')).match(/"ip":"([^"]+)"/)?.[1] || ''; } catch {}
 
   const status = {
+    serverId: activeId,
     running: minecraftServer.isRunning,
     starting: minecraftServer.isStarting,
     serverName: config.motd || 'MineControl OS',

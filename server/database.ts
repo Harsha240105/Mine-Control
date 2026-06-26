@@ -85,23 +85,27 @@ function initializeSchema() {
 
     CREATE TABLE IF NOT EXISTS backups (
       id TEXT PRIMARY KEY,
+      server_id TEXT,
       name TEXT NOT NULL,
       size TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       type TEXT NOT NULL DEFAULT 'manual',
       worlds TEXT NOT NULL DEFAULT '[]',
       encrypted INTEGER NOT NULL DEFAULT 0,
-      path TEXT NOT NULL
+      path TEXT NOT NULL,
+      FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS worlds (
       name TEXT PRIMARY KEY,
+      server_id TEXT,
       seed TEXT,
       gamemode TEXT NOT NULL DEFAULT 'survival',
       difficulty TEXT NOT NULL DEFAULT 'normal',
       size TEXT,
       last_backup TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS plugins (
@@ -135,10 +139,12 @@ function initializeSchema() {
 
     CREATE TABLE IF NOT EXISTS chat_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      server_id TEXT,
       username TEXT NOT NULL,
       uuid TEXT,
       message TEXT NOT NULL,
-      timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+      timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS audit_log (
@@ -252,6 +258,11 @@ function initializeSchema() {
   try { db.exec('ALTER TABLE servers ADD COLUMN network TEXT DEFAULT \'local\''); } catch {}
   // Populate version/source from jarFile for existing rows
   db.exec("UPDATE servers SET version = REPLACE(REPLACE(REPLACE(jarFile, 'paper-', ''), 'vanilla-', ''), '.jar', ''), version_source = CASE WHEN jarFile LIKE 'paper-%' THEN 'PaperMC' WHEN jarFile LIKE 'vanilla-%' THEN 'Mojang' ELSE '' END WHERE version = '' OR version IS NULL");
+
+  // Migration for adding server_id to legacy tables
+  try { db.exec('ALTER TABLE backups ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE'); } catch {}
+  try { db.exec('ALTER TABLE worlds ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE'); } catch {}
+  try { db.exec('ALTER TABLE chat_log ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE'); } catch {}
 
   // Seed default roles if they don't exist
   const defaultRoles = [

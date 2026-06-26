@@ -45,4 +45,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.os }}-build
-          path: dist/release/*.{exe,dmg,AppImage,deb}
+          path: |
+            dist/release/*.{exe,dmg,AppImage,deb}
+            dist/release/*.yml
+            dist/release/*.blockmap

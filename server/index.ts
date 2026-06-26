@@ -27,6 +27,7 @@ import githubRoutes from './routes/github';
 import compatibilityRoutes from './routes/compatibility';
 import scheduleRoutes from './routes/schedules';
 import marketplaceRoutes from './routes/marketplace';
+import analyticsRoutes from './routes/analytics';
 import { SchedulerService } from './services/scheduler';
 
 const app = express();
@@ -65,6 +66,7 @@ app.use('/api/github', githubRoutes);
 app.use('/api/compatibility', compatibilityRoutes);
 app.use('/api/schedules', scheduleRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
+app.use('/api/server', analyticsRoutes);
 
 // Global error handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
