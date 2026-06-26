@@ -14,6 +14,7 @@ const router = Router();
 
 const PAPER_API = 'https://api.papermc.io/v2/projects/paper';
 const MOJANG_MANIFEST = 'https://launchermeta.mojang.com/mc/game/version_manifest.json';
+const FABRIC_API = 'https://meta.fabricmc.net/v2';
 
 interface MojangVersion {
   id: string;
@@ -173,7 +174,10 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
 
 router.post('/start', authMiddleware, requirePermission('server.start'), async (_req: AuthRequest, res) => {
   try {
-    await minecraftServer.start();
+    if (minecraftServer.isRunning || minecraftServer.isStarting) {
+      return res.status(400).json({ error: 'Server is already running or starting' });
+    }
+    minecraftServer.start().catch((err: any) => console.error('[Start Error]', err.message));
     res.json({ success: true, message: 'Server starting...' });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
@@ -191,12 +195,14 @@ router.post('/stop', authMiddleware, requirePermission('server.stop'), async (_r
 
 router.post('/restart', authMiddleware, requirePermission('server.restart'), async (_req: AuthRequest, res) => {
   try {
-    await minecraftServer.stop();
-    setTimeout(async () => {
-      try {
-        await minecraftServer.start();
-      } catch (e) {}
-    }, 3000);
+    if (minecraftServer.isStarting) {
+      return res.status(400).json({ error: 'Server is currently starting' });
+    }
+    minecraftServer.stop().then(() => {
+      setTimeout(() => {
+        minecraftServer.start().catch((err: any) => console.error('[Start Error]', err.message));
+      }, 1000);
+    }).catch((err: any) => console.error('[Stop Error]', err.message));
     res.json({ success: true, message: 'Server restarting...' });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
@@ -607,6 +613,19 @@ router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
     } catch {}
   }
 
+  // Fetch Fabric versions
+  let fabricVersions: any[] = [];
+  const cachedFabric = cacheGet<any[]>('fabricVersions');
+  if (cachedFabric) {
+    fabricVersions = cachedFabric;
+  } else {
+    try {
+      const data = await httpsGet(`${FABRIC_API}/versions/game`);
+      fabricVersions = JSON.parse(data) || [];
+      cacheSet('fabricVersions', fabricVersions);
+    } catch {}
+  }
+
   // Build combined version list
   const versionSet = new Set<string>();
   const combined: any[] = [];
@@ -622,6 +641,19 @@ router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
       source: 'PaperMC',
       downloaded: downloadedJars.some(d => d === jarPrefix),
       current: currentVersion === v && currentSource === 'PaperMC',
+    });
+  }
+
+  // Add Fabric versions
+  for (const v of fabricVersions) {
+    const ver = v.version;
+    const jarPrefix = `fabric-${ver}`;
+    combined.push({
+      version: ver,
+      type: v.stable ? 'release' : 'snapshot',
+      source: 'Fabric',
+      downloaded: downloadedJars.some(d => d === jarPrefix),
+      current: currentVersion === ver && currentSource === 'Fabric',
     });
   }
 
@@ -697,12 +729,15 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
 
     const mcDir = resolveMinecraftDir();
     const usePaper = source === 'PaperMC' || (!source && await isPaperAvailable(version));
-    const jarPrefix = usePaper ? 'paper' : 'vanilla';
+    const useFabric = source === 'Fabric';
+    const jarPrefix = useFabric ? 'fabric' : (usePaper ? 'paper' : 'vanilla');
     const jarFile = `${jarPrefix}-${version}.jar`;
     const jarPath = path.join(mcDir, jarFile);
 
     if (!fs.existsSync(jarPath)) {
-      if (usePaper) {
+      if (useFabric) {
+        await downloadFabricVersion(version, jarPath);
+      } else if (usePaper) {
         // Download from PaperMC
         await downloadPaperVersion(version, jarPath);
       } else {
@@ -770,6 +805,21 @@ async function downloadPaperVersion(version: string, jarPath: string): Promise<v
   }
 }
 
+  async function downloadFabricVersion(version: string, jarPath: string): Promise<void> {
+    try {
+      const loadersData = await httpsGet(`${FABRIC_API}/versions/loader`);
+      const loaders = JSON.parse(loadersData);
+      if (!loaders || loaders.length === 0) {
+        throw new Error('No Fabric loaders found');
+      }
+      const loaderVersion = loaders[0].version;
+      const downloadUrl = `${FABRIC_API}/versions/loader/${version}/${loaderVersion}/1.0.1/server/jar`;
+      await downloadFile(downloadUrl, jarPath);
+    } catch (err: any) {
+      throw new Error(`Failed to download Fabric ${version}: ${err.message}`);
+    }
+  }
+
 async function downloadVanillaVersion(version: string, jarPath: string): Promise<void> {
   try {
     // Get manifest
@@ -811,7 +861,12 @@ function downloadFile(url: string, destPath: string): Promise<void> {
 
     const getWithRedirects = (requestUrl: string) => {
       const client = requestUrl.startsWith('https') ? https : require('http');
-      client.get(requestUrl, (resp: any) => {
+      const options = {
+        headers: {
+          'User-Agent': 'MineControl-OS/1.0.27 (contact@minecontrol.dev)'
+        }
+      };
+      client.get(requestUrl, options, (resp: any) => {
         if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
           let newUrl = resp.headers.location;
           if (!newUrl.startsWith('http')) {

@@ -29,12 +29,16 @@ import {
   CheckCircle,
   Cable,
   Clock,
+  Bell,
+  RefreshCw,
+  FolderOpen
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
 import NotificationPanel from './NotificationPanel';
 import UpdateBanner from './UpdateBanner';
 import toast from 'react-hot-toast';
+import pkg from '../../package.json';
 
 const navItems = [
   { path: '/dashboard', label: 'Server', icon: LayoutDashboard },
@@ -364,7 +368,7 @@ export default function Layout() {
             <UpdateBanner />
             <NotificationPanel />
             <span className="text-xs text-gray-500">
-              v1.0.19
+              v{pkg.version}
             </span>
           </div>
         </header>

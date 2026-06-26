@@ -52,7 +52,14 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
 
     const getWithRedirects = (requestUrl: string) => {
       const client = requestUrl.startsWith('https') ? https : http;
-      client.get(requestUrl, (response: any) => {
+      
+      const options = {
+        headers: {
+          'User-Agent': 'MineControl-OS/1.0.27 (contact@minecontrol.dev)'
+        }
+      };
+
+      client.get(requestUrl, options, (response: any) => {
         if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
           let newUrl = response.headers.location;
           if (!newUrl.startsWith('http')) {

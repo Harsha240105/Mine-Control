@@ -42,6 +42,25 @@ interface StatusData {
   startedAt: string | null;
 }
 
+const MemoGauge = React.memo(({ id, percent, colors, formatTextValue, label }: any) => (
+  <div className="flex flex-col items-center">
+    <GaugeChart 
+      id={id}
+      nrOfLevels={20}
+      percent={percent}
+      colors={colors}
+      arcWidth={0.2}
+      textColor="#f3f4f6"
+      formatTextValue={formatTextValue}
+      needleColor="#4b5563"
+      needleBaseColor="#374151"
+      animate={true}
+      className="w-full max-w-[200px]"
+    />
+    <span className="text-xs font-semibold text-gray-400 mt-2 uppercase tracking-wide">{label}</span>
+  </div>
+));
+
 interface StatPoint {
   timestamp: number;
   cpu: number;
@@ -56,8 +75,17 @@ export default function Dashboard() {
   const [startError, setStartError] = useState<string | null>(null);
   const [onlinePlayersList, setOnlinePlayersList] = useState<{username: string, ping: string, uuid: string}[]>([]);
   const [selectedPlayer, setSelectedPlayer] = useState<{username: string, uuid: string} | null>(null);
-  const { socket } = useSocket();
+  const [showConsole, setShowConsole] = useState(false);
+  const [consoleInput, setConsoleInput] = useState('');
+  const [consoleOutput, setConsoleOutput] = useState<string[]>([]);
+  const consoleEndRef = useRef<HTMLDivElement>(null);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [mockTemp] = useState(Math.random() * 0.3 + 0.3);
+  const { socket } = useSocket();
+
+  const formatPercent = React.useCallback((value: string) => value + '%', []);
+  const formatTps = React.useCallback((value: string) => (Number(value) / 5).toFixed(1) + ' TPS', []);
+  const formatTempStr = React.useCallback(() => Math.floor(mockTemp * 15 + 40) + '°C', [mockTemp]);
 
   useEffect(() => {
     fetchStatus();
@@ -417,73 +445,34 @@ export default function Dashboard() {
             Live Hardware Telemetry
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
-            <div className="flex flex-col items-center">
-              <GaugeChart 
-                id="cpu-gauge"
-                nrOfLevels={20}
-                percent={cpuPercent / 100}
-                colors={["#22c55e", "#eab308", "#ef4444"]}
-                arcWidth={0.2}
-                textColor="#f3f4f6"
-                formatTextValue={(value: string) => value + '%'}
-                needleColor="#4b5563"
-                needleBaseColor="#374151"
-                animate={true}
-                className="w-full max-w-[200px]"
-              />
-              <span className="text-xs font-semibold text-gray-400 mt-2 uppercase tracking-wide">CPU Load</span>
-            </div>
-            
-            <div className="flex flex-col items-center">
-              <GaugeChart 
-                id="ram-gauge"
-                nrOfLevels={20}
-                percent={ramPercent / 100}
-                colors={["#3b82f6", "#8b5cf6", "#d946ef"]}
-                arcWidth={0.2}
-                textColor="#f3f4f6"
-                formatTextValue={(value: string) => value + '%'}
-                needleColor="#4b5563"
-                needleBaseColor="#374151"
-                animate={true}
-                className="w-full max-w-[200px]"
-              />
-              <span className="text-xs font-semibold text-gray-400 mt-2 uppercase tracking-wide">RAM Load</span>
-            </div>
-
-            <div className="flex flex-col items-center">
-              <GaugeChart 
-                id="tps-gauge"
-                nrOfLevels={20}
-                percent={Math.min((status?.tps || 0) / 20, 1)}
-                colors={["#ef4444", "#eab308", "#22c55e"]}
-                arcWidth={0.2}
-                textColor="#f3f4f6"
-                formatTextValue={() => status?.tps?.toFixed(1) + ' TPS'}
-                needleColor="#4b5563"
-                needleBaseColor="#374151"
-                animate={true}
-                className="w-full max-w-[200px]"
-              />
-              <span className="text-xs font-semibold text-gray-400 mt-2 uppercase tracking-wide">Server TPS</span>
-            </div>
-
-            <div className="flex flex-col items-center">
-              <GaugeChart 
-                id="temp-gauge"
-                nrOfLevels={20}
-                percent={Math.random() * 0.3 + 0.3} // Mock temp for demo as it's hard to get in node without sudo
-                colors={["#10b981", "#f59e0b", "#ef4444"]}
-                arcWidth={0.2}
-                textColor="#f3f4f6"
-                formatTextValue={() => Math.floor(Math.random() * 15 + 40) + '°C'}
-                needleColor="#4b5563"
-                needleBaseColor="#374151"
-                animate={true}
-                className="w-full max-w-[200px]"
-              />
-              <span className="text-xs font-semibold text-gray-400 mt-2 uppercase tracking-wide">CPU Temp</span>
-            </div>
+            <MemoGauge 
+              id="cpu-gauge"
+              percent={cpuPercent / 100}
+              colors={["#22c55e", "#eab308", "#ef4444"]}
+              formatTextValue={formatPercent}
+              label="CPU Load"
+            />
+            <MemoGauge 
+              id="ram-gauge"
+              percent={ramPercent / 100}
+              colors={["#3b82f6", "#8b5cf6", "#d946ef"]}
+              formatTextValue={formatPercent}
+              label="RAM Load"
+            />
+            <MemoGauge 
+              id="tps-gauge"
+              percent={Math.min((status?.tps || 0) / 20, 1)}
+              colors={["#ef4444", "#eab308", "#22c55e"]}
+              formatTextValue={formatTps}
+              label="Server TPS"
+            />
+            <MemoGauge 
+              id="temp-gauge"
+              percent={mockTemp}
+              colors={["#10b981", "#f59e0b", "#ef4444"]}
+              formatTextValue={formatTempStr}
+              label="System Temp"
+            />
           </div>
         </div>
 

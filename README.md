@@ -416,3 +416,12 @@ MIT
 - **Bug Fixes**: Fixed jar download race condition, resolved plugin download 404s, synchronized dashboard server name, and optimized background performance.
 - **New Features**: Added Aternos-style Software tab for seamless version hot-swapping.
 - **Discord Integration**: Complete integration to sync game chat, logs, and events to Discord.
+
+### v1.0.26
+- **Hotfix**: Fixed global React Error Boundary and Discord Bot safe initialization to prevent black screens.
+
+### v1.0.27
+- **Deadlock Fixes**: Resolved infinite loading on login and async execution of server start to prevent Express hangs.
+- **Performance**: Optimized dashboard gauges with React.memo() to prevent full-app UI lag.
+- **Software**: Fabric metadata parsing integrated into the backend versions API.
+- **UI**: Added Import Server button and dynamic app version display.

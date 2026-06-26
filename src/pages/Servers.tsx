@@ -124,12 +124,20 @@ export default function Servers() {
           <Server size={48} className="mx-auto text-gray-600 mb-4" />
           <h3 className="text-lg font-semibold text-gray-300 mb-2">No Servers Yet</h3>
           <p className="text-sm text-gray-500 mb-6">Create your first Minecraft server to get started.</p>
-          <button
-            onClick={() => navigate('/wizard')}
-            className="btn-primary"
-          >
-            Create Server
-          </button>
+          <div className="flex gap-4 justify-center">
+            <button
+              onClick={() => navigate('/wizard')}
+              className="btn-primary"
+            >
+              Create Server
+            </button>
+            <button
+              onClick={() => navigate('/import')}
+              className="btn-secondary"
+            >
+              Import Server
+            </button>
+          </div>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
