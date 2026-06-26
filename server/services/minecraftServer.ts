@@ -2,13 +2,23 @@ import { ChildProcess, spawn, execSync } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import net from 'net';
+import os from 'os';
 import { EventEmitter } from 'events';
 import unzipper from 'unzipper';
 import { getDatabase } from '../database';
 import { resolveMinecraftDir, setMinecraftDir } from '../paths';
 
+export enum ServerState {
+  STOPPED = 'stopped',
+  STARTING = 'starting',
+  RUNNING = 'running',
+  STOPPING = 'stopping',
+  FAILED = 'failed',
+}
+
 export interface MinecraftEventMap {
   'server:output': (data: string) => void;
+  'server:state': (state: ServerState, previous: ServerState) => void;
   'server:started': () => void;
   'server:stopped': (code: number | null) => void;
   'server:error': (error: string) => void;
@@ -22,8 +32,8 @@ export interface MinecraftEventMap {
 class MinecraftServerManager extends EventEmitter {
   private process: ChildProcess | null = null;
   private serverDir: string;
-  private running = false;
-  private starting = false;
+  private _state: ServerState = ServerState.STOPPED;
+  private _lastError: string | null = null;
   private statsInterval: NodeJS.Timeout | null = null;
   private logStream: fs.WriteStream | null = null;
   private startedAt: Date | null = null;
@@ -32,6 +42,7 @@ class MinecraftServerManager extends EventEmitter {
   private outputBuffer: string[] = [];
   private startAttemptedAt: number | null = null;
   private hasStartedSuccessfully = false;
+  private crashLog: string[] = [];
 
   constructor() {
     super();
@@ -39,9 +50,26 @@ class MinecraftServerManager extends EventEmitter {
     this.ensureDirectories();
   }
 
+  get state(): ServerState { return this._state; }
+  get lastError(): string | null { return this._lastError; }
+
+  get isRunning(): boolean { return this._state === ServerState.RUNNING; }
+  get isStarting(): boolean { return this._state === ServerState.STARTING; }
+
+  private setState(newState: ServerState) {
+    const prev = this._state;
+    this._state = newState;
+    if (newState === ServerState.FAILED) {
+      this.crashLog = this.outputBuffer.slice(-50);
+    }
+    this.emit('server:state', newState, prev);
+    this.emit('server:output', `[MineControl] State: ${prev} → ${newState}\n`);
+  }
+
   loadServer(directory: string) {
-    if (this.running || this.starting) return;
+    if (this._state === ServerState.RUNNING || this._state === ServerState.STARTING || this._state === ServerState.STOPPING) return;
     this.serverDir = directory;
+    this._lastError = null;
     setMinecraftDir(directory);
     this.ensureDirectories();
   }
@@ -95,14 +123,6 @@ class MinecraftServerManager extends EventEmitter {
     });
   }
 
-  get isRunning(): boolean {
-    return this.running;
-  }
-
-  get isStarting(): boolean {
-    return this.starting;
-  }
-
   get uptime(): number {
     if (!this.startedAt) return 0;
     return Math.floor((Date.now() - this.startedAt.getTime()) / 1000);
@@ -131,184 +151,150 @@ class MinecraftServerManager extends EventEmitter {
     }
   }
 
+  // ── Pre-flight validation: runs BEFORE entering STARTING ──
+  private async validatePreFlight(): Promise<{ config: any; jarFileName: string; jarPath: string }> {
+    const config = this.getConfig();
+    const jarFileName = config.jarFile || 'server.jar';
+    const jarPath = path.join(this.serverDir, jarFileName);
+
+    // Wait if the jar is currently being downloaded
+    let waitCount = 0;
+    while (fs.existsSync(jarPath + '.download') && waitCount < 120) {
+      if (waitCount === 0) {
+        this.emit('server:output', '[MineControl] Waiting for jar download to finish...\n');
+      }
+      await new Promise(r => setTimeout(r, 2000));
+      waitCount++;
+    }
+
+    if (!fs.existsSync(jarPath)) {
+      throw new Error(`Server jar not found: ${jarFileName} is missing. Run a Repair or download a server version from the Software page first.`);
+    }
+
+    // EULA
+    const eulaPath = path.join(this.serverDir, 'eula.txt');
+    const eulaContent = (() => { try { return fs.readFileSync(eulaPath, 'utf-8'); } catch { return ''; } })();
+    if (!eulaContent.includes('eula=true')) {
+      fs.writeFileSync(eulaPath, 'eula=true\n');
+      this.emit('server:output', '[MineControl] EULA accepted automatically.\n');
+    }
+
+    // Port check
+    const portCheck = await this.checkPort(config.port);
+    if (!portCheck.available) {
+      let processName = 'unknown';
+      if (portCheck.pid) {
+        try {
+          const taskOut = execSync(`tasklist /FI "PID eq ${portCheck.pid}" /FO CSV /NH`, { encoding: 'utf-8', timeout: 5000 });
+          const match = taskOut.match(/"([^"]+)"/);
+          processName = match ? match[1] : `PID ${portCheck.pid}`;
+        } catch {}
+      }
+      const isJava = processName.toLowerCase().includes('java');
+      if (isJava && portCheck.pid) {
+        try {
+          execSync(`taskkill /PID ${portCheck.pid} /F`, { timeout: 5000 });
+          this.emit('server:output', `[MineControl] Killed orphaned Java process (PID: ${portCheck.pid}) that was holding port ${config.port}\n`);
+          await new Promise(r => setTimeout(r, 1000));
+          const recheck = await this.checkPort(config.port);
+          if (!recheck.available) {
+            throw new Error(`Port ${config.port} is still in use after killing Java process (PID: ${portCheck.pid}). Another application is using it.`);
+          }
+        } catch (e: any) {
+          if (e.message?.startsWith('Port')) throw e;
+          throw new Error(`Port ${config.port} is in use by ${processName} (PID: ${portCheck.pid}). Failed to auto-kill. Please close it manually.`);
+        }
+      } else {
+        throw new Error(`Port ${config.port} is in use by ${processName}${portCheck.pid ? ` (PID: ${portCheck.pid})` : ''}. Please stop that process or change the server port in Settings.`);
+      }
+    }
+
+    return { config, jarFileName, jarPath };
+  }
+
+  // ── Java resolution: scan .class files, find compatible JDK ──
+  private async resolveJava(jarPath: string, config: any): Promise<{ javaPath: string; javaMajor: number; classVersion: number | null }> {
+    const classVersion = await this.detectRequiredJava(jarPath);
+    const requiredJava = classVersion !== null ? classVersion - 44 : 21;
+
+    // Try configured path
+    let javaPath = config.javaPath;
+    let javaMajor: number;
+
+    const tryJavaAt = async (jPath: string): Promise<number> => {
+      try {
+        const out = execSync(`"${jPath}" -version 2>&1`, { encoding: 'utf8', timeout: 10000 });
+        const m = out.match(/version "(\d+)/);
+        return m ? parseInt(m[1], 10) : 0;
+      } catch { return 0; }
+    };
+
+    javaMajor = await tryJavaAt(javaPath);
+
+    if (javaMajor >= requiredJava) {
+      return { javaPath, javaMajor, classVersion };
+    }
+
+    // Configured path is absent or too old — scan all installed JDKs
+    const { JavaDetector } = await import('./JavaDetector');
+    const installed = await JavaDetector.scan();
+    const viable = installed
+      .filter(j => j.majorVersion >= requiredJava)
+      .sort((a, b) => a.majorVersion - b.majorVersion);
+
+    if (viable.length > 0) {
+      javaPath = viable[0].path;
+      javaMajor = viable[0].majorVersion;
+      this.emit('server:output', `[MineControl] Auto-selected Java at "${javaPath}" (Java ${javaMajor})\n`);
+      return { javaPath, javaMajor, classVersion };
+    }
+
+    // No compatible JDK found — build error message
+    const installedList = installed.map(j => `  • Java ${j.majorVersion} at "${j.path}"`).join('\n');
+    const classInfo = classVersion !== null
+      ? ` (class version ${classVersion}.0)`
+      : '';
+    throw new Error(
+      `This server jar requires Java ${requiredJava}+${classInfo}, but the configured Java at "${config.javaPath}" is` +
+      (javaMajor > 0 ? ` only Java ${javaMajor}.` : ` not found.`) +
+      `\n\nInstalled JDKs:\n${installedList || '  (none found)'}\n\n` +
+      `No compatible Java ${requiredJava}+ installation found.\n` +
+      `Please install Java ${requiredJava}+ from:\n` +
+      `  • https://adoptium.net/temurin/releases/?version=${requiredJava}\n` +
+      `  • https://www.oracle.com/java/technologies/downloads/\n\n` +
+      `After installing, either:\n` +
+      `  - Add Java ${requiredJava}+ to your PATH\n` +
+      `  - Configure the full path in MineControl Settings\n` +
+      `  - Restart MineControl to auto-detect the new Java`
+    );
+  }
+
   async start(): Promise<void> {
-    if (this.running || this.starting) {
+    if (this._state === ServerState.RUNNING || this._state === ServerState.STARTING || this._state === ServerState.STOPPING) {
       throw new Error('Server is already running or starting');
     }
 
-    this.starting = true;
+    this._lastError = null;
     this.outputBuffer = [];
     this.startAttemptedAt = Date.now();
     this.hasStartedSuccessfully = false;
-    this.emit('server:output', '[MineControl] Starting Minecraft server...\n');
+    this.restartAttempts = 0;
+    this.crashLog = [];
 
     try {
-      const config = this.getConfig();
-      const jarFileName = config.jarFile || 'server.jar';
-      const jarPath = path.join(this.serverDir, jarFileName);
+      // ── Phase 1: Pre-flight validation (no state change yet) ──
+      this.emit('server:output', '[MineControl] Pre-flight validation...\n');
+      const { config, jarFileName, jarPath } = await this.validatePreFlight();
 
-      // Wait if the jar is currently being downloaded
-      let waitCount = 0;
-      while (fs.existsSync(jarPath + '.download') && waitCount < 120) {
-        if (waitCount === 0) {
-          this.emit('server:output', '[MineControl] Waiting for jar download to finish...\n');
-        }
-        await new Promise(r => setTimeout(r, 2000));
-        waitCount++;
-      }
+      // ── Phase 2: Java resolution ──
+      this.emit('server:output', '[MineControl] Resolving Java runtime...\n');
+      const { javaPath, javaMajor } = await this.resolveJava(jarPath, config);
 
-      if (!fs.existsSync(jarPath)) {
-        this.starting = false;
-        throw new Error(`Server jar not found: ${jarFileName} is missing. Run a Repair or download a server version from the Software page first.`);
-      }
+      // ── All checks passed — enter STARTING state and spawn ──
+      this.setState(ServerState.STARTING);
+      this.emit('server:output', `[MineControl] Starting with Java ${javaMajor} at "${javaPath}"...\n`);
 
-      const eulaPath = path.join(this.serverDir, 'eula.txt');
-      const eulaContent = (() => { try { return fs.readFileSync(eulaPath, 'utf-8'); } catch { return ''; } })();
-      if (!eulaContent.includes('eula=true')) {
-        fs.writeFileSync(eulaPath, 'eula=true\n');
-        this.emit('server:output', '[MineControl] EULA accepted automatically.\n');
-      }
-
-      // Detect the class version from the server jar to verify Java compatibility
-      const classVersion = await this.detectRequiredJava(jarPath);
-
-      // Auto-detect optimal Java: prefer configured path, fall back to scanning installed JDKs
-      let javaMajor = 0;
-      let javaPath = config.javaPath;
-      const tryJavaAt = async (jPath: string): Promise<number> => {
-        try {
-          const out = execSync(`"${jPath}" -version 2>&1`, { encoding: 'utf8', timeout: 10000 });
-          const m = out.match(/version "(\d+)/);
-          return m ? parseInt(m[1], 10) : 0;
-        } catch { return 0; }
-      };
-
-      javaMajor = await tryJavaAt(javaPath);
-
-      // Determine required Java from class version if available
-      const classVersionToJava = (cv: number) => cv - 44;
-      const requiredJava = classVersion !== null ? classVersionToJava(classVersion) : 21;
-
-      if (javaMajor === 0) {
-        // Configured Java not found — scan installed JDKs
-        const { JavaDetector } = await import('./JavaDetector');
-        const installed = await JavaDetector.scan();
-        const viable = installed
-          .filter(j => j.majorVersion >= requiredJava)
-          .sort((a, b) => a.majorVersion - b.majorVersion);
-
-        if (viable.length > 0) {
-          javaPath = viable[0].path;
-          javaMajor = viable[0].majorVersion;
-          this.emit('server:output', `[MineControl] Auto-selected Java at "${javaPath}" (Java ${javaMajor})\n`);
-        } else {
-          const best = installed.sort((a, b) => b.majorVersion - a.majorVersion);
-          const bestMsg = best.length > 0
-            ? `Highest installed: Java ${best[0].majorVersion} at "${best[0].path}"`
-            : 'No Java installations found';
-          this.starting = false;
-          throw new Error(
-            `Java not found at "${config.javaPath}" nor any compatible JDK.\n` +
-            `${bestMsg}\n\n` +
-            `This server requires Java ${requiredJava}+.\n` +
-            `Please install Java ${requiredJava}+ from https://adoptium.net/ and configure the path in Settings.`
-          );
-        }
-      } else if (javaMajor < 21) {
-        // Configured Java is too old — scan for newer
-        const { JavaDetector } = await import('./JavaDetector');
-        const installed = await JavaDetector.scan();
-        const viable = installed
-          .filter(j => j.majorVersion >= requiredJava)
-          .sort((a, b) => a.majorVersion - b.majorVersion);
-
-        if (viable.length > 0) {
-          javaPath = viable[0].path;
-          javaMajor = viable[0].majorVersion;
-          this.emit('server:output', `[MineControl] Java at "${config.javaPath}" is too old (Java ${javaMajor < 21 ? `<21` : `${javaMajor}<${requiredJava}`}); auto-selected "${javaPath}" (Java ${javaMajor})\n`);
-        } else if (requiredJava > javaMajor) {
-          const installedList = installed.map(j => `  • Java ${j.majorVersion} at "${j.path}"`).join('\n');
-          this.starting = false;
-          throw new Error(
-            `This server jar requires Java ${requiredJava}+ (class version ${classVersion}.0), ` +
-            `but your configured Java at "${config.javaPath}" is only Java ${javaMajor}.\n\n` +
-            `Installed JDKs:\n${installedList || '  (none found)'}\n\n` +
-            `No compatible Java ${requiredJava}+ installation found.\n\n` +
-            `Please install Java ${requiredJava}+ from:\n` +
-            `  • https://adoptium.net/temurin/releases/?version=${requiredJava}\n` +
-            `  • https://www.oracle.com/java/technologies/downloads/\n\n` +
-            `After installing, either:\n` +
-            `  - Add Java ${requiredJava}+ to your PATH\n` +
-            `  - Configure the full path in MineControl Settings\n` +
-            `  - Restart MineControl to auto-detect the new Java`
-          );
-        }
-      } else if (classVersion !== null && requiredJava > javaMajor) {
-        // Java >= 21 but not enough for this jar — scan for higher
-        const { JavaDetector } = await import('./JavaDetector');
-        const installed = await JavaDetector.scan();
-        const viable = installed
-          .filter(j => j.majorVersion >= requiredJava)
-          .sort((a, b) => a.majorVersion - b.majorVersion);
-
-        if (viable.length > 0) {
-          javaPath = viable[0].path;
-          javaMajor = viable[0].majorVersion;
-          this.emit('server:output', `[MineControl] This jar requires Java ${requiredJava}+; auto-selected "${javaPath}" (Java ${javaMajor})\n`);
-        } else {
-          const installedList = installed.map(j => `  • Java ${j.majorVersion} at "${j.path}"`).join('\n');
-          this.starting = false;
-          throw new Error(
-            `This server jar requires Java ${requiredJava}+ (class version ${classVersion}.0), ` +
-            `but your configured Java at "${config.javaPath}" is only Java ${javaMajor}.\n\n` +
-            `Installed JDKs:\n${installedList || '  (none found)'}\n\n` +
-            `No compatible Java ${requiredJava}+ installation found.\n\n` +
-            `Please install Java ${requiredJava}+ from:\n` +
-            `  • https://adoptium.net/temurin/releases/?version=${requiredJava}\n` +
-            `  • https://www.oracle.com/java/technologies/downloads/\n\n` +
-            `After installing, either:\n` +
-            `  - Add Java ${requiredJava}+ to your PATH\n` +
-            `  - Configure the full path in MineControl Settings\n` +
-            `  - Restart MineControl to auto-detect the new Java`
-          );
-        }
-      }
-
-      // Check if server port is available
-      const portCheck = await this.checkPort(config.port);
-      if (!portCheck.available) {
-        let processName = 'unknown';
-        if (portCheck.pid) {
-          try {
-            const taskOut = execSync(`tasklist /FI "PID eq ${portCheck.pid}" /FO CSV /NH`, { encoding: 'utf-8', timeout: 5000 });
-            const match = taskOut.match(/"([^"]+)"/);
-            processName = match ? match[1] : `PID ${portCheck.pid}`;
-          } catch {}
-        }
-        const isJava = processName.toLowerCase().includes('java');
-        if (isJava && portCheck.pid) {
-          // Auto-kill orphaned Java process holding the port
-          try {
-            execSync(`taskkill /PID ${portCheck.pid} /F`, { timeout: 5000 });
-            this.emit('server:output', `[MineControl] Killed orphaned Java process (PID: ${portCheck.pid}) that was holding port ${config.port}\n`);
-            // Wait for OS to release the port
-            await new Promise(r => setTimeout(r, 1000));
-            const recheck = await this.checkPort(config.port);
-            if (!recheck.available) {
-              this.starting = false;
-              throw new Error(`Port ${config.port} is still in use after killing Java process (PID: ${portCheck.pid}). Another application is using it.`);
-            }
-          } catch (e: any) {
-            if (e.message?.startsWith('Port')) throw e;
-            this.starting = false;
-            throw new Error(`Port ${config.port} is in use by ${processName} (PID: ${portCheck.pid}). Failed to auto-kill. Please close it manually.`);
-          }
-        } else {
-          this.starting = false;
-          throw new Error(`Port ${config.port} is in use by ${processName}${portCheck.pid ? ` (PID: ${portCheck.pid})` : ''}. Please stop that process or change the server port in Settings.`);
-        }
-      }
-
+      // Log file
       const logFileName = `server-${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
       const logPath = path.join(this.serverDir, 'logs', logFileName);
       this.logStream = fs.createWriteStream(logPath, { flags: 'a' });
@@ -341,84 +327,85 @@ class MinecraftServerManager extends EventEmitter {
         '--port', `${config.port}`,
       ];
 
-      const env = { ...process.env };
-      // Set working directory
-      const options: { cwd: string; env: NodeJS.ProcessEnv; stdio: ['pipe', 'pipe', 'pipe'] } = {
+      const proc = spawn(javaPath, javaArgs, {
         cwd: this.serverDir,
-        env,
+        env: { ...process.env },
         stdio: ['pipe', 'pipe', 'pipe'],
-      };
-
-      const proc = spawn(javaPath, javaArgs, options);
+      } as any);
       this.process = proc;
 
-      // Wait briefly to catch immediate spawn errors (e.g., Java not found)
+      // Catch immediate spawn errors
       const spawnErr = await new Promise<Error | null>((resolve) => {
         const onError = (err: Error) => resolve(err);
         proc.once('error', onError);
-        setTimeout(() => {
-          proc.removeListener('error', onError);
-          resolve(null);
-        }, 500);
+        setTimeout(() => { proc.removeListener('error', onError); resolve(null); }, 500);
       });
 
       if (spawnErr) {
         this.cleanup();
+        this.setState(ServerState.FAILED);
+        this._lastError = spawnErr.message;
         this.emit('server:error', spawnErr.message);
         this.emit('server:output', `[MineControl] Spawn failed: ${spawnErr.message}\n`);
         throw new Error(`Failed to start Java: ${spawnErr.message}. Check that Java is installed and JAVA_HOME is set.`);
       }
 
-      this.restartAttempts = 0;
+      // Wire up output handlers
+      proc.stdout?.on('data', (data: Buffer) => this.handleOutput(data.toString()));
+      proc.stderr?.on('data', (data: Buffer) => this.handleOutput(`[STDERR] ${data.toString()}`));
 
-      proc.stdout?.on('data', (data: Buffer) => {
-        const output = data.toString();
-        this.handleOutput(output);
-      });
-
-      proc.stderr?.on('data', (data: Buffer) => {
-        const output = data.toString();
-        this.handleOutput(`[STDERR] ${output}`);
-      });
-
+      // Process close handler (only fires for unexpected exits, not during a graceful stop)
       proc.on('close', (code) => {
-        this.running = false;
-        this.starting = false;
         this.startedAt = null;
+        this.process = null;
         this.cleanup();
-        this.emit('server:stopped', code);
-        this.emit('server:output', `\n[MineControl] Server stopped with code ${code}\n`);
 
-        // Detect server that exited before fully starting
-        if (code === 0 && !this.hasStartedSuccessfully && this.startAttemptedAt && Date.now() - this.startAttemptedAt < 15000 && this.outputBuffer.length > 0) {
-          const lastOutput = this.outputBuffer.slice(-30).join('\n');
-          const errorMsg = `Server exited with code 0 before fully starting.\nPossible causes: invalid server.jar, wrong Java version (need 21+), or port already in use.\n\nLast output:\n${lastOutput}`;
-          this.emit('server:error', errorMsg);
-          this.emit('server:output', `[MineControl] ERROR: ${errorMsg}\n`);
+        // If stop() already transitioned to STOPPING → STOPPED, don't override
+        if (this._state === ServerState.STOPPING || this._state === ServerState.STOPPED) {
+          if (this._state === ServerState.STOPPING) {
+            this.setState(ServerState.STOPPED);
+            this.emit('server:stopped', code);
+          }
+          return;
         }
 
-        if (code !== 0 && this.getConfig().autoRestart && this.restartAttempts < this.maxRestartAttempts) {
-          this.restartAttempts++;
-          this.emit('server:output', `[MineControl] Auto-restarting in 5 seconds (attempt ${this.restartAttempts}/${this.maxRestartAttempts})...\n`);
-          setTimeout(() => this.start().catch(() => {}), 5000);
-        } else if (code !== 0 && this.restartAttempts >= this.maxRestartAttempts) {
-          this.emit('server:output', `[MineControl] Max restart attempts reached. Giving up.\n`);
+        const crashed = code !== 0 || !this.hasStartedSuccessfully;
+        const finalState = crashed ? ServerState.FAILED : ServerState.STOPPED;
+
+        this._lastError = null;
+        if (crashed && code !== 0) {
+          this._lastError = `Process exited with code ${code}`;
+        } else if (crashed && code === 0 && !this.hasStartedSuccessfully) {
+          const snippet = this.outputBuffer.slice(-30).join('\n');
+          this._lastError = `Server exited with code 0 before fully starting.\nPossible causes: invalid server.jar, wrong Java version, or port already in use.\n\nLast output:\n${snippet}`;
+        }
+
+        this.setState(finalState);
+        this.emit('server:stopped', code);
+        this.emit('server:output', `\n[MineControl] Server stopped with code ${code} → ${finalState}\n`);
+
+        if (this._lastError) {
+          this.emit('server:error', this._lastError);
+          this.emit('server:output', `[MineControl] ERROR: ${this._lastError}\n`);
         }
       });
 
+      // Process error handler
       proc.on('error', (err) => {
-        this.running = false;
-        this.starting = false;
+        this.process = null;
         this.cleanup();
+        this._lastError = err.message;
+        this.setState(ServerState.FAILED);
         this.emit('server:error', err.message);
         this.emit('server:output', `[MineControl] Runtime error: ${err.message}\n`);
       });
 
-      // Start monitoring
+      // Start process telemetry monitoring
       this.startStatsMonitoring();
 
     } catch (error: any) {
-      this.starting = false;
+      this._lastError = error.message;
+      this.setState(ServerState.FAILED);
       this.emit('server:error', error.message);
       throw error;
     }
@@ -468,10 +455,9 @@ class MinecraftServerManager extends EventEmitter {
 
       // Done loading
       if (line.includes('Done') && line.includes('For help')) {
-        this.running = true;
-        this.starting = false;
         this.startedAt = new Date();
         this.hasStartedSuccessfully = true;
+        this.setState(ServerState.RUNNING);
         this.emit('server:started');
         continue;
       }
@@ -510,11 +496,16 @@ class MinecraftServerManager extends EventEmitter {
   }
 
   async stop(): Promise<void> {
-    if (!this.process && !this.running) {
+    const allowed = [ServerState.RUNNING, ServerState.STARTING, ServerState.FAILED];
+    if (!allowed.includes(this._state)) {
       throw new Error('Server is not running');
     }
 
+    // Already stopping
+    if (this._state === ServerState.STOPPING) return;
+
     this.emit('server:output', '[MineControl] Stopping server...\n');
+    this.setState(ServerState.STOPPING);
 
     // Stop stats monitoring immediately
     if (this.statsInterval) {
@@ -524,13 +515,12 @@ class MinecraftServerManager extends EventEmitter {
 
     const proc = this.process;
     if (!proc) {
-      this.running = false;
-      this.starting = false;
+      this.setState(ServerState.STOPPED);
       return;
     }
 
     return new Promise((resolve) => {
-      // Resolve as soon as the process actually exits
+      // Reset state on close; start()'s close handler defers to STOPPING state
       const onClose = () => {
         proc.removeListener('close', onClose);
         proc.removeListener('error', onClose);
@@ -564,10 +554,12 @@ class MinecraftServerManager extends EventEmitter {
   }
 
   async sendCommand(command: string): Promise<void> {
-    if (!this.process || !this.running) {
+    if (this._state !== ServerState.RUNNING) {
       throw new Error('Server is not running');
     }
-    this.process.stdin?.write(command + '\n');
+    const proc = this.process;
+    if (!proc) return;
+    proc.stdin?.write(command + '\n');
     this.emit('server:output', `> ${command}\n`);
   }
 
@@ -579,11 +571,13 @@ class MinecraftServerManager extends EventEmitter {
 
   private startStatsMonitoring() {
     this.statsInterval = setInterval(async () => {
-      if (!this.process || !this.running) return;
+      if (this._state !== ServerState.RUNNING) return;
+      const proc = this.process;
+      if (!proc) return;
 
       try {
         const pidusage = require('pidusage');
-        const stats = await pidusage(this.process.pid);
+        const stats = await pidusage(proc.pid);
 
         const statsData = {
           cpu: Math.min(stats.cpu, 100),

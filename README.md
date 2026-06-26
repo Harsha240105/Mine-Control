@@ -7,7 +7,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.37-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.38-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -36,12 +36,11 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 - [x] **Safe App Environment Fix**: Resolved unhandled `ReferenceError: Cpu is not defined` crash on launch. Implemented `ErrorBoundary` for application-wide crash resilience and updated software tab data maps to resolve `mojangVersions` errors.
 
 ### ⏳ Current Focus / Active Task
-- Java runtime auto-detection and compatible JDK selection.
-- Dashboard always showing live real data (never placeholder values).
-- Socket.IO reliability and error propagation improvements.
+- Continuous state machine hardening and edge-case error recovery.
+- Cross-platform testing for Electron builds and auto-updater.
 
 ### ❌ Known Bugs & Active Blockers
-*(No active blockers! The core CRUD operations, dynamic APIs, and state hydration issues are successfully patched.)*
+*(No active blockers! The state machine, Java auto-detection, and Socket.IO error propagation have been fully resolved in v1.0.38.)*
 
 ---
 
@@ -64,7 +63,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 
 ## 📥 Download
 
-Latest version: **v1.0.37** — [Auto-updates from within the app]
+Latest version: **v1.0.38** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -361,7 +360,13 @@ The app checks GitHub for new releases on startup. When an update is found:
 
 ## 📋 Release History
 
-### v1.0.37
+### v1.0.38
+- **Complete State Machine Rewrite** — The Minecraft server process manager (`minecraftServer.ts`) has been fully rewritten with a proper 5-state lifecycle (`STOPPED → STARTING → RUNNING → STOPPING → STOPPED`, with `FAILED` for error states). All old boolean `this.running`/`this.starting` flags have been removed. State transitions are now atomic, emit `server:state` events via Socket.IO, and are reflected in real-time on the Dashboard.
+- **Automatic Java Runtime Resolution** — `resolveJava()` scans the server jar's `.class` files to determine the required Java version, then checks the configured path. If it's absent or too old, it auto-selects a compatible JDK from all installed runtimes (via `JavaDetector.scan()`). If none is found, the error message lists every installed JDK with versions and direct download links.
+- **Pre-Flight Validation Before Starting** — `validatePreFlight()` checks jar existence (with download-in-progress wait), EULA auto-accept, and port availability (with auto-kill of orphaned Java processes) **before** the server enters the STARTING state. This ensures the Dashboard never gets stuck at "Starting..." when validation fails.
+- **Dashboard Handles All States** — The status indicator now shows the correct color and text for all 5 states: green "Online" (running), yellow pulsing "Starting..." / "Stopping...", red "Failed", and gray "Offline". The Dashboard subscribes to `server:state` Socket.IO events for instant UI updates.
+- **Child Process Error Handling** — When the Java process exits with a non-zero code, the state transitions to `FAILED` and the error message is captured. Crash logs are preserved. The close handler correctly defers to a graceful `stop()` when already in the STOPPING state, preventing race conditions.
+- **Server Status API Enhancement** — The `/api/server/status` endpoint now includes the `state` field (one of `stopped`, `starting`, `running`, `stopping`, `failed`) alongside the existing `running`/`starting` booleans, enabling the frontend to distinguish between "stopped", "failed", and other states.
 - **Fixed Dashboard crash on null status** — When `/api/server/status` returns a 500 error (e.g., broken `require` path for package.json), the Dashboard no longer crashes with `Cannot read properties of null (reading 'onlinePlayers')`. Added a null-status guard that shows "Unable to connect to server. Retrying..." instead of crashing. All null guards changed from `!== null` (which fails for `undefined`) to `!= null` (which catches both).
 - **Fixed production `package.json` path resolution** — The `/api/server/status` endpoint used `require('../../package.json')` which resolves to `dist/package.json` in the production ASAR bundle, causing a 500 error. Added a try-catch fallback chain that works in both development (`tsx watch`) and production (Electron ASAR) environments.
 - **Null-safe Dashboard rendering** — All computed values (`cpuPercent`, `ramPercent`, `sysRamPercent`, `diskPercent`) now use optional chaining with `??` fallbacks, so they never crash when `status` is `null` or partially initialized.

@@ -152,9 +152,11 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
       }).catch(()=>{});
   }
 
+  const state = minecraftServer.state;
   const running = minecraftServer.isRunning;
   const status = {
     serverId: activeId,
+    state,
     running,
     starting: minecraftServer.isStarting,
     serverName: config.name || serverNameFromDb || 'MineControl OS',

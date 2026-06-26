@@ -21,6 +21,7 @@ import RepairFlow from '../components/RepairFlow';
 
 interface StatusData {
   serverId: string;
+  state: string;
   running: boolean;
   starting: boolean;
   serverName: string;
@@ -147,6 +148,10 @@ export default function Dashboard() {
     socket.on('server:started', () => {
       setStartError(null);
     });
+    socket.on('server:state', (state: string) => {
+      setStatus((prev) => prev ? { ...prev, state, running: state === 'running', starting: state === 'starting' } : prev);
+      if (state === 'running' || state === 'starting') setStartError(null);
+    });
     return () => {
       socket.off('stats:update');
       socket.off('server:status');
@@ -154,6 +159,7 @@ export default function Dashboard() {
       socket.off('player:leave');
       socket.off('server:error');
       socket.off('server:started');
+      socket.off('server:state');
     };
   }, [socket]);
 
@@ -208,22 +214,22 @@ export default function Dashboard() {
     return 'text-red-400';
   };
 
-  const statusDot = status?.running
-    ? 'status-dot-online'
-    : status?.starting
-    ? 'status-dot-loading'
-    : 'status-dot-offline';
-
-  const statusText = status?.running
-    ? 'Online'
-    : status?.starting
-    ? 'Starting...'
-    : 'Offline';
+  const getStatusDisplay = (s: StatusData | null) => {
+    if (!s) return { dot: 'status-dot-offline', text: 'Offline' };
+    switch (s.state) {
+      case 'running': return { dot: 'status-dot-online', text: 'Online' };
+      case 'starting': return { dot: 'status-dot-loading', text: 'Starting...' };
+      case 'stopping': return { dot: 'status-dot-loading', text: 'Stopping...' };
+      case 'failed': return { dot: 'status-dot-offline', text: 'Failed' };
+      default: return { dot: 'status-dot-offline', text: 'Offline' };
+    }
+  };
+  const { dot: statusDot, text: statusText } = getStatusDisplay(status);
 
   const ramPercent = status?.ramUsage != null && (status.ramTotal ?? 0) > 0 ? Math.round((status.ramUsage / status.ramTotal) * 100) : null;
-  const sysRamPercent = (status?.systemRamTotal ?? 0) > 0 ? Math.round((status.systemRamUsed / status.systemRamTotal) * 100) : 0;
+  const sysRamPercent = (status?.systemRamTotal ?? 0) > 0 ? Math.round(((status?.systemRamUsed ?? 0) / (status?.systemRamTotal ?? 1)) * 100) : 0;
   const cpuPercent = status?.cpuUsage != null ? Math.round(status.cpuUsage) : null;
-  const diskPercent = (status?.diskTotal ?? 0) > 0 ? Math.round((status.diskUsed / status.diskTotal) * 100) : 0;
+  const diskPercent = (status?.diskTotal ?? 0) > 0 ? Math.round(((status?.diskUsed ?? 0) / (status?.diskTotal ?? 1)) * 100) : 0;
 
   if (startError) {
     return <RepairFlow error={startError} onDismiss={() => setStartError(null)} />;
@@ -329,12 +335,17 @@ export default function Dashboard() {
             <Server className="w-4 h-4 text-minecraft-500" />
           </div>
           <div className="flex items-center gap-3">
-            <span className={`w-3 h-3 rounded-full ${status?.running ? 'bg-green-500' : status?.starting ? 'bg-yellow-500 animate-pulse' : 'bg-gray-500'}`} />
+            <span className={`w-3 h-3 rounded-full ${
+              status?.state === 'running' ? 'bg-green-500' :
+              status?.state === 'starting' ? 'bg-yellow-500 animate-pulse' :
+              status?.state === 'stopping' ? 'bg-yellow-500 animate-pulse' :
+              status?.state === 'failed' ? 'bg-red-500' : 'bg-gray-500'
+            }`} />
             <span className="text-lg font-semibold">{statusText}</span>
           </div>
           {status?.running && (
             <div className="mt-2 flex gap-4 text-xs text-gray-500">
-              <span className="flex items-center gap-1"><Activity size={12} /> TPS: <span className={getTpsColor(status.tps)}>{status.tps.toFixed(1)}</span></span>
+              <span className="flex items-center gap-1"><Activity size={12} /> TPS: <span className={getTpsColor(status.tps ?? 20)}>{(status.tps ?? 20).toFixed(1)}</span></span>
             </div>
           )}
         </div>

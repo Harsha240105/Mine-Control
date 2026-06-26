@@ -140,6 +140,11 @@ io.on('connection', (socket) => {
 });
 
 // Forward Minecraft server events to Socket.IO
+minecraftServer.on('server:state', (state: string) => {
+  io.emit('server:state', state);
+  io.emit('server:status', { running: state === 'running', starting: state === 'starting' || state === 'stopping' });
+});
+
 minecraftServer.on('server:output', (data: string) => {
   io.emit('server:output', data);
 });
@@ -158,11 +163,13 @@ minecraftServer.on('player:chat', (username: string, message: string) => {
 
 minecraftServer.on('server:started', () => {
   io.emit('server:started');
+  io.emit('server:state', 'running');
   io.emit('server:status', { running: true, starting: false });
 });
 
 minecraftServer.on('server:stopped', (code: number | null) => {
   io.emit('server:stopped', code);
+  io.emit('server:state', 'stopped');
   io.emit('server:status', { running: false, starting: false, code });
 });
 
