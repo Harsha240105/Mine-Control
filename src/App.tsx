@@ -13,6 +13,7 @@ import Worlds from './pages/Worlds';
 import Plugins from './pages/Plugins';
 import Settings from './pages/Settings';
 import Backups from './pages/Backups';
+import { Scheduler } from './pages/Scheduler';
 import Connection from './pages/Connection';
 import MapView from './pages/MapView';
 import Diagnostics from './pages/Diagnostics';
@@ -98,6 +99,7 @@ export default function App() {
             <Route path="worlds" element={<Worlds />} />
             <Route path="plugins" element={<Plugins />} />
             <Route path="backups" element={<Backups />} />
+            <Route path="scheduler" element={<Scheduler />} />
             <Route path="connection" element={<Connection />} />
             <Route path="compatibility" element={<Compatibility />} />
             <Route path="map" element={<MapView />} />

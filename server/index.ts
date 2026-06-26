@@ -25,6 +25,9 @@ import claimRoutes from './routes/claims';
 import buildRoutes from './routes/builds';
 import githubRoutes from './routes/github';
 import compatibilityRoutes from './routes/compatibility';
+import scheduleRoutes from './routes/schedules';
+import marketplaceRoutes from './routes/marketplace';
+import { SchedulerService } from './services/scheduler';
 
 const app = express();
 const server = http.createServer(app);
@@ -60,6 +63,8 @@ app.use('/api/claims', claimRoutes);
 app.use('/api/builds', buildRoutes);
 app.use('/api/github', githubRoutes);
 app.use('/api/compatibility', compatibilityRoutes);
+app.use('/api/schedules', scheduleRoutes);
+app.use('/api/marketplace', marketplaceRoutes);
 
 // Global error handler
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
@@ -222,7 +227,16 @@ if (activeId) {
 }
 
 // Start server
-server.listen(PORT, () => {
+const portToUse = PORT;
+server.listen(portToUse, () => {
+  console.log(`[Server] Running on port ${portToUse}`);
+  
+  // Initialize cron schedules
+  try {
+    SchedulerService.initialize();
+  } catch (err) {
+    console.error('[Server] Failed to initialize schedules:', err);
+  }
   console.log(`
   ╔══════════════════════════════════════════╗
   ║         MineControl OS v1.0.15          ║

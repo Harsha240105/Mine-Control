@@ -59,10 +59,29 @@ export default function Plugins() {
   const [pluginUrl, setPluginUrl] = useState('');
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  
+  // New State for Tabs
+  const [activeTab, setActiveTab] = useState<'installed' | 'marketplace'>('installed');
+  const [marketplaceSearch, setMarketplaceSearch] = useState('');
+  const [modrinthResults, setModrinthResults] = useState<any[]>([]);
+  const [loadingModrinth, setLoadingModrinth] = useState(false);
 
   useEffect(() => {
     fetchPlugins();
   }, []);
+
+  const searchModrinth = async () => {
+    if (!marketplaceSearch) return;
+    setLoadingModrinth(true);
+    try {
+      const { data } = await api.get(`/marketplace/search?q=${encodeURIComponent(marketplaceSearch)}`);
+      setModrinthResults(data.hits || []);
+    } catch (err) {
+      toast.error('Failed to search Modrinth');
+    } finally {
+      setLoadingModrinth(false);
+    }
+  };
 
   const fetchPlugins = async () => {
     try {
@@ -149,6 +168,24 @@ export default function Plugins() {
           </a>
         ))}
       </div>
+
+      <div className="flex border-b border-gray-700 mb-6">
+        <button
+          className={`py-2 px-4 border-b-2 font-medium text-sm ${activeTab === 'installed' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-gray-400 hover:text-gray-300'}`}
+          onClick={() => setActiveTab('installed')}
+        >
+          Installed Plugins
+        </button>
+        <button
+          className={`py-2 px-4 border-b-2 font-medium text-sm ${activeTab === 'marketplace' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-gray-400 hover:text-gray-300'}`}
+          onClick={() => setActiveTab('marketplace')}
+        >
+          Modrinth Marketplace
+        </button>
+      </div>
+
+      {activeTab === 'installed' && (
+        <>
 
       {/* Install Form */}
       {showInstall && (
@@ -280,6 +317,62 @@ export default function Plugins() {
           </div>
         )}
       </div>
+        </>
+      )}
+
+      {activeTab === 'marketplace' && (
+        <div className="card">
+          <h3 className="text-lg font-medium text-gray-200 mb-4">Modrinth Plugins</h3>
+          <div className="flex gap-2 mb-4">
+            <input
+              type="text"
+              value={marketplaceSearch}
+              onChange={(e) => setMarketplaceSearch(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && searchModrinth()}
+              placeholder="Search Modrinth..."
+              className="input flex-1"
+            />
+            <button onClick={searchModrinth} className="btn-primary flex items-center gap-2">
+              <Search size={16} /> Search
+            </button>
+          </div>
+
+          {loadingModrinth ? (
+            <div className="text-center text-gray-400 py-8">Searching...</div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {modrinthResults.map((mod) => (
+                <div key={mod.project_id} className="card-hover p-4 border border-gray-700/50">
+                  <div className="flex items-center gap-3 mb-2">
+                    {mod.icon_url ? (
+                      <img src={mod.icon_url} alt={mod.title} className="w-10 h-10 rounded" />
+                    ) : (
+                      <Puzzle className="w-10 h-10 text-gray-500" />
+                    )}
+                    <div>
+                      <h4 className="text-sm font-medium text-gray-200 line-clamp-1">{mod.title}</h4>
+                      <p className="text-xs text-gray-500 line-clamp-1">{mod.author}</p>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400 line-clamp-2 mb-3 h-8">{mod.description}</p>
+                  <button
+                    onClick={() => {
+                      /* Just an example install, ideally we fetch the latest version jar url */
+                      toast.success(`Please install ${mod.title} manually for now.`);
+                    }}
+                    className="w-full btn-secondary py-1 text-xs"
+                  >
+                    View / Install
+                  </button>
+                </div>
+              ))}
+              {modrinthResults.length === 0 && marketplaceSearch && (
+                <div className="col-span-full text-center text-gray-500 py-8">No results found</div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -27,6 +27,7 @@ import {
   Layers,
   CheckCircle,
   Cable,
+  Clock,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
@@ -42,6 +43,7 @@ const navItems = [
   { path: '/worlds', label: 'Worlds', icon: Globe },
   { path: '/plugins', label: 'Plugins', icon: Puzzle },
   { path: '/backups', label: 'Backups', icon: HardDrive },
+  { path: '/scheduler', label: 'Scheduler', icon: Clock },
   { path: '/connection', label: 'Connection', icon: Wifi },
   { path: '/compatibility', label: 'Compatibility', icon: Cable },
   { path: '/map', label: 'World Map', icon: Map },
@@ -337,7 +339,7 @@ export default function Layout() {
             <UpdateBanner />
             <NotificationPanel />
             <span className="text-xs text-gray-500">
-              v1.0.17
+              v1.0.18
             </span>
           </div>
         </header>

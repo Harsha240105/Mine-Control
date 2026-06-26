@@ -8,6 +8,7 @@ import { minecraftServer } from '../services/minecraftServer';
 import { authMiddleware, requirePermission, AuthRequest } from '../middleware/auth';
 import { getDatabase } from '../database';
 import { resolveMinecraftDir } from '../paths';
+import { JavaDetector } from '../services/JavaDetector';
 
 const router = Router();
 
@@ -44,6 +45,15 @@ function httpsGet(url: string): Promise<string> {
     }).on('error', reject);
   });
 }
+
+router.get('/java/scan', authMiddleware, async (_req, res) => {
+  try {
+    const installs = await JavaDetector.scan();
+    res.json(installs);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
   const db = getDatabase();
