@@ -89,6 +89,7 @@ interface StatPoint {
 
 export default function Dashboard() {
   const [status, setStatus] = useState<StatusData | null>(null);
+  const [connecting, setConnecting] = useState(true);
   const [statsHistory, setStatsHistory] = useState<StatPoint[]>([]);
   const [startError, setStartError] = useState<string | null>(null);
   const [onlinePlayersList, setOnlinePlayersList] = useState<{username: string, ping: string, uuid: string}[]>([]);
@@ -138,8 +139,9 @@ export default function Dashboard() {
       setOnlinePlayersList(prev => prev.filter(p => p.username !== username));
     });
     socket.on('server:error', (error: string) => {
-      if (!status?.running && !status?.starting) {
+      if (!status?.running) {
         setStartError(error);
+        setConnecting(false);
       }
     });
     socket.on('server:started', () => {
@@ -161,6 +163,8 @@ export default function Dashboard() {
       setStatus(data);
     } catch (e) {
       console.error('fetchStatus error:', e);
+    } finally {
+      setConnecting(false);
     }
   };
 
@@ -222,8 +226,18 @@ export default function Dashboard() {
   const diskPercent = status && status.diskTotal > 0 ? Math.round((status.diskUsed / status.diskTotal) * 100) : 0;
 
   if (startError) {
-    // Return the repair flow immediately rather than the normal dashboard
     return <RepairFlow error={startError} onDismiss={() => setStartError(null)} />;
+  }
+
+  if (connecting) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-4">
+          <div className="animate-spin rounded-full h-10 w-10 border-2 border-minecraft-500 border-t-transparent mx-auto" />
+          <p className="text-gray-400 text-sm">Connecting to server...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -292,7 +306,7 @@ export default function Dashboard() {
         )}
         <div className="flex-1" />
         <span className="text-xs text-gray-500">
-          {status?.onlinePlayers !== null ? `${status?.onlinePlayers || 0}/${status?.maxPlayers || 4} players` : 'Server Offline'}
+          {status?.onlinePlayers !== null ? `${status.onlinePlayers}/${status.maxPlayers} players` : 'Server Offline'}
         </span>
       </div>
 
@@ -310,7 +324,7 @@ export default function Dashboard() {
           </div>
           {status?.running && (
             <div className="mt-2 flex gap-4 text-xs text-gray-500">
-              <span className="flex items-center gap-1"><Activity size={12} /> TPS: <span className={getTpsColor(status.tps || 20)}>{status.tps?.toFixed(1) || '20.0'}</span></span>
+              <span className="flex items-center gap-1"><Activity size={12} /> TPS: <span className={getTpsColor(status.tps)}>{status.tps.toFixed(1)}</span></span>
             </div>
           )}
         </div>
@@ -324,13 +338,13 @@ export default function Dashboard() {
           {status?.running ? (
             <>
               <div className="text-3xl font-bold">
-                {status?.onlinePlayers || 0}
-                <span className="text-lg text-gray-500 font-normal">/{status?.maxPlayers || 4}</span>
+                {status?.onlinePlayers ?? 0}
+                <span className="text-lg text-gray-500 font-normal">/{status?.maxPlayers ?? 20}</span>
               </div>
               <div className="mt-2 w-full bg-surface-800 rounded-full h-1.5">
                 <div
                   className="bg-minecraft-500 h-1.5 rounded-full transition-all duration-500"
-                  style={{ width: `${((status?.onlinePlayers || 0) / (status?.maxPlayers || 4)) * 100}%` }}
+                  style={{ width: `${((status?.onlinePlayers ?? 0) / (status?.maxPlayers ?? 20)) * 100}%` }}
                 />
               </div>
             </>
@@ -372,16 +386,16 @@ export default function Dashboard() {
           </div>
           {status?.running ? (
             <>
-              <div className={`text-3xl font-bold ${getRamColor(ramPercent || 0)}`}>
-                {Math.round((status?.ramUsage || 0) / 1024)} <span className="text-lg text-gray-500 font-normal">GB</span>
+              <div className={`text-3xl font-bold ${getRamColor(ramPercent ?? 0)}`}>
+                {Math.round((status.ramUsage ?? 0) / 1024)} <span className="text-lg text-gray-500 font-normal">GB</span>
               </div>
-              <div className="text-xs text-gray-500 mt-1">{ramPercent}% of {Math.round((status?.ramTotal || 8192) / 1024)} GB</div>
+              <div className="text-xs text-gray-500 mt-1">{ramPercent}% of {Math.round((status.ramTotal) / 1024)} GB</div>
               <div className="mt-2 w-full bg-surface-800 rounded-full h-1.5">
                 <div
                   className={`h-1.5 rounded-full transition-all duration-500 ${
-                    (ramPercent || 0) < 60 ? 'bg-green-500' : (ramPercent || 0) < 85 ? 'bg-yellow-500' : 'bg-red-500'
+                    (ramPercent ?? 0) < 60 ? 'bg-green-500' : (ramPercent ?? 0) < 85 ? 'bg-yellow-500' : 'bg-red-500'
                   }`}
-                  style={{ width: `${ramPercent || 0}%` }}
+                  style={{ width: `${ramPercent ?? 0}%` }}
                 />
               </div>
             </>
@@ -418,16 +432,16 @@ export default function Dashboard() {
           </div>
           {status?.tps !== null ? (
             <>
-              <div className={`text-3xl font-bold ${getTpsColor(status?.tps || 20)}`}>
-                {status?.tps?.toFixed(1) || '20.0'}
+              <div className={`text-3xl font-bold ${getTpsColor(status.tps)}`}>
+                {status.tps.toFixed(1)}
               </div>
               <div className="text-xs text-gray-500 mt-1">Target: 20.0</div>
               <div className="mt-2 w-full bg-surface-800 rounded-full h-1.5">
                 <div
                   className={`h-1.5 rounded-full transition-all duration-500 ${
-                    (status?.tps || 20) >= 19 ? 'bg-green-500' : (status?.tps || 20) >= 15 ? 'bg-yellow-500' : 'bg-red-500'
+                    status.tps >= 19 ? 'bg-green-500' : status.tps >= 15 ? 'bg-yellow-500' : 'bg-red-500'
                   }`}
-                  style={{ width: `${((status?.tps || 20) / 20) * 100}%` }}
+                  style={{ width: `${(status.tps / 20) * 100}%` }}
                 />
               </div>
             </>

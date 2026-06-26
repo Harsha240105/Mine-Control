@@ -188,7 +188,9 @@ router.post('/start', authMiddleware, requirePermission('server.start'), async (
     if (minecraftServer.isRunning || minecraftServer.isStarting) {
       return res.status(400).json({ error: 'Server is already running or starting' });
     }
-    minecraftServer.start().catch((err: any) => console.error('[Start Error]', err.message));
+    // Await the start promise so pre-check errors (missing jar, incompatible Java)
+    // propagate to the HTTP response instead of being swallowed.
+    await minecraftServer.start();
     res.json({ success: true, message: 'Server starting...' });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
@@ -381,13 +383,56 @@ router.get('/diagnostics', authMiddleware, async (_req: AuthRequest, res) => {
   const mcDir = resolveMinecraftDir();
   const checks: any[] = [];
 
-  // Java check
+  // Java check — scan all installed JDKs
   try {
-    const { execSync } = require('child_process');
-    const ver = execSync('"java" -version 2>&1', { encoding: 'utf-8', timeout: 5000 });
-    checks.push({ name: 'Java Installation', status: 'pass', message: `Java found: ${ver.split('\n')[0]}` });
-  } catch {
-    checks.push({ name: 'Java Installation', status: 'fail', message: 'Java not found. Install Java 21+ and set JAVA_HOME.' });
+    const installs = await JavaDetector.scan();
+    if (installs.length === 0) {
+      checks.push({ name: 'Java Installation', status: 'fail', message: 'No Java installation found. Install Java 21+ from https://adoptium.net/' });
+    } else {
+      const sorted = [...installs].sort((a, b) => b.majorVersion - a.majorVersion);
+      const best = sorted[0];
+      const configuredPath = config.javaPath || 'java';
+      const configured = installs.find(j => j.path === configuredPath);
+      const configuredInfo = configured
+        ? `Java ${configured.majorVersion}`
+        : `"${configuredPath}" (not found in scan)`;
+
+      // Check if the configured Java is sufficient for the server jar
+      const jarPath = path.join(mcDir, config.jarFile || 'server.jar');
+      let classVersion: number | null = null;
+      if (fs.existsSync(jarPath)) {
+        try {
+          const { minecraftServer: ms } = await import('../services/minecraftServer');
+          // Access the private method via prototype for diagnostics
+          // Instead, reimplement a quick class version check
+          const unzipper = require('unzipper');
+          const directory = await unzipper.Open.file(jarPath);
+          for (const file of directory.files) {
+            if (!file.path.endsWith('.class')) continue;
+            const buf = await file.buffer();
+            if (buf.length >= 8) {
+              const ver = buf.readUInt16BE(6);
+              if (ver > (classVersion ?? 0)) classVersion = ver;
+            }
+          }
+        } catch {}
+      }
+
+      const requiredJava = classVersion !== null ? classVersion - 44 : 21;
+      const hasCompatible = sorted.some(j => j.majorVersion >= requiredJava);
+
+      if (best.majorVersion < 21) {
+        checks.push({ name: 'Java Version', status: 'fail', message: `Java ${best.majorVersion} is below minimum (21+). Install Java 21+ from https://adoptium.net/` });
+      } else if (!hasCompatible && classVersion !== null) {
+        checks.push({ name: 'Java Compatibility', status: 'fail', message: `Server jar requires Java ${requiredJava}+, but highest installed is Java ${best.majorVersion}. Install Java ${requiredJava}+ from https://adoptium.net/temurin/releases/?version=${requiredJava}` });
+      } else if (configured && configured.majorVersion < requiredJava && hasCompatible) {
+        checks.push({ name: 'Java Compatibility', status: 'warn', message: `Configured Java is ${configuredInfo} (requires ${requiredJava}+), but Java ${best.majorVersion} is available at "${best.path}". Auto-selection is active.` });
+      } else {
+        checks.push({ name: 'Java Version', status: 'pass', message: `Java ${best.majorVersion} found (${installs.length} installation${installs.length > 1 ? 's' : ''})` });
+      }
+    }
+  } catch (err: any) {
+    checks.push({ name: 'Java Installation', status: 'fail', message: `Java detection error: ${err.message}` });
   }
 
   // Server jar check
@@ -634,11 +679,15 @@ router.post('/health-check', authMiddleware, async (_req: AuthRequest, res) => {
   }
 
   try {
-    const { execSync } = require('child_process');
-    execSync('"java" -version 2>&1', { encoding: 'utf-8', timeout: 5000 });
-    checks.push({ name: 'Java', status: 'pass', message: 'Java is installed' });
+    const installs = await JavaDetector.scan();
+    if (installs.length === 0) {
+      checks.push({ name: 'Java', status: 'fail', message: 'No Java installation found' });
+    } else {
+      const sorted = [...installs].sort((a, b) => b.majorVersion - a.majorVersion);
+      checks.push({ name: 'Java', status: 'pass', message: `Java ${sorted[0].majorVersion} installed (${installs.length} runtime${installs.length > 1 ? 's' : ''})` });
+    }
   } catch {
-    checks.push({ name: 'Java', status: 'fail', message: 'Java not found' });
+    checks.push({ name: 'Java', status: 'fail', message: 'Java detection failed' });
   }
 
   const overall = checks.every(c => c.status === 'pass') ? 'pass' : checks.some(c => c.status === 'fail') ? 'fail' : 'warn';

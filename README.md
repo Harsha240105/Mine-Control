@@ -7,7 +7,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.35-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.36-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -36,7 +36,9 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 - [x] **Safe App Environment Fix**: Resolved unhandled `ReferenceError: Cpu is not defined` crash on launch. Implemented `ErrorBoundary` for application-wide crash resilience and updated software tab data maps to resolve `mojangVersions` errors.
 
 ### ⏳ Current Focus / Active Task
-- Stabilizing UI components for multi-server runtime controls.
+- Java runtime auto-detection and compatible JDK selection.
+- Dashboard always showing live real data (never placeholder values).
+- Socket.IO reliability and error propagation improvements.
 
 ### ❌ Known Bugs & Active Blockers
 *(No active blockers! The core CRUD operations, dynamic APIs, and state hydration issues are successfully patched.)*
@@ -62,7 +64,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 
 ## 📥 Download
 
-Latest version: **v1.0.35** — [Auto-updates from within the app]
+Latest version: **v1.0.36** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -358,6 +360,15 @@ The app checks GitHub for new releases on startup. When an update is found:
 ---
 
 ## 📋 Release History
+
+### v1.0.36
+- **Automatic Java Version Detection** — `minecraftServer.start()` now scans all installed JDKs via `JavaDetector.scan()` when the configured Java is too old. If the server jar requires Java 25+ (class version 69.0) but the default `java` on PATH is only Java 21, MineControl will automatically find a compatible JDK among installed runtimes and use it. If none is found, the error message lists every installed JDK with versions and provides direct download links.
+- **Dashboard "Connecting..." State** — Dashboard now shows a spinner with "Connecting to server..." on initial load, instead of immediately rendering placeholder values. Once the first `/api/server/status` response arrives, real data is shown. If an error occurs during startup, the RepairFlow appears immediately.
+- **Error Propagation Fix** — `POST /api/server/start` now awaits the `minecraftServer.start()` promise directly, so pre-check failures (missing jar, incompatible Java) return an HTTP 400 with the error message instead of being silently swallowed by `catch()`. Combined with the Socket.IO `server:error` handler fix, start errors always reach the frontend.
+- **Socket.IO Error Handler Fix** — The Dashboard's `server:error` listener no longer filters out errors when `status.starting` is true. Start-time errors (Java mismatch, port conflicts) now display the RepairFlow instead of being hidden.
+- **Enhanced Diagnostics** — The `/api/server/diagnostics` endpoint now runs `JavaDetector.scan()` to list all installed JDKs, compares their versions against the required Java version detected from the server jar's class files, and reports exactly which version is needed vs. what's available. The health-check endpoint also reports detailed Java status.
+- **useSocket Hook Enhancement** — The `useSocket` hook now exposes an `on<T>(event, handler)` method that returns an unsubscribe function, enabling cleaner subscription management in components.
+- **Null-Safe Dashboard Rendering** — Replaced all `||` fallback operators (which masked null/offline values) with `??` nullish coalescing, ensuring the Dashboard never shows "20.0 TPS", "0 GB RAM", or "0/4 players" when the server is offline.
 
 ### v1.0.35
 - **Atomic Server Provisioning** — Server creation now downloads the jar BEFORE creating the database record. If the download fails, no orphaned server record is created and the directory is cleaned up. The wizard sends all data in a single API call.

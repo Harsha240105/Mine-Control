@@ -7,6 +7,7 @@ interface UseSocketReturn {
   socket: Socket | null;
   connected: boolean;
   emit: (event: string, data?: any) => void;
+  on: <T = any>(event: string, handler: (data: T) => void) => () => void;
 }
 
 export function useSocket(): UseSocketReturn {
@@ -43,5 +44,12 @@ export function useSocket(): UseSocketReturn {
     socketRef.current?.emit(event, data);
   }, []);
 
-  return { socket: socketRef.current, connected, emit };
+  const on = useCallback(<T = any>(event: string, handler: (data: T) => void): (() => void) => {
+    socketRef.current?.on(event, handler);
+    return () => {
+      socketRef.current?.off(event, handler);
+    };
+  }, []);
+
+  return { socket: socketRef.current, connected, emit, on };
 }

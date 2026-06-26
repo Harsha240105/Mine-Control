@@ -169,30 +169,108 @@ class MinecraftServerManager extends EventEmitter {
         this.emit('server:output', '[MineControl] EULA accepted automatically.\n');
       }
 
-      // Check Java version and jar requirements
-      let javaMajor = 0;
-      try {
-        const javaOut = execSync(`"${config.javaPath}" -version 2>&1`, { encoding: 'utf8', timeout: 10000 });
-        const versionMatch = javaOut.match(/version "(\d+)/);
-        if (versionMatch) javaMajor = parseInt(versionMatch[1], 10);
-      } catch (err: any) {
-        this.starting = false;
-        throw new Error(`Java not found or failed to execute at "${config.javaPath}".\nError: ${err.message}\n\nPlease install Java 21+ and configure a custom Java path in Settings.`);
-      }
-
-      if (javaMajor > 0 && javaMajor < 21) {
-        this.starting = false;
-        throw new Error(`Java version ${javaMajor} is not supported. MineControl requires Java 21 or higher. Found Java at: "${config.javaPath}"\n\nPlease install Java 21+ and configure the path in Settings.`);
-      }
-
       // Detect the class version from the server jar to verify Java compatibility
       const classVersion = await this.detectRequiredJava(jarPath);
-      if (classVersion !== null) {
-        // Class version 61=Java17, 62=18, 63=19, 64=20, 65=21, 66=22, 67=23, 68=24, 69=25
-        const requiredJava = classVersion - 44;
-        if (javaMajor > 0 && requiredJava > javaMajor) {
+
+      // Auto-detect optimal Java: prefer configured path, fall back to scanning installed JDKs
+      let javaMajor = 0;
+      let javaPath = config.javaPath;
+      const tryJavaAt = async (jPath: string): Promise<number> => {
+        try {
+          const out = execSync(`"${jPath}" -version 2>&1`, { encoding: 'utf8', timeout: 10000 });
+          const m = out.match(/version "(\d+)/);
+          return m ? parseInt(m[1], 10) : 0;
+        } catch { return 0; }
+      };
+
+      javaMajor = await tryJavaAt(javaPath);
+
+      // Determine required Java from class version if available
+      const classVersionToJava = (cv: number) => cv - 44;
+      const requiredJava = classVersion !== null ? classVersionToJava(classVersion) : 21;
+
+      if (javaMajor === 0) {
+        // Configured Java not found — scan installed JDKs
+        const { JavaDetector } = await import('./JavaDetector');
+        const installed = await JavaDetector.scan();
+        const viable = installed
+          .filter(j => j.majorVersion >= requiredJava)
+          .sort((a, b) => a.majorVersion - b.majorVersion);
+
+        if (viable.length > 0) {
+          javaPath = viable[0].path;
+          javaMajor = viable[0].majorVersion;
+          this.emit('server:output', `[MineControl] Auto-selected Java at "${javaPath}" (Java ${javaMajor})\n`);
+        } else {
+          const best = installed.sort((a, b) => b.majorVersion - a.majorVersion);
+          const bestMsg = best.length > 0
+            ? `Highest installed: Java ${best[0].majorVersion} at "${best[0].path}"`
+            : 'No Java installations found';
           this.starting = false;
-          throw new Error(`This server jar requires Java ${requiredJava}+ (class version ${classVersion}.0), but your Java only supports up to Java ${javaMajor} (class version ${javaMajor + 44}.0).\nFound Java at: "${config.javaPath}"\n\nPlease download and install Java ${requiredJava}+ from https://adoptium.net/ and configure the path in Settings.`);
+          throw new Error(
+            `Java not found at "${config.javaPath}" nor any compatible JDK.\n` +
+            `${bestMsg}\n\n` +
+            `This server requires Java ${requiredJava}+.\n` +
+            `Please install Java ${requiredJava}+ from https://adoptium.net/ and configure the path in Settings.`
+          );
+        }
+      } else if (javaMajor < 21) {
+        // Configured Java is too old — scan for newer
+        const { JavaDetector } = await import('./JavaDetector');
+        const installed = await JavaDetector.scan();
+        const viable = installed
+          .filter(j => j.majorVersion >= requiredJava)
+          .sort((a, b) => a.majorVersion - b.majorVersion);
+
+        if (viable.length > 0) {
+          javaPath = viable[0].path;
+          javaMajor = viable[0].majorVersion;
+          this.emit('server:output', `[MineControl] Java at "${config.javaPath}" is too old (Java ${javaMajor < 21 ? `<21` : `${javaMajor}<${requiredJava}`}); auto-selected "${javaPath}" (Java ${javaMajor})\n`);
+        } else if (requiredJava > javaMajor) {
+          const installedList = installed.map(j => `  • Java ${j.majorVersion} at "${j.path}"`).join('\n');
+          this.starting = false;
+          throw new Error(
+            `This server jar requires Java ${requiredJava}+ (class version ${classVersion}.0), ` +
+            `but your configured Java at "${config.javaPath}" is only Java ${javaMajor}.\n\n` +
+            `Installed JDKs:\n${installedList || '  (none found)'}\n\n` +
+            `No compatible Java ${requiredJava}+ installation found.\n\n` +
+            `Please install Java ${requiredJava}+ from:\n` +
+            `  • https://adoptium.net/temurin/releases/?version=${requiredJava}\n` +
+            `  • https://www.oracle.com/java/technologies/downloads/\n\n` +
+            `After installing, either:\n` +
+            `  - Add Java ${requiredJava}+ to your PATH\n` +
+            `  - Configure the full path in MineControl Settings\n` +
+            `  - Restart MineControl to auto-detect the new Java`
+          );
+        }
+      } else if (classVersion !== null && requiredJava > javaMajor) {
+        // Java >= 21 but not enough for this jar — scan for higher
+        const { JavaDetector } = await import('./JavaDetector');
+        const installed = await JavaDetector.scan();
+        const viable = installed
+          .filter(j => j.majorVersion >= requiredJava)
+          .sort((a, b) => a.majorVersion - b.majorVersion);
+
+        if (viable.length > 0) {
+          javaPath = viable[0].path;
+          javaMajor = viable[0].majorVersion;
+          this.emit('server:output', `[MineControl] This jar requires Java ${requiredJava}+; auto-selected "${javaPath}" (Java ${javaMajor})\n`);
+        } else {
+          const installedList = installed.map(j => `  • Java ${j.majorVersion} at "${j.path}"`).join('\n');
+          this.starting = false;
+          throw new Error(
+            `This server jar requires Java ${requiredJava}+ (class version ${classVersion}.0), ` +
+            `but your configured Java at "${config.javaPath}" is only Java ${javaMajor}.\n\n` +
+            `Installed JDKs:\n${installedList || '  (none found)'}\n\n` +
+            `No compatible Java ${requiredJava}+ installation found.\n\n` +
+            `Please install Java ${requiredJava}+ from:\n` +
+            `  • https://adoptium.net/temurin/releases/?version=${requiredJava}\n` +
+            `  • https://www.oracle.com/java/technologies/downloads/\n\n` +
+            `After installing, either:\n` +
+            `  - Add Java ${requiredJava}+ to your PATH\n` +
+            `  - Configure the full path in MineControl Settings\n` +
+            `  - Restart MineControl to auto-detect the new Java`
+          );
         }
       }
 
@@ -271,7 +349,7 @@ class MinecraftServerManager extends EventEmitter {
         stdio: ['pipe', 'pipe', 'pipe'],
       };
 
-      const proc = spawn(config.javaPath, javaArgs, options);
+      const proc = spawn(javaPath, javaArgs, options);
       this.process = proc;
 
       // Wait briefly to catch immediate spawn errors (e.g., Java not found)
