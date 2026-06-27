@@ -198,7 +198,7 @@ class MinecraftServerManager extends EventEmitter {
         'server-ip=',
         'motd=A Minecraft Server',
         'max-players=20',
-        'online-mode=true',
+        `online-mode=${config.onlineMode ? 'true' : 'false'}`,
         'gamemode=survival',
         'difficulty=easy',
         'spawn-protection=16',
@@ -242,7 +242,7 @@ class MinecraftServerManager extends EventEmitter {
         'enable-status=true',
         'prevent-proxy-connections=false',
         'hide-online-players=false',
-        'enforce-secure-profile=true',
+        `enforce-secure-profile=${config.onlineMode ? 'true' : 'false'}`,
         'initial-enabled-packs=vanilla',
         'initial-disabled-packs=',
         'bug-report-link=',
@@ -867,6 +867,7 @@ class MinecraftServerManager extends EventEmitter {
         gamemode: server.gamemode || 'survival',
         pvp: !!server.pvp,
         maxPlayers: server.maxPlayers || 4,
+        onlineMode: !!server.onlineMode,
         discordToken: config.discordToken || '',
         discordChannel: config.discordChannel || '',
       };
@@ -890,6 +891,7 @@ class MinecraftServerManager extends EventEmitter {
       gamemode: config.gamemode || 'survival',
       pvp: config.pvp !== 'false',
       maxPlayers: parseInt(config.maxPlayers || '4'),
+      onlineMode: config.onlineMode !== 'false',
       discordToken: config.discordToken || '',
       discordChannel: config.discordChannel || '',
     };

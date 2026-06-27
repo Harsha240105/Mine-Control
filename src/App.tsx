@@ -16,6 +16,7 @@ import Settings from './pages/Settings';
 import Backups from './pages/Backups';
 import { Scheduler } from './pages/Scheduler';
 import Connection from './pages/Connection';
+import ConnectionWizard from './pages/ConnectionWizard';
 import MapView from './pages/MapView';
 import Diagnostics from './pages/Diagnostics';
 import Guide from './pages/Guide';
@@ -99,6 +100,7 @@ export default function App() {
             <Route path="backups" element={<Backups />} />
             <Route path="scheduler" element={<Scheduler />} />
             <Route path="connection" element={<Connection />} />
+            <Route path="connection/wizard" element={<ConnectionWizard />} />
             <Route path="compatibility" element={<Compatibility />} />
             <Route path="discord" element={<Discord />} />
             <Route path="feedback" element={<Feedback />} />

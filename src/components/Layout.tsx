@@ -34,7 +34,8 @@ import {
   FolderOpen,
   MessageSquare,
   MessageCircle,
-  Shield
+  Shield,
+  Radio,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
@@ -58,6 +59,7 @@ const navItems = [
 ];
 
 const bottomNavItems = [
+  { path: '/connection/wizard', label: 'Connect Wizard', icon: Radio },
   { path: '/diagnostics', label: 'Diagnostics', icon: Stethoscope },
   { path: '/guide', label: 'Guide', icon: BookOpen },
   { path: '/privacy', label: 'Privacy', icon: Shield },

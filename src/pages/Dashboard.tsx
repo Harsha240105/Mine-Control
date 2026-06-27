@@ -10,6 +10,11 @@ import {
   Zap,
   Clock,
   TrendingUp,
+  Radio,
+  Shield,
+  ShieldOff,
+  CheckCircle,
+  XCircle,
 } from 'lucide-react';
 import { LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import GaugeChart from 'react-gauge-chart';
@@ -101,6 +106,7 @@ export default function Dashboard() {
   const consoleEndRef = useRef<HTMLDivElement>(null);
   const [mockTemp] = useState(Math.random() * 0.3 + 0.3);
   const { socket } = useSocket();
+  const [connMode, setConnMode] = useState<{ label: string; color: string; dot: string; quality: string }>({ label: 'Unknown', color: 'text-gray-500', dot: 'bg-gray-500', quality: 'unknown' });
 
   const formatPercent = React.useCallback((value: string) => value + '%', []);
   const formatTps = React.useCallback((value: string) => (Number(value) / 5).toFixed(1) + ' TPS', []);
@@ -114,9 +120,12 @@ export default function Dashboard() {
     }, 10000);
     fetchStatus();
     fetchStats();
+    fetchConnectionMode();
     const interval = setInterval(fetchStatus, 5000);
+    const connInterval = setInterval(fetchConnectionMode, 15000);
     return () => {
       clearInterval(interval);
+      clearInterval(connInterval);
       clearTimeout(timeoutId);
     };
   }, []);
@@ -187,6 +196,47 @@ export default function Dashboard() {
     } catch (e) {
       console.error('fetchStats error:', e);
     }
+  };
+
+  const fetchConnectionMode = async () => {
+    try {
+      const data = await api.getConnectionWizard();
+      let label = 'Local';
+      let color = 'text-blue-400';
+      let dot = 'bg-blue-500';
+      let quality = 'unknown';
+
+      if (data.serverRunning) {
+        if (data.playitActive) {
+          label = 'Playit Tunnel';
+          color = 'text-pink-400';
+          dot = 'bg-pink-500';
+          quality = 'online';
+        } else if (data.lanReachable) {
+          label = 'LAN';
+          color = 'text-green-400';
+          dot = 'bg-green-500';
+          quality = 'reachable';
+        } else if (data.allMethods.localhost.status === 'ready') {
+          label = 'Local';
+          color = 'text-blue-400';
+          dot = 'bg-blue-500';
+          quality = 'ready';
+        } else {
+          label = 'Offline';
+          color = 'text-gray-500';
+          dot = 'bg-gray-500';
+          quality = 'offline';
+        }
+      } else {
+        label = 'Offline';
+        color = 'text-gray-500';
+        dot = 'bg-gray-500';
+        quality = 'offline';
+      }
+
+      setConnMode({ label, color, dot, quality });
+    } catch {}
   };
 
   const formatUptime = (seconds: number) => {
@@ -294,9 +344,23 @@ export default function Dashboard() {
       {/* Connection Info */}
       <div className="card border border-minecraft-500/20 bg-minecraft-500/5">
         <div className="flex items-start gap-3">
-          <Network size={18} className="text-minecraft-500 mt-0.5 flex-shrink-0" />
+          <div className={`p-2 rounded-lg ${connMode.color.replace('text', 'bg').replace('blue-400', 'blue-500/10').replace('green-400', 'green-500/10').replace('pink-400', 'pink-500/10').replace('gray-500', 'gray-500/10')} ${connMode.color}`}>
+            <Radio size={18} />
+          </div>
           <div className="flex-1">
-            <h3 className="text-sm font-semibold text-gray-200 mb-2">Connect to Server</h3>
+            <div className="flex items-center gap-3 mb-2">
+              <h3 className="text-sm font-semibold text-gray-200">Connect to Server</h3>
+              <span className={`flex items-center gap-1 text-xs ${connMode.color}`}>
+                <span className={`w-2 h-2 rounded-full ${connMode.dot}`} />
+                {connMode.label}
+              </span>
+              <span className={`flex items-center gap-1 text-xs ${
+                connMode.quality === 'reachable' || connMode.quality === 'online' || connMode.quality === 'ready' ? 'text-green-400' : 'text-gray-500'
+              }`}>
+                {connMode.quality === 'reachable' || connMode.quality === 'online' || connMode.quality === 'ready' ? <CheckCircle size={12} /> : <XCircle size={12} />}
+                {connMode.quality === 'reachable' ? 'Reachable' : connMode.quality === 'online' ? 'Online' : connMode.quality === 'ready' ? 'Ready' : 'Offline'}
+              </span>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
               <div className="bg-surface-800 rounded p-2.5">
                 <span className="text-gray-500 block mb-0.5">Local Address</span>
@@ -312,12 +376,12 @@ export default function Dashboard() {
               </div>
               <div className="bg-surface-800 rounded p-2.5">
                 <span className="text-gray-500 block mb-0.5">Mode</span>
-                <span className="text-yellow-400 font-mono font-medium">Cracked (offline)</span>
+                <span className="text-purple-400 font-mono font-medium">Java Edition</span>
               </div>
             </div>
             <p className="text-[11px] text-gray-500 mt-2">
               <strong className="text-gray-400">Local:</strong> Use <code className="text-minecraft-400">localhost</code> on this PC &nbsp;·&nbsp;
-              <strong className="text-gray-400">Friends:</strong> Use the Public IP above (requires port forwarding on router) &nbsp;·&nbsp;
+              <strong className="text-gray-400">Friends:</strong> Use the Playit tunnel or Public IP (requires port forwarding) &nbsp;·&nbsp;
               Minecraft version: <strong className="text-gray-300">
                 {status?.installationStatus === 'not_configured' ? 'Not configured' : (status?.serverVersion || 'Not configured')}
               </strong>

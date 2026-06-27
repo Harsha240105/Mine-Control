@@ -56,7 +56,7 @@ function collectDiagnostics(): Record<string, any> {
   const cpuModel = cpus.length > 0 ? cpus[0].model : 'unknown';
 
   return {
-    app_version: process.env.npm_package_version || '1.0.42',
+    app_version: process.env.npm_package_version || '1.0.44',
     os: `${os.type()} ${os.release()}`,
     cpu: cpuModel,
     cpu_cores: cpus.length,

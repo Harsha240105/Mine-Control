@@ -7,7 +7,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.41-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.44-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -64,7 +64,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 
 ## 📥 Download
 
-Latest version: **v1.0.41** — [Auto-updates from within the app]
+Latest version: **v1.0.44** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -360,6 +360,23 @@ The app checks GitHub for new releases on startup. When an update is found:
 ---
 
 ## 📋 Release History
+
+### v1.0.44 — Universal Multiplayer Connection System
+- **Connection Wizard Page** — New dedicated wizard that auto-detects all connection methods (localhost, LAN, Playit tunnel, public IP) and recommends the easiest one. Displays scenario cards for Same Computer, Local Network, and Internet Friends with live status indicators.
+- **Connection Tabbed Redesign** — Connection Manager now has three scenario tabs (Same Computer / Local Network / Internet) with tailored instructions and one-click actions per scenario.
+- **Auto-Detection Engine** — Backend automatically detects local address, LAN IP, public IP, Playit tunnel status (with DNS verification and latency), Windows Firewall state, and server reachability. Returns a recommended connection method.
+- **Minecraft Server Status Ping** — New `/api/server/mc-ping` endpoint performs a real Minecraft protocol handshake (server list ping) to verify the server is truly accepting connections. Returns MOTD, version, player count, latency, and player samples.
+- **Comprehensive Server Validation** — New `POST /api/server/validate` checks server process, TCP port, socket acceptance, Minecraft ping response, LAN accessibility, and firewall status in one call.
+- **Dashboard Connection Mode** — Dashboard now shows the current connection mode (Local / LAN / Playit Tunnel) with quality indicator (Ready / Reachable / Online / Offline) in the connection info header, updated every 15 seconds.
+- **Updated documentation and version badges** for v1.0.44 release.
+
+### v1.0.43 — Server Connectivity Fix & Windows Firewall Auto-Configuration
+- **Dynamic `enforce-secure-profile`** — Now mirrors `online-mode` automatically in `server.properties` generation, ensuring cracked clients (TLauncher) are never silently blocked.
+- **Offline Mode Toggle Sync** — Toggling online mode via Compatibility Manager now also updates `enforce-secure-profile` to match, preventing the common "offline mode but still blocking unauthenticated clients" bug.
+- **Server Settings API Sync** — Updating `onlineMode` through the server settings endpoint now also writes `enforce-secure-profile` to `server.properties`.
+- **Windows Firewall Auto-Configuration** — New Connection Manager section shows firewall status (active/inactive) with a one-click "Add Firewall Rule" button using `netsh advfirewall`. No more manual Windows Firewall configuration.
+- **Misconfiguration Warning** — Connection Manager now shows a red warning banner when `enforce-secure-profile=true` but `online-mode=false`, alerting users to the mismatch.
+- **Updated documentation and version badges** for v1.0.43 release.
 
 ### v1.0.41 — Complete Local-First Stability, Persistence & Multiplayer Repair
 - **Server Library Landing** — Server selection screen now opens first. Shows all locally created servers with version, status, players, world size, dates, and action buttons (Start/Stop/Open/Settings/Delete). "Create New Server" modal with software/version/RAM/gamemode/difficulty/seed fields. Import and search support. Empty state with CTA.

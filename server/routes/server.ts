@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { execSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -8,6 +9,8 @@ import { minecraftServer } from '../services/minecraftServer';
 import { authMiddleware, requirePermission, AuthRequest } from '../middleware/auth';
 import { getDatabase } from '../database';
 import { resolveMinecraftDir } from '../paths';
+import { validateServer, getConnectionWizardData } from '../services/connectionValidator';
+import { mcPing, formatDescription } from '../services/mcPing';
 import { JavaDetector } from '../services/JavaDetector';
 import {
   cacheGet, cacheSet, httpsGet, downloadFile, isPaperAvailable,
@@ -346,12 +349,22 @@ router.get('/connection', authMiddleware, async (_req: AuthRequest, res) => {
 
   let serverIp = '';
   let onlineMode = true;
+  let enforceSecureProfile = true;
   try {
     const props = fs.readFileSync(propsPath, 'utf-8');
     const ipMatch = props.match(/^server-ip=(.*)$/m);
     if (ipMatch) serverIp = ipMatch[1].trim();
     const omMatch = props.match(/^online-mode=(.*)$/m);
     if (omMatch) onlineMode = omMatch[1].trim() !== 'false';
+    const espMatch = props.match(/^enforce-secure-profile=(.*)$/m);
+    if (espMatch) enforceSecureProfile = espMatch[1].trim() !== 'false';
+  } catch {}
+
+  // Check Windows Firewall rule for Minecraft port
+  let firewallActive = false;
+  try {
+    const fwOut = execSync(`netsh advfirewall firewall show rule name="MineControl OS Minecraft" dir=in verbose`, { encoding: 'utf-8', timeout: 5000 });
+    firewallActive = fwOut.includes('Enabled:               Yes');
   } catch {}
 
   const networkInterfaces = os.networkInterfaces();
@@ -377,6 +390,8 @@ router.get('/connection', authMiddleware, async (_req: AuthRequest, res) => {
     port: String(config.port),
     serverIp,
     onlineMode,
+    enforceSecureProfile,
+    firewallActive,
     serverVersion: (config.jarFile || '').replace('paper-', '').replace('vanilla-', '').replace('.jar', '') || 'Unknown',
     playitAddress,
     playitEnabled: !!playitAddress,
@@ -1183,6 +1198,31 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
   }
 });
 
+// Windows Firewall check
+router.get('/firewall-check', authMiddleware, async (_req: AuthRequest, res) => {
+  try {
+    const out = execSync(`netsh advfirewall firewall show rule name="MineControl OS Minecraft" dir=in verbose`, { encoding: 'utf-8', timeout: 5000 });
+    const active = out.includes('Enabled:               Yes');
+    res.json({ active, message: active ? 'Firewall rule exists and enabled' : 'No firewall rule found' });
+  } catch {
+    res.json({ active: false, message: 'No firewall rule found' });
+  }
+});
+
+// Windows Firewall add rule
+router.post('/firewall-add', authMiddleware, requirePermission('server.start'), async (_req: AuthRequest, res) => {
+  try {
+    const config = minecraftServer.getConfig();
+    execSync(
+      `netsh advfirewall firewall add rule name="MineControl OS Minecraft" dir=in action=allow protocol=TCP localport=${config.port} profile=any description="Allow Minecraft server connections (port ${config.port})"`,
+      { encoding: 'utf-8', timeout: 10000 }
+    );
+    res.json({ success: true, message: `Firewall rule added for port ${config.port}` });
+  } catch (err: any) {
+    res.status(500).json({ error: `Failed to add firewall rule: ${err.message}` });
+  }
+});
+
 // Game Mode Switch
 router.post('/gamemode', authMiddleware, requirePermission('server.start'), async (req: AuthRequest, res) => {
   const { mode } = req.body;
@@ -1211,6 +1251,44 @@ router.post('/gamemode', authMiddleware, requirePermission('server.start'), asyn
   }
 
   res.json({ success: true, message: `Game mode switched to ${mode}` });
+});
+
+// Connection Validation — run after server start
+router.post('/validate', authMiddleware, async (_req: AuthRequest, res) => {
+  const port = minecraftServer.getConfig().port || 25565;
+  const result = await validateServer(port);
+  res.json(result);
+});
+
+// Minecraft Server Status Ping
+router.get('/mc-ping', authMiddleware, async (_req: AuthRequest, res) => {
+  const config = minecraftServer.getConfig();
+  const port = config.port || 25565;
+  const ping = await mcPing('127.0.0.1', port, 5000);
+  if (ping.online) {
+    res.json({
+      online: true,
+      latency: ping.latency,
+      version: ping.version?.name || 'Unknown',
+      protocol: ping.version?.protocol || 0,
+      playersOnline: ping.players?.online || 0,
+      playersMax: ping.players?.max || 0,
+      playerSample: ping.players?.sample || [],
+      motd: formatDescription(ping.description),
+    });
+  } else {
+    res.json({ online: false, error: ping.error || 'Server not responding' });
+  }
+});
+
+// Connection Wizard — comprehensive auto-detection
+router.get('/connection-wizard', authMiddleware, async (_req: AuthRequest, res) => {
+  try {
+    const data = await getConnectionWizardData();
+    res.json(data);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

@@ -140,6 +140,9 @@ export const api = {
 
   // Connection Info
   getConnectionInfo: () => request<any>('/server/connection'),
+  validateConnection: () => request<any>('/server/validate', { method: 'POST' }),
+  mcPing: () => request<any>('/server/mc-ping'),
+  getConnectionWizard: () => request<any>('/server/connection-wizard'),
 
   // Compatibility Manager
   getCompatibilityStatus: () => request<any>('/compatibility/status'),

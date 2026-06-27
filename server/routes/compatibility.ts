@@ -622,6 +622,7 @@ function updateOnlineMode(active: ActiveServer, enabled: boolean) {
   db.prepare("UPDATE servers SET onlineMode = ?, updated_at = datetime('now') WHERE id = ?").run(enabled ? 1 : 0, active.id);
   writeServerProperties(active.directory, {
     'online-mode': enabled ? 'true' : 'false',
+    'enforce-secure-profile': enabled ? 'true' : 'false',
     'server-port': String(active.port || 25565),
     'server-ip': '',
   });
