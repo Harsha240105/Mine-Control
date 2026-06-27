@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware, requirePermission, AuthRequest } from '../middleware/auth';
 import { getDatabase, generateSlug } from '../database';
 import { minecraftServer } from '../services/minecraftServer';
-import { setMinecraftDir, resolvePath } from '../paths';
+import { setMinecraftDir, resolvePath, getMinecraftDir } from '../paths';
 import { downloadVersion } from '../services/download';
 
 const router = Router();
@@ -16,32 +16,75 @@ router.get('/', authMiddleware, (_req: AuthRequest, res) => {
   const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value || '';
   const servers = db.prepare('SELECT * FROM servers ORDER BY created_at ASC').all() as any[];
   res.json({
-    servers: servers.map((s: any) => ({
-      id: s.id,
-      name: s.name,
-      slug: s.slug,
-      port: s.port,
-      version: s.version || '',
-      version_source: s.version_source || '',
-      javaPath: s.javaPath,
-      jarFile: s.jarFile,
-      minRam: s.minRam,
-      maxRam: s.maxRam,
-      motd: s.motd,
-      difficulty: s.difficulty,
-      gamemode: s.gamemode,
-      pvp: !!s.pvp,
-      maxPlayers: s.maxPlayers,
-      viewDistance: s.viewDistance,
-      onlineMode: !!s.onlineMode,
-      autoRestart: !!s.autoRestart,
-      autoBackup: !!s.autoBackup,
-      whitelistEnabled: !!s.whitelistEnabled,
-      status: s.status,
-      directory: s.directory,
-      created_at: s.created_at,
-      updated_at: s.updated_at,
-    })),
+    servers: servers.map((s: any) => {
+      // Compute world name from level-name in server.properties
+      let worldName = 'world';
+      let lastPlayed: string | null = null;
+      let worldSize: string | null = null;
+      let playerCount = 0;
+      try {
+        const propsPath = path.join(s.directory, 'server.properties');
+        if (fs.existsSync(propsPath)) {
+          const props = fs.readFileSync(propsPath, 'utf-8');
+          const ln = props.match(/^level-name=(.*)$/m);
+          if (ln) worldName = ln[1].trim();
+        }
+        // Check world directory for last modified time and size
+        const worldDir = path.join(s.directory, worldName);
+        if (fs.existsSync(worldDir)) {
+          const stat = fs.statSync(worldDir);
+          lastPlayed = stat.mtime.toISOString();
+          const getSize = (dir: string): number => {
+            let total = 0;
+            try {
+              const entries = fs.readdirSync(dir, { withFileTypes: true });
+              for (const e of entries) {
+                const p = path.join(dir, e.name);
+                if (e.isFile()) total += fs.statSync(p).size;
+                else if (e.isDirectory()) total += getSize(p);
+              }
+            } catch {}
+            return total;
+          };
+          const bytes = getSize(worldDir);
+          if (bytes < 1024) worldSize = `${bytes} B`;
+          else if (bytes < 1024 * 1024) worldSize = `${(bytes / 1024).toFixed(1)} KB`;
+          else if (bytes < 1024 * 1024 * 1024) worldSize = `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+          else worldSize = `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+        }
+        playerCount = (db.prepare('SELECT COUNT(*) as c FROM players WHERE status = ?').get('online') as any)?.c || 0;
+      } catch {}
+      return {
+        id: s.id,
+        name: s.name,
+        slug: s.slug,
+        port: s.port,
+        version: s.version || '',
+        version_source: s.version_source || '',
+        javaPath: s.javaPath,
+        jarFile: s.jarFile,
+        minRam: s.minRam,
+        maxRam: s.maxRam,
+        motd: s.motd,
+        difficulty: s.difficulty,
+        gamemode: s.gamemode,
+        pvp: !!s.pvp,
+        maxPlayers: s.maxPlayers,
+        viewDistance: s.viewDistance,
+        onlineMode: !!s.onlineMode,
+        autoRestart: !!s.autoRestart,
+        autoBackup: !!s.autoBackup,
+        whitelistEnabled: !!s.whitelistEnabled,
+        status: s.status,
+        directory: s.directory,
+        worldName,
+        worldSize,
+        lastPlayed,
+        playerCount,
+        created_at: s.created_at,
+        updated_at: s.updated_at,
+      };
+    }),
     activeServerId: activeId,
   });
 });
@@ -237,7 +280,17 @@ router.delete('/:id', authMiddleware, requirePermission('server.start'), (req: A
   }
 
   try {
-    // Perform robust wipe of local directory
+    // Manual deletion of related records (ensures cleanup even if FK cascading is incomplete)
+    db.prepare('DELETE FROM backups WHERE server_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM worlds WHERE server_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM chat_log WHERE server_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM schedules WHERE server_id = ?').run(req.params.id);
+    db.prepare('DELETE FROM notifications WHERE server_id = ?').run(req.params.id);
+    
+    // Delete the server record
+    db.prepare('DELETE FROM servers WHERE id = ?').run(req.params.id);
+
+    // Perform robust wipe of local directory (removes worlds, backups, plugins, logs, config)
     if (fs.existsSync(server.directory)) {
       try {
         fs.rmSync(server.directory, { recursive: true, force: true });
@@ -246,17 +299,17 @@ router.delete('/:id', authMiddleware, requirePermission('server.start'), (req: A
       }
     }
 
-    // Manual deletion of related schedules and notifications to ensure SQLite cascading if legacy constraint
-    db.prepare('DELETE FROM schedules WHERE server_id = ?').run(req.params.id);
-    db.prepare('DELETE FROM notifications WHERE server_id = ?').run(req.params.id);
-    
-    // Delete the server record
-    db.prepare('DELETE FROM servers WHERE id = ?').run(req.params.id);
-
-    // If it was the active server, unset it
+    // If it was the active server, unset it and reset to first available
     const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
     if (activeId === req.params.id) {
       db.prepare("DELETE FROM server_config WHERE key = 'active_server_id'").run();
+      // Set active to first remaining server if any exist
+      const firstServer = db.prepare('SELECT id FROM servers ORDER BY created_at ASC LIMIT 1').get() as any;
+      if (firstServer) {
+        db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('active_server_id', ?)").run(firstServer.id);
+        setMinecraftDir(firstServer.directory);
+        minecraftServer.loadServer(firstServer.directory);
+      }
     }
 
     res.json({ success: true });

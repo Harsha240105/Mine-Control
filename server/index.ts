@@ -242,10 +242,15 @@ minecraftServer.on('stats:update', (stats) => {
 
 // Scheduled tasks
 
-// Auto backup every hour
+// Auto backup every hour (only if active server has autoBackup enabled)
 cron.schedule('0 * * * *', async () => {
-  console.log('[Cron] Running auto-backup...');
   try {
+    const db = getDatabase();
+    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+    if (!activeId) return;
+    const server = db.prepare('SELECT autoBackup FROM servers WHERE id = ?').get(activeId) as any;
+    if (!server || !server.autoBackup) return;
+    console.log('[Cron] Running auto-backup...');
     await backupService.createBackup(
       `Auto-Backup-${new Date().toISOString().slice(0, 10)}`,
       'auto',
@@ -327,10 +332,10 @@ server.listen(portToUse, () => {
   // Initialize Discord
   discordService.initialize().catch(err => console.error('[Discord] Init failed:', err));
 
-  const osVersion = (() => { try { return require('../package.json').version; } catch { return require('../../package.json').version; } })();
+  const appVersion = (() => { try { return require('../package.json').version; } catch { return require('../../package.json').version; } })();
   console.log(`
   ╔══════════════════════════════════════════╗
-  ║         MineControl OS v${osVersion.padEnd(16, ' ')} ║
+  ║         MineControl OS v${appVersion.padEnd(16, ' ')} ║
   ║     Minecraft Server Management         ║
   ║══════════════════════════════════════════║
   ║  Server:  http://localhost:${PORT}         ║

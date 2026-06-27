@@ -4,6 +4,7 @@ import os from 'os';
 import fs from 'fs';
 import path from 'path';
 import { execSync } from 'child_process';
+import { resolveMinecraftDir } from '../paths';
 
 function random5(): string {
   return String(Math.floor(10000 + Math.random() * 90000));
@@ -17,9 +18,19 @@ function generateTicketId(type: 'bug' | 'feature' | 'general'): string {
 function collectDiagnostics(): Record<string, any> {
   const db = getDatabase();
   let consoleLines: string[] = [];
+  const mcDir = resolveMinecraftDir();
+
+  // Read Electron server log
   try {
-    const logPath = path.join(process.cwd(), 'server-out.log');
-    if (fs.existsSync(logPath)) {
+    const logPath = path.join(mcDir, 'logs', 'server-out.log');
+    if (!fs.existsSync(logPath)) {
+      const altPath = path.join(process.cwd(), 'server-out.log');
+      if (fs.existsSync(altPath)) {
+        const content = fs.readFileSync(altPath, 'utf-8');
+        const lines = content.split(/\r?\n/).filter(Boolean);
+        consoleLines = lines.slice(-50);
+      }
+    } else {
       const content = fs.readFileSync(logPath, 'utf-8');
       const lines = content.split(/\r?\n/).filter(Boolean);
       consoleLines = lines.slice(-50);
@@ -55,14 +66,14 @@ function collectDiagnostics(): Record<string, any> {
   const cpus = os.cpus();
   const cpuModel = cpus.length > 0 ? cpus[0].model : 'unknown';
 
-  // Collect crash reports from logs directory
+  // Collect crash reports from Minecraft logs directory
   let crashReports: string[] = [];
   try {
-    const logDir = path.join(process.cwd(), 'logs');
-    if (fs.existsSync(logDir)) {
-      const crashFiles = fs.readdirSync(logDir).filter(f => f.startsWith('crash-') || f.includes('hs_err'));
+    const logsDir = path.join(mcDir, 'logs');
+    if (fs.existsSync(logsDir)) {
+      const crashFiles = fs.readdirSync(logsDir).filter(f => f.startsWith('crash-') || f.includes('hs_err'));
       for (const cf of crashFiles.slice(-3)) {
-        crashReports.push(cf + ': ' + fs.readFileSync(path.join(logDir, cf), 'utf-8').slice(0, 2000));
+        crashReports.push(cf + ': ' + fs.readFileSync(path.join(logsDir, cf), 'utf-8').slice(0, 2000));
       }
     }
   } catch {}
@@ -70,7 +81,6 @@ function collectDiagnostics(): Record<string, any> {
   // Minecraft server log tail
   let serverLogTail: string[] = [];
   try {
-    const mcDir = process.env.MINECRAFT_DIR || '';
     const logsDir = path.join(mcDir, 'logs');
     if (fs.existsSync(logsDir)) {
       const logFiles = fs.readdirSync(logsDir).filter(f => f.startsWith('server-') && f.endsWith('.log')).sort().reverse();
@@ -99,7 +109,7 @@ function collectDiagnostics(): Record<string, any> {
     free_ram_gb: Math.round((os.freemem() / (1024 ** 3)) * 100) / 100,
     java: javaInfo,
     minecraft_version: minecraftVersion,
-    minecraft_dir: process.env.MINECRAFT_DIR || '',
+    minecraft_dir: mcDir || '',
     plugins: pluginsList,
     last_50_console_lines: consoleLines,
     server_log_tail: serverLogTail,

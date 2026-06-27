@@ -66,6 +66,27 @@ export default function Worlds() {
     }
   };
 
+  const handleDownloadWorld = async (name: string) => {
+    try {
+      const token = localStorage.getItem('mc_token');
+      const resp = await fetch(`/api/worlds/${encodeURIComponent(name)}/download`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!resp.ok) { toast.error('Download failed'); return; }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${name}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err: any) {
+      toast.error(err.message || 'Download failed');
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
@@ -151,13 +172,13 @@ export default function Worlds() {
             </div>
 
             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              <a
-                href={api.downloadWorld(world.name)}
+              <button
+                onClick={() => handleDownloadWorld(world.name)}
                 className="btn-ghost p-1.5 text-xs flex items-center gap-1"
                 title="Download"
               >
                 <Download size={12} /> Download
-              </a>
+              </button>
               <button onClick={() => handleClone(world.name)} className="btn-ghost p-1.5 text-xs flex items-center gap-1" title="Clone">
                 <Copy size={12} /> Clone
               </button>

@@ -157,9 +157,14 @@ export class BackupService {
     }
   }
 
-  getBackups(): any[] {
+  getBackups(serverId?: string): any[] {
     const db = getDatabase();
-    const backups = db.prepare('SELECT * FROM backups ORDER BY created_at DESC').all() as any[];
+    let backups: any[];
+    if (serverId) {
+      backups = db.prepare('SELECT * FROM backups WHERE server_id = ? ORDER BY created_at DESC').all(serverId) as any[];
+    } else {
+      backups = db.prepare('SELECT * FROM backups ORDER BY created_at DESC').all() as any[];
+    }
     return backups.map(b => ({
       ...b,
       worlds: JSON.parse(b.worlds),

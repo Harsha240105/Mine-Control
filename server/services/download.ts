@@ -54,7 +54,7 @@ export async function httpsGet(url: string, timeoutMs = 15000): Promise<string> 
   });
 }
 
-export function downloadFile(url: string, destPath: string, timeoutMs = 120000): Promise<void> {
+export function downloadFile(url: string, destPath: string, timeoutMs = 300000): Promise<void> {
   return downloadWithRetry(url, destPath, timeoutMs, 3);
 }
 

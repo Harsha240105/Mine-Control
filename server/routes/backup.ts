@@ -6,7 +6,9 @@ const router = Router();
 
 router.get('/', authMiddleware, (_req: AuthRequest, res) => {
   try {
-    const backups = backupService.getBackups();
+    const db = require('../database').getDatabase();
+    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+    const backups = backupService.getBackups(activeId || undefined);
     res.json(backups);
   } catch (error: any) {
     res.status(400).json({ error: error.message });

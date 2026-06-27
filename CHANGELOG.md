@@ -86,6 +86,37 @@ All notable changes to MineControl OS are documented here.
 - Pre-flight validation before starting (jar, EULA, port)
 - Dashboard handles all server states
 
+## v1.0.49 — Complete Architecture Audit, Integration & Production Readiness
+
+### Architecture Audit & Dependency Repair
+- Full codebase audit: every Express route, Socket.IO event, SQLite query, IPC handler, and frontend dependency mapped and verified
+- Server Library endpoint now returns per-server `worldName`, `worldSize`, `lastPlayed`, `playerCount`
+- Auto-backup cron only runs when the active server has `autoBackup` enabled
+- Backups filtered by active server's `server_id` (no more cross-server backup pollution)
+- Delete server fully cleans: cascades through backups, worlds, chat logs, schedules, notifications, then removes the on-disk directory; auto-selects next available server
+- Server startup auto-detects Java version from `.class` files and resolves compatible JDK
+
+### Bug Fixes
+- **Version dropdown fix**: Servers.tsx now correctly filters `availableVersions` by software source (PaperMC, Purpur, Fabric, Forge, Mojang, NeoForge) matching the backend response format
+- **mcDirSize unit fix**: Both Servers.tsx and Dashboard.tsx now display MC directory size in MB consistently
+- **World download auth**: Worlds page now downloads via fetch with Bearer token instead of unauthenticated `<a>` tag
+- **Feedback diagnostics**: Fixed log directory path to use `resolveMinecraftDir()` instead of `process.cwd()`, so crash reports and server logs are collected from the correct server directory
+- **Delete server guard**: Backend now auto-selects first remaining server after deletion; no orphaned `active_server_id`
+- **Software download**: Default timeout increased from 120s to 300s; plugin download timeout also increased
+- **Null/empty state handling**: All fetch catch blocks now log warnings; no more silent `catch {}` on critical data loads
+- **`osVersion` in diagnostics**: Uses `os.type()` + `os.release()` instead of app version
+
+### Persistence & Electron Integration
+- All user data paths use `resolveMinecraftDir()` for consistent per-server file layout
+- Server state (STARTING/RUNNING/STOPPED/FAILED) persisted to `servers.status` column on every transition
+- UI state (sidebar collapse, last page) persists via `localStorage` + backend `/api/ui` endpoints
+- Application updates never touch user data (configured in `electron-builder.yml` with `deleteAppDataOnUninstall: false`)
+
+### Build & Release
+- Version bumped to 1.0.49
+- All TypeScript compilations (server, electron, client) pass with zero errors
+- Vite production build verified
+
 ## v1.0.48 — Complete System Integration, Workflow & Stability
 
 ### Critical Bug Fixes

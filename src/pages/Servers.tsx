@@ -146,12 +146,13 @@ export default function Servers() {
     const loadVersions = async () => {
       setLoadingVersions(true);
       try {
-        const versions = await api.getAvailableVersions();
-        if (versions && typeof versions === 'object' && !Array.isArray(versions)) {
-          const vers = versions[formData.software];
-          setAvailableVersions(Array.isArray(vers) ? vers : []);
-        } else if (Array.isArray(versions)) {
-          setAvailableVersions(versions);
+        const resp = await api.getAvailableVersions();
+        const vList = resp?.availableVersions || (Array.isArray(resp) ? resp : []);
+        if (Array.isArray(vList)) {
+          const sourceMap: Record<string, string> = { paper: 'PaperMC', purpur: 'Purpur', fabric: 'Fabric', forge: 'Forge', vanilla: 'Mojang', neoforge: 'NeoForge' };
+          const src = sourceMap[formData.software?.toLowerCase()] || '';
+          const filtered = src ? vList.filter((v: any) => v.source === src) : vList;
+          setAvailableVersions(filtered);
         } else {
           setAvailableVersions([]);
         }
@@ -405,7 +406,7 @@ export default function Servers() {
                   </div>
                   <div className="flex items-center gap-2 text-gray-400">
                     <HardDrive size={13} className="text-gray-500 shrink-0" />
-                    <span className="truncate">{showActiveStats ? formatBytes(activeStatus.mcDirSize) : '---'}</span>
+                    <span className="truncate">{showActiveStats ? `${activeStatus.mcDirSize || 0} MB` : '---'}</span>
                   </div>
                   <div className="flex items-center gap-2 text-gray-400">
                     <Calendar size={13} className="text-gray-500 shrink-0" />
