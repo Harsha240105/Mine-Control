@@ -69,10 +69,11 @@ export default function Layout() {
   const [activeServerName, setActiveServerName] = useState('');
   const [showServerDropdown, setShowServerDropdown] = useState(false);
   const [appVersion, setAppVersion] = useState<string>('Unknown');
-  const { socket, connected } = useSocket();
+  const { socket, connected: socketConnected, error: socketError } = useSocket();
   const lastSocketUpdate = useRef(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [initialStatusLoaded, setInitialStatusLoaded] = useState(false);
+  const [backendAlive, setBackendAlive] = useState(true);
 
   useEffect(() => {
     if (window.electronAPI?.getVersion) {
@@ -85,10 +86,6 @@ export default function Layout() {
       try {
         const data = await api.getServers();
         setServerList(data.servers);
-        if (data.servers.length === 0) {
-          navigate('/wizard', { replace: true });
-          return;
-        }
         const active = data.servers.find((s: any) => s.id === data.activeServerId);
         setActiveServerName(active?.name || '');
       } catch {}
@@ -127,14 +124,39 @@ export default function Layout() {
           setServerStarting(s.starting);
         }
         setInitialStatusLoaded(true);
+        setBackendAlive(true);
       } catch {
         // Socket will update status when connected
       }
     };
+
+    const checkHealth = async () => {
+      try {
+        await api.health();
+        setBackendAlive(true);
+      } catch {
+        setBackendAlive(false);
+      }
+    };
+
     fetchStatus();
-    const interval = setInterval(fetchStatus, 10000);
-    return () => clearInterval(interval);
+    const statusInterval = setInterval(fetchStatus, 10000);
+    const healthInterval = setInterval(checkHealth, 5000);
+    return () => {
+      clearInterval(statusInterval);
+      clearInterval(healthInterval);
+    };
   }, []);
+
+  // Auto-recovery: when backend becomes available again, reload
+  useEffect(() => {
+    if (backendAlive && !initialStatusLoaded) {
+      const timer = setTimeout(() => {
+        setInitialStatusLoaded(true);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [backendAlive]);
 
   useEffect(() => {
     if (!socket) return;
@@ -383,7 +405,21 @@ export default function Layout() {
       <main className="flex-1 flex flex-col min-w-0">
         {/* Top Bar */}
         <header className="h-14 border-b border-surface-800 flex items-center justify-between px-6 bg-surface-900/50 backdrop-blur-sm">
-          <h1 className="text-sm font-medium text-gray-200">MineControl OS</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-sm font-medium text-gray-200">MineControl OS</h1>
+            {!backendAlive && (
+              <span className="flex items-center gap-1.5 text-[11px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded-full border border-red-500/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                Backend Offline
+              </span>
+            )}
+            {backendAlive && !socketConnected && (
+              <span className="flex items-center gap-1.5 text-[11px] bg-yellow-500/10 text-yellow-400 px-2 py-0.5 rounded-full border border-yellow-500/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
+                Reconnecting...
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-3">
             <UpdateBanner />
             <NotificationPanel />

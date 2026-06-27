@@ -43,6 +43,7 @@ class MinecraftServerManager extends EventEmitter {
   private startAttemptedAt: number | null = null;
   private hasStartedSuccessfully = false;
   private crashLog: string[] = [];
+  private _currentTps = 20.0;
 
   constructor() {
     super();
@@ -62,6 +63,14 @@ class MinecraftServerManager extends EventEmitter {
     if (newState === ServerState.FAILED) {
       this.crashLog = this.outputBuffer.slice(-50);
     }
+    // Update database server status
+    try {
+      const db = getDatabase();
+      const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+      if (activeId) {
+        db.prepare("UPDATE servers SET status = ?, updated_at = datetime('now') WHERE id = ?").run(newState, activeId);
+      }
+    } catch (e) { /* ignore */ }
     this.emit('server:state', newState, prev);
     this.emit('server:output', `[MineControl] State: ${prev} → ${newState}\n`);
   }
@@ -468,6 +477,24 @@ class MinecraftServerManager extends EventEmitter {
           line.includes('Error: A fatal exception has occurred')) {
         this.emit('server:crashed', line);
       }
+
+      // TPS report (Vanilla /tps, Paper /tps)
+      const tpsMatch = line.match(/TPS:\s*(\d+\.?\d*)/i);
+      if (tpsMatch) {
+        this._currentTps = parseFloat(tpsMatch[1]);
+      }
+
+      // Paper detailed TPS: "TPS from last 1m, 5m, 15m: 20.0, 20.0, 20.0"
+      const tpsDetailedMatch = line.match(/TPS from last.*:\s*(\d+\.?\d*)/i);
+      if (tpsDetailedMatch) {
+        this._currentTps = parseFloat(tpsDetailedMatch[1]);
+      }
+
+      // Vanilla /tps: "The server's TPS is 20.0"
+      const tpsVanillaMatch = line.match(/server's TPS is\s*(\d+\.?\d*)/i);
+      if (tpsVanillaMatch) {
+        this._currentTps = parseFloat(tpsVanillaMatch[1]);
+      }
     }
   }
 
@@ -475,13 +502,144 @@ class MinecraftServerManager extends EventEmitter {
     try {
       const db = getDatabase();
       const player = db.prepare('SELECT * FROM players WHERE username = ?').get(username) as any;
+      const now = new Date().toISOString();
       if (player) {
-        db.prepare('UPDATE players SET status = ?, last_login = ? WHERE username = ?')
-          .run(status === 'online' ? 'online' : 'offline', new Date().toISOString(), username);
+        const updates: string[] = ['status = ?', 'last_login = ?'];
+        const values: any[] = [status === 'online' ? 'online' : 'offline', now];
+        if (status === 'online') {
+          // Set first_join if not set
+          if (!player.first_join) {
+            updates.push('first_join = ?');
+            values.push(now);
+          }
+          // Try to enrich player data from NBT files
+          this.enrichPlayerData(username, player);
+        } else {
+          updates.push('last_disconnect = ?');
+          values.push(now);
+        }
+        updates.push('playtime = COALESCE(playtime, 0) + ?');
+        const lastLogin = player.last_login ? new Date(player.last_login).getTime() : Date.now();
+        const timeDiff = Math.floor((Date.now() - lastLogin) / 1000);
+        values.push(status === 'offline' ? Math.min(timeDiff, 86400) : 0);
+        values.push(player.id || username);
+        db.prepare(`UPDATE players SET ${updates.join(', ')} WHERE id = ? OR username = ?`).run(...values);
+      } else {
+        // Auto-register unknown player
+        const id = require('uuid').v4();
+        const uuid = player?.uuid || '';
+        db.prepare(
+          'INSERT INTO players (id, username, uuid, status, last_login, first_join, join_date) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        ).run(id, username, uuid, 'online', now, now, now);
       }
     } catch (e) {
       // ignore
     }
+  }
+
+  private async enrichPlayerDataAsync(username: string, player: any) {
+    try {
+      const nbt = await import('prismarine-nbt');
+      const { promisify } = await import('util');
+      const parseNbt = promisify(nbt.default ? nbt.default.parse : nbt.parse);
+      const fs = await import('fs');
+      const path = await import('path');
+
+      const serverPropsPath = path.join(this.serverDir, 'server.properties');
+      let levelName = 'world';
+      if (fs.existsSync(serverPropsPath)) {
+        const props = fs.readFileSync(serverPropsPath, 'utf-8');
+        const match = props.match(/^level-name=(.*)$/m);
+        if (match) levelName = match[1].trim();
+      }
+      const playerDataDir = path.join(this.serverDir, levelName, 'playerdata');
+      const statsDir = path.join(this.serverDir, levelName, 'stats');
+      const advancementsDir = path.join(this.serverDir, levelName, 'advancements');
+
+      let uuid = player.uuid;
+      if (!uuid) {
+        const usercachePath = path.join(this.serverDir, 'usercache.json');
+        if (fs.existsSync(usercachePath)) {
+          const cache = JSON.parse(fs.readFileSync(usercachePath, 'utf-8'));
+          const entry = cache.find((e: any) => e.name === player.username);
+          if (entry) uuid = entry.uuid;
+        }
+      }
+      if (!uuid) return;
+
+      const db = getDatabase();
+      const updateFields: string[] = [];
+      const updateValues: any[] = [];
+
+      const playerDataPath = path.join(playerDataDir, `${uuid}.dat`);
+      if (fs.existsSync(playerDataPath)) {
+        try {
+          const buffer = fs.readFileSync(playerDataPath);
+          const { parsed } = (await parseNbt(buffer)) as any;
+          const data = (nbt.default || nbt).simplify(parsed);
+          if (data.Health !== undefined) { updateFields.push('health = ?'); updateValues.push(data.Health); }
+          if (data.foodLevel !== undefined) { updateFields.push('food_level = ?'); updateValues.push(data.foodLevel); }
+          if (data.XpLevel !== undefined) { updateFields.push('xp_level = ?'); updateValues.push(data.XpLevel); }
+          if (data.XpP !== undefined) { updateFields.push('xp_progress = ?'); updateValues.push(data.XpP); }
+          if (data.Dimension !== undefined) {
+            const dim = typeof data.Dimension === 'string'
+              ? data.Dimension.replace('minecraft:', '')
+              : String(data.Dimension === -1 ? 'nether' : data.Dimension === 1 ? 'end' : 'overworld');
+            updateFields.push('dimension = ?'); updateValues.push(dim);
+          }
+          if (data.Pos && Array.isArray(data.Pos) && data.Pos.length >= 3) {
+            updateFields.push('pos_x = ?'); updateValues.push(data.Pos[0]);
+            updateFields.push('pos_y = ?'); updateValues.push(data.Pos[1]);
+            updateFields.push('pos_z = ?'); updateValues.push(data.Pos[2]);
+          }
+          if (data.Inventory) {
+            updateFields.push('inventory = ?'); updateValues.push(JSON.stringify(data.Inventory));
+            const armor = data.Inventory.filter((i: any) => i.Slot >= 100 && i.Slot <= 103);
+            if (armor.length > 0) {
+              updateFields.push('armor = ?'); updateValues.push(JSON.stringify(armor));
+            }
+          }
+          if (data.EnderItems) {
+            updateFields.push('ender_chest = ?'); updateValues.push(JSON.stringify(data.EnderItems));
+          }
+        } catch (e) { /* ignore */ }
+      }
+
+      const statsPath = path.join(statsDir, `${uuid}.json`);
+      if (fs.existsSync(statsPath)) {
+        try {
+          const stats = JSON.parse(fs.readFileSync(statsPath, 'utf-8'));
+          updateFields.push('statistics = ?'); updateValues.push(JSON.stringify(stats));
+          const deathsKey = Object.keys(stats?.stats?.minecraft?.custom || {}).find(k => k.endsWith('deaths'));
+          if (deathsKey) {
+            updateFields.push('death_count = ?'); updateValues.push(stats.stats.minecraft.custom[deathsKey] || 0);
+          }
+          const killsKey = Object.keys(stats?.stats?.minecraft?.custom || {}).find(k => k.endsWith('player_kills') || k.endsWith('mob_kills'));
+          if (killsKey) {
+            updateFields.push('kills = ?'); updateValues.push(stats.stats.minecraft.custom[killsKey] || 0);
+          }
+        } catch (e) { /* ignore */ }
+      }
+
+      const advancementsPath = path.join(advancementsDir, `${uuid}.json`);
+      if (fs.existsSync(advancementsPath)) {
+        try {
+          updateFields.push('advancements = ?');
+          updateValues.push(fs.readFileSync(advancementsPath, 'utf-8'));
+        } catch (e) { /* ignore */ }
+      }
+
+      if (updateFields.length > 0) {
+        updateValues.push(uuid);
+        db.prepare(`UPDATE players SET ${updateFields.join(', ')} WHERE uuid = ?`).run(...updateValues);
+      }
+    } catch (e) {
+      // ignore enrichment errors
+    }
+  }
+
+  private enrichPlayerData(username: string, player: any) {
+    this.enrichPlayerDataAsync(username, player).catch(() => {});
   }
 
   private logChat(username: string, message: string) {
@@ -582,7 +740,7 @@ class MinecraftServerManager extends EventEmitter {
         const statsData = {
           cpu: Math.min(stats.cpu, 100),
           ram: Math.round(stats.memory / 1024 / 1024), // MB
-          tps: 20.0,
+          tps: this._currentTps,
           players: this.getOnlinePlayersCount(),
         };
 

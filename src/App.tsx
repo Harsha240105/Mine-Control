@@ -63,14 +63,6 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <WelcomeWrapper />
-              </ProtectedRoute>
-            }
-          />
-          <Route
             path="/wizard"
             element={
               <ProtectedRoute>
@@ -94,9 +86,10 @@ export default function App() {
               </ProtectedRoute>
             }
           >
+            <Route index element={<Servers />} />
+            <Route path="servers" element={<Servers />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="software" element={<Software />} />
-            <Route path="servers" element={<Servers />} />
             <Route path="players" element={<Players />} />
             <Route path="console" element={<Console />} />
             <Route path="worlds" element={<Worlds />} />
@@ -128,7 +121,7 @@ function WelcomeWrapper() {
   })();
 
   if (wizardComplete || hasServers) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/servers" replace />;
   }
   return <Welcome />;
 }

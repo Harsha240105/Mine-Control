@@ -51,7 +51,25 @@ function initializeSchema() {
       ip TEXT,
       join_date TEXT NOT NULL DEFAULT (datetime('now')),
       muted INTEGER NOT NULL DEFAULT 0,
-      notes TEXT
+      notes TEXT,
+      health REAL DEFAULT 20,
+      food_level INTEGER DEFAULT 20,
+      xp_level INTEGER DEFAULT 0,
+      xp_progress REAL DEFAULT 0,
+      dimension TEXT DEFAULT '',
+      pos_x REAL DEFAULT 0,
+      pos_y REAL DEFAULT 0,
+      pos_z REAL DEFAULT 0,
+      world_name TEXT DEFAULT 'world',
+      death_count INTEGER DEFAULT 0,
+      kills INTEGER DEFAULT 0,
+      first_join TEXT,
+      last_disconnect TEXT,
+      inventory TEXT DEFAULT '[]',
+      armor TEXT DEFAULT '[]',
+      ender_chest TEXT DEFAULT '[]',
+      advancements TEXT DEFAULT '{}',
+      statistics TEXT DEFAULT '{}'
     );
 
     CREATE TABLE IF NOT EXISTS roles (
@@ -280,6 +298,26 @@ function initializeSchema() {
   for (const role of defaultRoles) {
     insertRole.run(role.name, role.level, role.color, JSON.stringify(role.permissions));
   }
+
+  // Migration: add player tracking columns
+  try { db.exec('ALTER TABLE players ADD COLUMN health REAL DEFAULT 20'); } catch {}
+  try { db.exec('ALTER TABLE players ADD COLUMN food_level INTEGER DEFAULT 20'); } catch {}
+  try { db.exec('ALTER TABLE players ADD COLUMN xp_level INTEGER DEFAULT 0'); } catch {}
+  try { db.exec('ALTER TABLE players ADD COLUMN xp_progress REAL DEFAULT 0'); } catch {}
+  try { db.exec('ALTER TABLE players ADD COLUMN dimension TEXT DEFAULT \'\''); } catch {}
+  try { db.exec('ALTER TABLE players ADD COLUMN pos_x REAL DEFAULT 0'); } catch {}
+  try { db.exec('ALTER TABLE players ADD COLUMN pos_y REAL DEFAULT 0'); } catch {}
+  try { db.exec('ALTER TABLE players ADD COLUMN pos_z REAL DEFAULT 0'); } catch {}
+  try { db.exec('ALTER TABLE players ADD COLUMN world_name TEXT DEFAULT \'world\''); } catch {}
+  try { db.exec('ALTER TABLE players ADD COLUMN death_count INTEGER DEFAULT 0'); } catch {}
+  try { db.exec('ALTER TABLE players ADD COLUMN kills INTEGER DEFAULT 0'); } catch {}
+  try { db.exec('ALTER TABLE players ADD COLUMN first_join TEXT'); } catch {}
+  try { db.exec('ALTER TABLE players ADD COLUMN last_disconnect TEXT'); } catch {}
+  try { db.exec('ALTER TABLE players ADD COLUMN inventory TEXT DEFAULT \'[]\''); } catch {}
+  try { db.exec('ALTER TABLE players ADD COLUMN armor TEXT DEFAULT \'[]\''); } catch {}
+  try { db.exec('ALTER TABLE players ADD COLUMN ender_chest TEXT DEFAULT \'[]\''); } catch {}
+  try { db.exec('ALTER TABLE players ADD COLUMN advancements TEXT DEFAULT \'{}\''); } catch {}
+  try { db.exec('ALTER TABLE players ADD COLUMN statistics TEXT DEFAULT \'{}\''); } catch {}
 
   // Fix existing users with lowercase roles from previous versions
   db.prepare("UPDATE users SET role = 'Owner' WHERE role = 'owner'").run();

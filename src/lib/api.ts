@@ -48,6 +48,26 @@ export const api = {
   put: (endpoint: string, data?: any) => request<any>(endpoint, { method: 'PUT', body: data ? JSON.stringify(data) : undefined }),
   delete: (endpoint: string) => request<any>(endpoint, { method: 'DELETE' }),
 
+  // Health check
+  health: () => request<any>('/server/health'),
+
+  // Connection verification
+  verifyConnection: () => request<any>('/server/verify-connection'),
+
+  // Playit status
+  getPlayitStatus: () => request<any>('/server/playit-status'),
+
+  // Config file management
+  getOps: () => request<any[]>('/server/ops'),
+  updateOps: (data: any[]) => request<any>('/server/ops', { method: 'PUT', body: JSON.stringify(data) }),
+  getWhitelistJson: () => request<any[]>('/server/whitelist-json'),
+  updateWhitelistJson: (data: any[]) => request<any>('/server/whitelist-json', { method: 'PUT', body: JSON.stringify(data) }),
+  getBannedPlayersJson: () => request<any[]>('/server/banned-players-json'),
+  updateBannedPlayersJson: (data: any[]) => request<any>('/server/banned-players-json', { method: 'PUT', body: JSON.stringify(data) }),
+  getBannedIpsJson: () => request<any[]>('/server/banned-ips-json'),
+  updateBannedIpsJson: (data: any[]) => request<any>('/server/banned-ips-json', { method: 'PUT', body: JSON.stringify(data) }),
+  getUsercacheJson: () => request<any[]>('/server/usercache-json'),
+
   // Auth
   login: (username: string, password: string) =>
     request<{ token: string; user: any }>('/auth/login', {

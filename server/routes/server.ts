@@ -116,6 +116,11 @@ setInterval(async () => {
   } catch {}
 }, 600000); // 10 minutes
 
+// Lightweight health check (no auth required for monitoring)
+router.get('/health', (_req, res) => {
+  res.json({ status: 'ok', uptime: process.uptime(), timestamp: Date.now() });
+});
+
 router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
   const db = getDatabase();
   const onlinePlayers = db.prepare('SELECT COUNT(*) as count FROM players WHERE status = ?').get('online') as any;
@@ -377,6 +382,183 @@ router.get('/connection', authMiddleware, async (_req: AuthRequest, res) => {
     playitEnabled: !!playitAddress,
     boundToLocalhost: serverIp === '127.0.0.1' || serverIp === 'localhost',
   });
+});
+
+// Connection Verification - TCP port test
+router.get('/verify-connection', authMiddleware, async (_req: AuthRequest, res) => {
+  const config = minecraftServer.getConfig();
+  const results: any[] = [];
+
+  // Test local connection
+  const testPort = async (host: string, port: number, label: string): Promise<any> => {
+    return new Promise((resolve) => {
+      const sock = new net.Socket();
+      sock.setTimeout(3000);
+      const start = Date.now();
+      sock.on('connect', () => {
+        const latency = Date.now() - start;
+        sock.destroy();
+        resolve({ label, reachable: true, latency: `${latency}ms`, host: `${host}:${port}` });
+      });
+      sock.on('error', () => { sock.destroy(); resolve({ label, reachable: false, host: `${host}:${port}` }); });
+      sock.on('timeout', () => { sock.destroy(); resolve({ label, reachable: false, host: `${host}:${port}`, error: 'timeout' }); });
+      sock.connect(port, host);
+    });
+  };
+
+  results.push(await testPort('127.0.0.1', config.port, 'Localhost'));
+  results.push(await testPort('0.0.0.0', config.port, 'Local Network'));
+
+  // Get LAN address
+  const networkIfaces = os.networkInterfaces();
+  for (const [name, addrs] of Object.entries(networkIfaces)) {
+    if (!addrs) continue;
+    for (const addr of addrs) {
+      if (addr.family === 'IPv4' && !addr.internal && !addr.address.startsWith('127.')) {
+        results.push(await testPort(addr.address, config.port, `LAN (${name})`));
+        break;
+      }
+    }
+    break;
+  }
+
+  res.json({ checks: results, serverRunning: minecraftServer.isRunning, port: config.port });
+});
+
+// Playit Tunnel Status
+router.get('/playit-status', authMiddleware, async (_req: AuthRequest, res) => {
+  const db = getDatabase();
+  const playitAddress = (db.prepare("SELECT value FROM server_config WHERE key = 'playitAddress'").get() as any)?.value || '';
+  const playitAuth = (db.prepare("SELECT value FROM server_config WHERE key = 'playitAuthToken'").get() as any)?.value || '';
+  const playitAgentPath = (db.prepare("SELECT value FROM server_config WHERE key = 'playitAgentPath'").get() as any)?.value || '';
+
+  let agentRunning = false;
+  let tunnelActive = false;
+  let error: string | null = null;
+
+  // Check if playit agent process is running
+  try {
+    const { execSync } = require('child_process');
+    const out = execSync('tasklist /FI "IMAGENAME eq playit*" /FO CSV /NH', { encoding: 'utf-8', timeout: 5000 });
+    agentRunning = out.trim().length > 0 && out.includes('playit');
+  } catch {}
+
+  // Try to verify tunnel by DNS lookup
+  if (playitAddress && playitAddress.includes('.')) {
+    try {
+      const dns = require('dns');
+      const lookup = await new Promise<boolean>((resolve) => {
+        dns.resolve(playitAddress.replace(/:.*$/, ''), (err: any) => {
+          resolve(!err);
+        });
+      });
+      tunnelActive = lookup;
+    } catch {
+      tunnelActive = false;
+    }
+  }
+
+  res.json({
+    address: playitAddress,
+    authConfigured: !!playitAuth,
+    agentPath: playitAgentPath || null,
+    agentRunning,
+    tunnelActive,
+    error,
+  });
+});
+
+// Server config file management - ops.json
+router.get('/ops', authMiddleware, (_req: AuthRequest, res) => {
+  const mcDir = resolveMinecraftDir();
+  const opsPath = path.join(mcDir, 'ops.json');
+  if (!fs.existsSync(opsPath)) return res.json([]);
+  try {
+    const data = JSON.parse(fs.readFileSync(opsPath, 'utf-8'));
+    res.json(data);
+  } catch {
+    res.json([]);
+  }
+});
+
+router.put('/ops', authMiddleware, requirePermission('permissions.manage'), (req: AuthRequest, res) => {
+  const mcDir = resolveMinecraftDir();
+  const opsPath = path.join(mcDir, 'ops.json');
+  fs.writeFileSync(opsPath, JSON.stringify(req.body, null, 2));
+  res.json({ success: true });
+});
+
+// Server config file management - whitelist.json
+router.get('/whitelist-json', authMiddleware, (_req: AuthRequest, res) => {
+  const mcDir = resolveMinecraftDir();
+  const whitelistPath = path.join(mcDir, 'whitelist.json');
+  if (!fs.existsSync(whitelistPath)) return res.json([]);
+  try {
+    const data = JSON.parse(fs.readFileSync(whitelistPath, 'utf-8'));
+    res.json(data);
+  } catch {
+    res.json([]);
+  }
+});
+
+router.put('/whitelist-json', authMiddleware, requirePermission('whitelist.manage'), (req: AuthRequest, res) => {
+  const mcDir = resolveMinecraftDir();
+  const whitelistPath = path.join(mcDir, 'whitelist.json');
+  fs.writeFileSync(whitelistPath, JSON.stringify(req.body, null, 2));
+  res.json({ success: true });
+});
+
+// Server config file management - banned-players.json
+router.get('/banned-players-json', authMiddleware, (_req: AuthRequest, res) => {
+  const mcDir = resolveMinecraftDir();
+  const bannedPath = path.join(mcDir, 'banned-players.json');
+  if (!fs.existsSync(bannedPath)) return res.json([]);
+  try {
+    const data = JSON.parse(fs.readFileSync(bannedPath, 'utf-8'));
+    res.json(data);
+  } catch {
+    res.json([]);
+  }
+});
+
+router.put('/banned-players-json', authMiddleware, requirePermission('player.ban'), (req: AuthRequest, res) => {
+  const mcDir = resolveMinecraftDir();
+  const bannedPath = path.join(mcDir, 'banned-players.json');
+  fs.writeFileSync(bannedPath, JSON.stringify(req.body, null, 2));
+  res.json({ success: true });
+});
+
+// Server config file management - banned-ips.json
+router.get('/banned-ips-json', authMiddleware, (_req: AuthRequest, res) => {
+  const mcDir = resolveMinecraftDir();
+  const bannedPath = path.join(mcDir, 'banned-ips.json');
+  if (!fs.existsSync(bannedPath)) return res.json([]);
+  try {
+    const data = JSON.parse(fs.readFileSync(bannedPath, 'utf-8'));
+    res.json(data);
+  } catch {
+    res.json([]);
+  }
+});
+
+router.put('/banned-ips-json', authMiddleware, requirePermission('player.ban'), (req: AuthRequest, res) => {
+  const mcDir = resolveMinecraftDir();
+  const bannedPath = path.join(mcDir, 'banned-ips.json');
+  fs.writeFileSync(bannedPath, JSON.stringify(req.body, null, 2));
+  res.json({ success: true });
+});
+
+// Server config file management - usercache.json
+router.get('/usercache-json', authMiddleware, (_req: AuthRequest, res) => {
+  const mcDir = resolveMinecraftDir();
+  const cachePath = path.join(mcDir, 'usercache.json');
+  if (!fs.existsSync(cachePath)) return res.json([]);
+  try {
+    const data = JSON.parse(fs.readFileSync(cachePath, 'utf-8'));
+    res.json(data);
+  } catch {
+    res.json([]);
+  }
 });
 
 // Diagnostics

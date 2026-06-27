@@ -7,7 +7,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.40-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.41-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -38,9 +38,10 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 ### ⏳ Current Focus / Active Task
 - Cross-platform testing for Electron builds and auto-updater.
 - Plugin marketplace integration with Hangar and Modrinth.
+- UI improvements for player analytics and inventory viewer.
 
 ### ❌ Known Bugs & Active Blockers
-*(No active blockers! Backend communication, Socket.IO, route ordering, and Playit.gg tunnel UX fixed in v1.0.40.)*
+*(No active blockers! Server Library, player tracking, TPS parsing, connection verification, Playit status, auto-recovery, and local-first data persistence completed in v1.0.41.)*
 
 ---
 
@@ -63,7 +64,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 
 ## 📥 Download
 
-Latest version: **v1.0.40** — [Auto-updates from within the app]
+Latest version: **v1.0.41** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -359,6 +360,20 @@ The app checks GitHub for new releases on startup. When an update is found:
 ---
 
 ## 📋 Release History
+
+### v1.0.41 — Complete Local-First Stability, Persistence & Multiplayer Repair
+- **Server Library Landing** — Server selection screen now opens first. Shows all locally created servers with version, status, players, world size, dates, and action buttons (Start/Stop/Open/Settings/Delete). "Create New Server" modal with software/version/RAM/gamemode/difficulty/seed fields. Import and search support. Empty state with CTA.
+- **Player Tracking Enrichment** — Automatically reads `playerdata/*.dat`, `stats/*.json`, and `advancements/*.json` when players join. Stores health, food, XP, position, dimension, inventory, armor, ender chest, death count, kills, statistics, advancements, first_join, last_disconnect, playtime. Data survives server and application restart.
+- **TPS Parsing** — TPS is now parsed from Minecraft console output instead of hardcoded 20.0. Parses Vanilla, Paper, and plugin TPS reports. Updates stats database and dashboard in real-time.
+- **Server Status Persistence** — Server state (running/stopped/starting/failed) is now stored in the database. Closing and reopening the app preserves the last known state.
+- **Backend Auto-Recovery** — Electron main process monitors backend health every 10 seconds. If the API becomes unreachable, it automatically restarts the backend server. Frontend shows "Backend Offline" or "Reconnecting..." banner while recovering.
+- **API Health Endpoint** — New `GET /api/server/health` lightweight check (no auth). Frontend uses it for 5-second health polling.
+- **Connection Verification** — New `GET /api/server/verify-connection` endpoint performs TCP port tests to 127.0.0.1, 0.0.0.0, and LAN address with latency measurement.
+- **Playit Tunnel Status** — New `GET /api/server/playit-status` endpoint checks if playit agent process is running and DNS resolves. Returns tunnel address, auth status, agent state.
+- **Server Config File Management** — New endpoints for `ops.json`, `whitelist.json`, `banned-players.json`, `banned-ips.json`, `usercache.json` with GET/PUT for read/write access.
+- **Data Directory Standardization** — Data now stored under `MineControl OS/` folder with proper subdirectories: `data/`, `servers/`, `downloads/`, `java/`, `playit/`, `cache/`, `temp/`.
+- **Connection Status Indicators** — Layout top bar now shows real-time "Backend Offline" or "Reconnecting..." badges based on health polling.
+- **Updated documentation and version badges** for v1.0.41 release.
 
 ### v1.0.40 — Backend Communication Repair
 - **Fixed `/api/players/banned` returning 404** — Route ordering bug fixed: moved `/banned`, `/chat`, and `/roles` routes before the `/:id` catch-all route in `players.ts`. Also added missing `temp-ban` route.

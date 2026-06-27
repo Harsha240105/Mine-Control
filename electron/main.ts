@@ -69,9 +69,9 @@ async function createWindow() {
   const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
 
   if (!isDev) {
-    const appRoot = path.dirname(app.getPath('exe'));
+    const appRoot = path.join(app.getPath('exe'), '..', 'MineControl OS');
     process.env.APP_DATA_PATH = appRoot;
-    process.env.MINECRAFT_DIR = path.join(appRoot, 'minecraft');
+    process.env.MINECRAFT_DIR = path.join(appRoot, 'servers', 'default');
     try {
       require(path.join(__dirname, '../server/index.js'));
       await waitForPort(3001);
@@ -79,6 +79,38 @@ async function createWindow() {
       console.error('Failed to start server:', err);
       dialog.showErrorBox('Server Error', 'Failed to start the backend server.\n' + (err?.message || err));
     }
+
+    // Auto-recovery: if the backend process dies, restart it
+    let serverModule: any = null;
+    const recoveryInterval = setInterval(async () => {
+      try {
+        const client = new net.Socket();
+        const alive = await new Promise<boolean>((resolve) => {
+          client.setTimeout(2000);
+          client.on('connect', () => { client.destroy(); resolve(true); });
+          client.on('error', () => { client.destroy(); resolve(false); });
+          client.on('timeout', () => { client.destroy(); resolve(false); });
+          client.connect(3001, '127.0.0.1');
+        });
+        if (!alive) {
+          console.log('[Auto-Recovery] Backend unreachable, attempting restart...');
+          try {
+            delete require.cache[require.resolve(path.join(__dirname, '../server/index.js'))];
+            serverModule = require(path.join(__dirname, '../server/index.js'));
+            await waitForPort(3001, 20000);
+            console.log('[Auto-Recovery] Backend restarted successfully');
+          } catch (restartErr: any) {
+            console.error('[Auto-Recovery] Failed to restart backend:', restartErr);
+          }
+        }
+      } catch (e) {
+        // ignore check errors
+      }
+    }, 10000);
+
+    app.on('before-quit', () => {
+      clearInterval(recoveryInterval);
+    });
   }
 
   mainWindow = new BrowserWindow({
