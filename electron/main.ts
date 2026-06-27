@@ -124,6 +124,8 @@ async function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true, // May conflict with preload; preload runs with limited Node.js APIs when sandbox is enabled
+      webSecurity: true,
       preload: path.join(__dirname, 'preload.js'),
     },
   });
@@ -134,6 +136,18 @@ async function createWindow() {
   } else {
     mainWindow.loadURL('http://localhost:3001');
   }
+
+  // Content Security Policy header
+  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [
+          "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' ws://localhost:* http://localhost:*; font-src 'self'",
+        ],
+      },
+    });
+  });
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
@@ -218,8 +232,8 @@ async function createWindow() {
           click: () => require('electron').shell.openExternal('https://github.com/minecontrol-os/docs'),
         },
         {
-          label: 'Report Issue',
-          click: () => require('electron').shell.openExternal('https://github.com/minecontrol-os/issues'),
+          label: 'Feedback Center',
+          click: () => mainWindow?.webContents.send('navigate', '/feedback'),
         },
       ],
     },

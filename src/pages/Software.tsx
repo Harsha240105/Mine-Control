@@ -211,12 +211,60 @@ export default function Software() {
 
   // Display Versions for Selected Software
   const software = SOFTWARE_TYPES.find(s => s.id === selectedSoftware);
-  let versionsList: string[] = [];
+  let filteredVersions: VersionEntry[] = [];
   if (data?.availableVersions) {
-    versionsList = data.availableVersions
-      .filter(v => v.source === selectedSoftware && v.type === 'release')
-      .map(v => v.version);
+    filteredVersions = data.availableVersions
+      .filter(v => v.source === selectedSoftware);
   }
+
+  const grouped = {
+    'Stable Releases': filteredVersions.filter(v => v.type.toLowerCase() === 'release'),
+    'Snapshots': filteredVersions.filter(v => v.type.toLowerCase() === 'snapshot'),
+    'Beta': filteredVersions.filter(v => v.type.toLowerCase() === 'beta' || v.type.toLowerCase() === 'old_beta'),
+    'Alpha': filteredVersions.filter(v => v.type.toLowerCase() === 'alpha' || v.type.toLowerCase() === 'old_alpha'),
+    'Old': filteredVersions.filter(v => {
+      const t = v.type.toLowerCase();
+      return t !== 'release' && t !== 'snapshot' && t !== 'beta' && t !== 'old_beta' && t !== 'alpha' && t !== 'old_alpha';
+    }),
+  };
+
+  const VersionRow = ({ v }: { v: VersionEntry }) => {
+    const isCurrent = data.currentSource === selectedSoftware && data.currentVersion === v.version;
+    const isDownloaded = data.availableVersions?.some(av => av.source === selectedSoftware && av.version === v.version && av.downloaded);
+    return (
+      <div className="flex items-center justify-between p-4 hover:bg-surface-800/30 transition-colors">
+        <div className="flex items-center gap-3">
+          <span className="font-medium text-gray-200">{v.version}</span>
+          {isCurrent && (
+            <span className="flex items-center gap-1 text-xs text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full border border-green-500/20">
+              <CheckCircle2 size={12} /> Active
+            </span>
+          )}
+          {isDownloaded && !isCurrent && (
+            <span className="flex items-center gap-1 text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
+              <Download size={10} /> Downloaded
+            </span>
+          )}
+        </div>
+        <button
+          onClick={() => handleInstall(v.version)}
+          disabled={installing || isCurrent}
+          className={`btn-secondary flex items-center gap-2 text-sm ${isCurrent ? 'opacity-50 cursor-not-allowed' : ''}`}
+        >
+          <Download size={14} />
+          {isCurrent ? 'Active' : installing ? 'Installing...' : 'Install'}
+        </button>
+      </div>
+    );
+  };
+
+  const groupColors: Record<string, string> = {
+    'Stable Releases': 'text-green-400',
+    'Snapshots': 'text-yellow-400',
+    'Beta': 'text-orange-400',
+    'Alpha': 'text-red-400',
+    'Old': 'text-gray-400',
+  };
 
   return (
     <div className="space-y-6 animate-fade-in max-w-3xl mx-auto">
@@ -231,34 +279,20 @@ export default function Software() {
       </div>
 
       <div className="card">
-        <div className="grid grid-cols-1 divide-y divide-surface-700/50 max-h-[600px] overflow-y-auto pr-2">
-          {versionsList.map(v => {
-            const isCurrent = data.currentSource === selectedSoftware && data.currentVersion === v;
-            const isDownloaded = data.availableVersions?.some(av => av.source === selectedSoftware && av.version === v && av.downloaded);
+        <div className="max-h-[600px] overflow-y-auto pr-2 space-y-1">
+          {Object.entries(grouped).map(([groupName, items]) => {
+            if (items.length === 0) return null;
             return (
-              <div key={v} className="flex items-center justify-between p-4 hover:bg-surface-800/30 transition-colors">
-                <div className="flex items-center gap-3">
-                  <span className="font-medium text-gray-200">{v}</span>
-                  {isCurrent && (
-                    <span className="flex items-center gap-1 text-xs text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full border border-green-500/20">
-                      <CheckCircle2 size={12} /> Active
-                    </span>
-                  )}
-                  {isDownloaded && !isCurrent && (
-                    <span className="flex items-center gap-1 text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded-full border border-blue-500/20">
-                      <Download size={10} /> Downloaded
-                    </span>
-                  )}
+              <details key={groupName} className="group" open={groupName === 'Stable Releases'}>
+                <summary className="sticky top-0 bg-surface-900/95 backdrop-blur-sm z-10 flex items-center gap-2 px-4 py-2.5 cursor-pointer hover:bg-surface-800/50 transition-colors text-sm font-medium border-b border-surface-700/50">
+                  <span className={groupColors[groupName]}>{groupName}</span>
+                  <span className="text-xs text-gray-500 ml-1">({items.length})</span>
+                  <ChevronRight size={14} className="ml-auto text-gray-500 transition-transform group-open:rotate-90" />
+                </summary>
+                <div className="divide-y divide-surface-700/50">
+                  {items.map(v => <VersionRow key={v.version} v={v} />)}
                 </div>
-                <button
-                  onClick={() => handleInstall(v)}
-                  disabled={installing || isCurrent}
-                  className={`btn-secondary flex items-center gap-2 text-sm ${isCurrent ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  <Download size={14} />
-                  {isCurrent ? 'Active' : installing ? 'Installing...' : 'Install'}
-                </button>
-              </div>
+              </details>
             );
           })}
         </div>

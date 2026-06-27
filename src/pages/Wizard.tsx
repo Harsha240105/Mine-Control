@@ -5,12 +5,12 @@ import {
   Monitor, Wifi, Layers, Cpu, Puzzle, Globe, BarChart3,
   Download, HardDrive, Gamepad2, Zap, Shield, BookOpen, Star,
   EyeOff, Eye, Users, Map, ExternalLink, Copy, CheckCircle,
-  Loader2, Sparkles, Play,
+  Loader2, Sparkles, Play, AlertTriangle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const STEPS = [
-  'Identification', 'Software', 'Version', 'World', 'Settings', 'Java',
+  'Identification', 'Compatibility', 'Software', 'Version', 'World', 'Settings', 'Java',
   'Plugins', 'Summary', 'Create',
 ];
 
@@ -99,6 +99,8 @@ type WizardData = {
   maxRam: string;
   plugins: string[];
   network: 'local' | 'lan' | 'internet' | 'tunnel';
+  compatibilityMode: 'java_only' | 'java_bedrock' | 'premium_only' | 'offline';
+  allowMultipleVersions: boolean;
 };
 
 export default function Wizard() {
@@ -133,6 +135,8 @@ export default function Wizard() {
     maxRam: '4G',
     plugins: [],
     network: 'local',
+    compatibilityMode: 'java_only',
+    allowMultipleVersions: false,
   });
 
   useEffect(() => {
@@ -173,8 +177,9 @@ export default function Wizard() {
   const canNext = (): boolean => {
     switch (step) {
       case 0: return data.name.trim().length > 0;
-      case 1: return data.software.length > 0;
-      case 2: return data.version.length > 0;
+      case 1: return data.compatibilityMode.length > 0;
+      case 2: return data.software.length > 0;
+      case 3: return data.version.length > 0;
       default: return true;
     }
   };
@@ -213,6 +218,8 @@ export default function Wizard() {
         seed: data.seed,
         network: data.network,
         pvp: data.pvp,
+        compatibilityMode: data.compatibilityMode,
+        allowMultipleVersions: data.allowMultipleVersions,
       });
 
       if (res.server?.id) {
@@ -393,16 +400,86 @@ function StepContent({
 }) {
   switch (step) {
     case 0: return <StepIdentification data={data} update={update} />;
-    case 1: return <StepSoftware data={data} update={update} />;
-    case 2: return <StepVersion data={data} update={update} versions={versions} loading={versionsLoading} search={versionSearch} setSearch={setVersionSearch} />;
-    case 3: return <StepWorld data={data} update={update} />;
-    case 4: return <StepSettings data={data} update={update} />;
-    case 5: return <StepJava data={data} update={update} ramSlider={ramSlider} setRamSlider={setRamSlider} />;
-    case 6: return <StepPlugins data={data} update={update} togglePlugin={togglePlugin} />;
-    case 7: return <StepSummary data={data} />;
-    case 8: return <StepCreate data={data} />;
+    case 1: return <StepCompatibility data={data} update={update} />;
+    case 2: return <StepSoftware data={data} update={update} />;
+    case 3: return <StepVersion data={data} update={update} versions={versions} loading={versionsLoading} search={versionSearch} setSearch={setVersionSearch} />;
+    case 4: return <StepWorld data={data} update={update} />;
+    case 5: return <StepSettings data={data} update={update} />;
+    case 6: return <StepJava data={data} update={update} ramSlider={ramSlider} setRamSlider={setRamSlider} />;
+    case 7: return <StepPlugins data={data} update={update} togglePlugin={togglePlugin} />;
+    case 8: return <StepSummary data={data} />;
+    case 9: return <StepCreate data={data} />;
     default: return null;
   }
+}
+
+function StepCompatibility({ data, update }: { data: WizardData; update: (p: Partial<WizardData>) => void }) {
+  const options: { id: WizardData['compatibilityMode']; label: string; desc: string; icon: any; badge?: string; warning?: string }[] = [
+    { id: 'java_only', label: 'Java Edition Only', desc: 'Standard Java players', icon: Monitor },
+    { id: 'java_bedrock', label: 'Java + Bedrock', desc: 'Java + Bedrock players (installs Geyser + Floodgate)', icon: Globe, badge: 'Crossplay' },
+    { id: 'premium_only', label: 'Premium Only', desc: 'Only authenticated Mojang accounts', icon: Shield },
+    { id: 'offline', label: 'Offline Mode', desc: 'No authentication required', icon: EyeOff, badge: 'Warning', warning: 'Offline mode allows cracked clients. Player usernames are not verified.' },
+  ];
+
+  return (
+    <div className="animate-fade-in">
+      <h2 className="text-2xl font-bold text-gray-100 mb-2">Compatibility</h2>
+      <p className="text-gray-500 mb-6">Configure who can join your server.</p>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-300 mb-3">What type of players should be able to join your server?</label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {options.map(opt => {
+            const selected = data.compatibilityMode === opt.id;
+            const Icon = opt.icon;
+            return (
+              <button
+                key={opt.id}
+                onClick={() => update({ compatibilityMode: opt.id })}
+                className={`relative p-4 rounded-xl border-2 text-left transition-all ${
+                  selected
+                    ? 'border-minecraft-500 bg-minecraft-600/10'
+                    : 'border-surface-700 bg-surface-800/50 hover:border-surface-600'
+                }`}
+              >
+                {opt.badge && (
+                  <span className={`absolute top-2 right-2 text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                    opt.id === 'offline' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-minecraft-500/20 text-minecraft-400'
+                  }`}>
+                    {opt.badge}
+                  </span>
+                )}
+                <Icon className={`w-5 h-5 mb-2 ${selected ? 'text-minecraft-400' : 'text-gray-400'}`} />
+                <h3 className="text-sm font-semibold text-gray-200">{opt.label}</h3>
+                <p className="text-xs text-gray-500 mt-1">{opt.desc}</p>
+                {opt.warning && selected && (
+                  <p className="text-xs text-yellow-400 mt-2 flex items-center gap-1">
+                    <AlertTriangle size={12} />
+                    {opt.warning}
+                  </p>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mt-6">
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={data.allowMultipleVersions}
+            onChange={(e) => update({ allowMultipleVersions: e.target.checked })}
+            className="rounded bg-surface-800 border-surface-600 text-minecraft-500 focus:ring-minecraft-500"
+          />
+          <div>
+            <span className="text-sm text-gray-200">Allow Multiple Minecraft Versions</span>
+            <p className="text-xs text-gray-500">Enables ViaVersion/ViaBackwards for cross-version support</p>
+          </div>
+        </label>
+      </div>
+    </div>
+  );
 }
 
 function StepIdentification({ data, update }: { data: WizardData; update: (p: Partial<WizardData>) => void }) {

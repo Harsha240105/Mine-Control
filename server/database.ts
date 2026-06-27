@@ -264,6 +264,22 @@ function initializeSchema() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (server_id) REFERENCES servers(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS feedback_tickets (
+      id TEXT PRIMARY KEY,
+      ticket_id TEXT UNIQUE NOT NULL,
+      title TEXT NOT NULL,
+      description TEXT NOT NULL,
+      type TEXT NOT NULL CHECK(type IN ('bug', 'feature')),
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open', 'in_progress', 'resolved', 'closed')),
+      username TEXT NOT NULL,
+      diagnostic_data TEXT,
+      screenshot_paths TEXT DEFAULT '[]',
+      votes INTEGER NOT NULL DEFAULT 0,
+      github_url TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // Migrate legacy server_config to a named server entry

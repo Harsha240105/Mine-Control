@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { HardDrive, Plus, RotateCcw, Trash2, Lock, Clock } from 'lucide-react';
+import { HardDrive, Plus, RotateCcw, Trash2, Lock, Clock, Settings, ChevronRight, Save } from 'lucide-react';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 
@@ -19,9 +19,21 @@ export default function Backups() {
   const [showCreate, setShowCreate] = useState(false);
   const [backupName, setBackupName] = useState('');
   const [encrypt, setEncrypt] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [customFolderEnabled, setCustomFolderEnabled] = useState(false);
+  const [customFolder, setCustomFolder] = useState('');
+  const [saveToBoth, setSaveToBoth] = useState(false);
+  const [autoBackup, setAutoBackup] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
 
   useEffect(() => {
     fetchBackups();
+    api.get('/backups/settings').then((data) => {
+      if (data.customFolder) setCustomFolder(data.customFolder);
+      if (data.customFolderEnabled !== undefined) setCustomFolderEnabled(data.customFolderEnabled);
+      if (data.saveToBoth !== undefined) setSaveToBoth(data.saveToBoth);
+      if (data.autoBackup !== undefined) setAutoBackup(data.autoBackup);
+    }).catch(() => {});
   }, []);
 
   const fetchBackups = async () => {
@@ -80,6 +92,91 @@ export default function Backups() {
           </button>
         </div>
       </div>
+
+      {/* Backup Settings */}
+      <details className="card group" open={showSettings} onToggle={(e) => setShowSettings(e.currentTarget.open)}>
+        <summary className="flex items-center gap-2 p-4 cursor-pointer hover:bg-surface-800/30 transition-colors rounded-lg">
+          <Settings size={16} className="text-gray-400" />
+          <span className="text-sm font-medium text-gray-200">Backup Settings</span>
+          <ChevronRight size={14} className="ml-auto text-gray-500 transition-transform group-open:rotate-90" />
+        </summary>
+        <div className="px-4 pb-4 space-y-4 border-t border-surface-700/50 pt-4">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={customFolderEnabled}
+              onChange={(e) => setCustomFolderEnabled(e.target.checked)}
+              className="rounded bg-surface-800 border-surface-600 text-minecraft-500 focus:ring-minecraft-500"
+            />
+            <span className="text-sm text-gray-200">Custom Backup Folder</span>
+          </label>
+          {customFolderEnabled && (
+            <div className="flex items-center gap-2 ml-6">
+              <input
+                type="text"
+                value={customFolder}
+                onChange={(e) => setCustomFolder(e.target.value)}
+                placeholder="C:\\Backups\\MyServer"
+                className="input flex-1 text-sm font-mono"
+              />
+              <button
+                onClick={async () => {
+                  if (window.electronAPI?.selectDirectory) {
+                    const dir = await window.electronAPI.selectDirectory();
+                    if (dir) setCustomFolder(dir);
+                  }
+                }}
+                className="btn-secondary text-sm whitespace-nowrap"
+              >
+                Browse
+              </button>
+            </div>
+          )}
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={saveToBoth}
+              onChange={(e) => setSaveToBoth(e.target.checked)}
+              className="rounded bg-surface-800 border-surface-600 text-minecraft-500 focus:ring-minecraft-500"
+            />
+            <div>
+              <span className="text-sm text-gray-200">Save to both locations</span>
+              <p className="text-xs text-gray-500">Backups go to both the default and custom location</p>
+            </div>
+          </label>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={autoBackup}
+              onChange={(e) => setAutoBackup(e.target.checked)}
+              className="rounded bg-surface-800 border-surface-600 text-minecraft-500 focus:ring-minecraft-500"
+            />
+            <div>
+              <span className="text-sm text-gray-200">Auto-backup</span>
+              <p className="text-xs text-gray-500">Automatically create backups on a schedule</p>
+            </div>
+          </label>
+          <div className="flex justify-end">
+            <button
+              onClick={async () => {
+                setSavingSettings(true);
+                try {
+                  await api.post('/backups/settings', { customFolder, customFolderEnabled, saveToBoth, autoBackup });
+                  toast.success('Backup settings saved');
+                } catch (err: any) {
+                  toast.error(err.message);
+                }
+                setSavingSettings(false);
+              }}
+              disabled={savingSettings}
+              className="btn-primary flex items-center gap-2 text-sm"
+            >
+              {savingSettings ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save size={14} />}
+              {savingSettings ? 'Saving...' : 'Save Settings'}
+            </button>
+          </div>
+        </div>
+      </details>
 
       {showCreate && (
         <div className="card p-5 animate-slide-in">

@@ -32,7 +32,9 @@ import {
   Bell,
   RefreshCw,
   FolderOpen,
-  MessageSquare
+  MessageSquare,
+  MessageCircle,
+  Shield
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
@@ -52,11 +54,13 @@ const navItems = [
   { path: '/scheduler', label: 'Scheduler', icon: Clock },
   { path: '/connection', label: 'Connection', icon: Wifi },
   { path: '/discord', label: 'Discord', icon: MessageSquare },
+  { path: '/feedback', label: 'Feedback', icon: MessageCircle },
 ];
 
 const bottomNavItems = [
   { path: '/diagnostics', label: 'Diagnostics', icon: Stethoscope },
   { path: '/guide', label: 'Guide', icon: BookOpen },
+  { path: '/privacy', label: 'Privacy', icon: Shield },
 ];
 
 export default function Layout() {

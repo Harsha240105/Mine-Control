@@ -30,6 +30,8 @@ import scheduleRoutes from './routes/schedules';
 import marketplaceRoutes from './routes/marketplace';
 import analyticsRoutes from './routes/analytics';
 import discordRoutes from './routes/discord';
+import feedbackRoutes from './routes/feedback';
+import privacyRoutes from './routes/privacy';
 import { SchedulerService } from './services/scheduler';
 import { discordService } from './services/discord';
 
@@ -86,6 +88,8 @@ app.use('/api/schedules', scheduleRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
 app.use('/api/server', analyticsRoutes);
 app.use('/api/discord', discordRoutes);
+app.use('/api/feedback', feedbackRoutes);
+app.use('/api/privacy', privacyRoutes);
 
 // API 404 handler (unknown API routes return JSON, not HTML)
 app.use('/api/*', (req, res) => {

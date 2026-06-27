@@ -321,4 +321,22 @@ export const api = {
       body: JSON.stringify({ filePath, config }),
     }),
   getSupportedFormats: () => request<any>('/import/supported-formats'),
+
+  // Feedback Center
+  getFeedbackTickets: (params?: { type?: string; status?: string }) =>
+    request<any[]>('/feedback' + (params ? '?' + new URLSearchParams(params as any).toString() : '')),
+  createFeedbackTicket: (data: any) =>
+    request<any>('/feedback', { method: 'POST', body: JSON.stringify(data) }),
+  getFeedbackTicket: (id: string) =>
+    request<any>(`/feedback/${id}`),
+  updateFeedbackTicketStatus: (id: string, status: string) =>
+    request<any>(`/feedback/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+  voteFeedbackTicket: (id: string) =>
+    request<any>(`/feedback/${id}/vote`, { method: 'POST' }),
+
+  // Privacy
+  getPrivacyData: () => request<any>('/privacy/data'),
+  clearPrivacyLogs: () => request<any>('/privacy/logs', { method: 'DELETE' }),
+  clearPrivacyBackups: () => request<any>('/privacy/backups', { method: 'DELETE' }),
+  exportPrivacyData: () => request<any>('/privacy/export'),
 };

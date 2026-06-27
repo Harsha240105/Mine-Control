@@ -24,6 +24,8 @@ import Servers from './pages/Servers';
 import Compatibility from './pages/Compatibility';
 import Import from './pages/Import';
 import Discord from './pages/Discord';
+import Feedback from './pages/Feedback';
+import Privacy from './pages/Privacy';
 import AutoUpdater from './components/AutoUpdater';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -99,10 +101,12 @@ export default function App() {
             <Route path="connection" element={<Connection />} />
             <Route path="compatibility" element={<Compatibility />} />
             <Route path="discord" element={<Discord />} />
+            <Route path="feedback" element={<Feedback />} />
             <Route path="map" element={<MapView />} />
             <Route path="diagnostics" element={<Diagnostics />} />
             <Route path="guide" element={<Guide />} />
             <Route path="github" element={<GitHub />} />
+            <Route path="privacy" element={<Privacy />} />
             <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>

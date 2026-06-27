@@ -3,10 +3,27 @@ import { MessageSquare, Save, CheckCircle, AlertTriangle } from 'lucide-react';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 
+const NOTIFICATION_EVENTS = [
+  { key: 'serverStart', label: 'Server Start' },
+  { key: 'serverStop', label: 'Server Stop' },
+  { key: 'serverCrash', label: 'Server Crash' },
+  { key: 'backupCreated', label: 'Backup Created' },
+  { key: 'playerJoin', label: 'Player Join' },
+  { key: 'playerLeave', label: 'Player Leave' },
+] as const;
+
 export default function Discord() {
   const [token, setToken] = useState('');
   const [channelId, setChannelId] = useState('');
   const [voiceChannelId, setVoiceChannelId] = useState('');
+  const [notifications, setNotifications] = useState<Record<string, boolean>>({
+    serverStart: true,
+    serverStop: true,
+    serverCrash: true,
+    backupCreated: true,
+    playerJoin: false,
+    playerLeave: false,
+  });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -17,6 +34,7 @@ export default function Discord() {
         if (data.token) setToken(data.token);
         if (data.channelId) setChannelId(data.channelId);
         if (data.voiceChannelId) setVoiceChannelId(data.voiceChannelId);
+        if (data.notifications) setNotifications({ ...notifications, ...data.notifications });
       } catch (err: any) {
         toast.error('Failed to load Discord settings: ' + err.message);
       } finally {
@@ -29,7 +47,7 @@ export default function Discord() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await api.post('/discord', { token, channelId, voiceChannelId });
+      await api.post('/discord', { token, channelId, voiceChannelId, notifications });
       toast.success('Discord settings saved! Bot is restarting...');
     } catch (err: any) {
       toast.error('Failed to save settings: ' + err.message);
@@ -120,6 +138,24 @@ export default function Discord() {
                 className="input-field font-mono text-sm"
               />
               <p className="text-xs text-gray-500 mt-2">The bot will use this for voice integrations (e.g., channel status updates).</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-3">Notification Events</label>
+              <div className="grid grid-cols-2 gap-3">
+                {NOTIFICATION_EVENTS.map(({ key, label }) => (
+                  <label key={key} className="flex items-center gap-3 cursor-pointer p-3 rounded-lg bg-surface-800/50 border border-surface-700/50 hover:border-surface-600 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={notifications[key]}
+                      onChange={(e) => setNotifications(prev => ({ ...prev, [key]: e.target.checked }))}
+                      className="rounded bg-surface-800 border-surface-600 text-minecraft-500 focus:ring-minecraft-500"
+                    />
+                    <span className="text-sm text-gray-200">{label}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-gray-500 mt-2">Choose which events the bot should notify about in the target channel.</p>
             </div>
 
           </div>

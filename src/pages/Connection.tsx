@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Wifi, Copy, Check, Globe, Monitor, Network, ExternalLink, ChevronDown, ChevronUp, Save, ExternalLink as ExternalLinkIcon } from 'lucide-react';
+import { Wifi, Copy, Check, Globe, Monitor, Network, ExternalLink, ChevronDown, ChevronUp, Save, ExternalLink as ExternalLinkIcon, HardDrive } from 'lucide-react';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 
@@ -286,6 +286,112 @@ export default function Connection() {
             <li>Check if your ISP uses CGNAT (Jio, Airtel, BSNL) - use Playit.gg instead</li>
             <li>Verify server is running and bound to 0.0.0.0:25565</li>
           </ul>
+        </div>
+      </div>
+
+      <BackupLocation />
+    </div>
+  );
+}
+
+function BackupLocation() {
+  const [backupDataDir, setBackupDataDir] = useState('C:\\MineControl OS\\data');
+  const [customFolderEnabled, setCustomFolderEnabled] = useState(false);
+  const [customFolder, setCustomFolder] = useState('');
+  const [saveToBoth, setSaveToBoth] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.get('/backups/settings').then((data) => {
+      if (data.dataDirectory) setBackupDataDir(data.dataDirectory);
+      if (data.customFolder) setCustomFolder(data.customFolder);
+      if (data.customFolderEnabled !== undefined) setCustomFolderEnabled(data.customFolderEnabled);
+      if (data.saveToBoth !== undefined) setSaveToBoth(data.saveToBoth);
+    }).catch(() => {});
+  }, []);
+
+  const handleBrowse = async () => {
+    if (window.electronAPI?.selectDirectory) {
+      const dir = await window.electronAPI.selectDirectory();
+      if (dir) setCustomFolder(dir);
+    }
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.post('/backups/settings', {
+        customFolder,
+        customFolderEnabled,
+        saveToBoth,
+      });
+      toast.success('Backup location saved');
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div className="card">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-medium text-gray-200 flex items-center gap-2">
+          <HardDrive size={16} className="text-minecraft-500" />
+          Backup Location
+        </h3>
+      </div>
+
+      <div className="space-y-4">
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Current Backup Directory</label>
+          <code className="text-sm font-mono text-minecraft-400 bg-surface-800 px-3 py-1.5 rounded-lg block">
+            {backupDataDir}
+          </code>
+        </div>
+
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={customFolderEnabled}
+            onChange={(e) => setCustomFolderEnabled(e.target.checked)}
+            className="rounded bg-surface-800 border-surface-600 text-minecraft-500 focus:ring-minecraft-500"
+          />
+          <span className="text-sm text-gray-200">Custom Backup Folder</span>
+        </label>
+
+        {customFolderEnabled && (
+          <div className="flex items-center gap-2 ml-6">
+            <input
+              type="text"
+              value={customFolder}
+              onChange={(e) => setCustomFolder(e.target.value)}
+              placeholder="C:\\Backups\\MyServer"
+              className="input flex-1 text-sm font-mono"
+            />
+            <button onClick={handleBrowse} className="btn-secondary text-sm whitespace-nowrap">
+              Browse
+            </button>
+          </div>
+        )}
+
+        <label className="flex items-center gap-3 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={saveToBoth}
+            onChange={(e) => setSaveToBoth(e.target.checked)}
+            className="rounded bg-surface-800 border-surface-600 text-minecraft-500 focus:ring-minecraft-500"
+          />
+          <div>
+            <span className="text-sm text-gray-200">Save to both locations</span>
+            <p className="text-xs text-gray-500">Backups go to both the default and custom location</p>
+          </div>
+        </label>
+
+        <div className="flex justify-end">
+          <button onClick={handleSave} disabled={saving} className="btn-primary flex items-center gap-2 text-sm">
+            <Save size={14} />
+            {saving ? 'Saving...' : 'Save Backup Location'}
+          </button>
         </div>
       </div>
     </div>
