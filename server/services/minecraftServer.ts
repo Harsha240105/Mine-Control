@@ -81,6 +81,19 @@ class MinecraftServerManager extends EventEmitter {
     this._lastError = null;
     setMinecraftDir(directory);
     this.ensureDirectories();
+    // Persist server state to database on load
+    try {
+      const { getDatabase } = require('../database');
+      const activeId = (getDatabase().prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+      if (activeId) {
+        const db = getDatabase();
+        const savedState = db.prepare('SELECT status FROM servers WHERE id = ?').get(activeId) as any;
+        if (savedState && (savedState.status === 'running' || savedState.status === 'starting')) {
+          db.prepare("UPDATE servers SET status = 'stopped', updated_at = datetime('now') WHERE id = ?").run(activeId);
+          this.emit('server:output', '[MineControl] Previous server session ended. Server state reset to stopped.\n');
+        }
+      }
+    } catch {}
   }
 
   get directory() {

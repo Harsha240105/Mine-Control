@@ -342,4 +342,9 @@ export const api = {
   clearPrivacyLogs: () => request<any>('/privacy/logs', { method: 'DELETE' }),
   clearPrivacyBackups: () => request<any>('/privacy/backups', { method: 'DELETE' }),
   exportPrivacyData: () => request<any>('/privacy/export'),
+
+  // UI State Persistence
+  getUiState: () => request<Record<string, string>>('/ui/state'),
+  saveUiState: (state: Record<string, string>) => request<any>('/ui/state', { method: 'POST', body: JSON.stringify(state) }),
+  getUiStateKey: (key: string) => request<any>(`/ui/state/${key}`),
 };

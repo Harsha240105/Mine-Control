@@ -15,8 +15,8 @@ export default function Console() {
   const [command, setCommand] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
-  const [autoScroll, setAutoScroll] = useState(true);
-  const [filterLevel, setFilterLevel] = useState<string>('all');
+  const [autoScroll, setAutoScroll] = useState(() => localStorage.getItem('mc_console_autoscroll') !== 'false');
+  const [filterLevel, setFilterLevel] = useState<string>(() => localStorage.getItem('mc_console_filter') || 'all');
   const consoleRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const { socket } = useSocket();
@@ -136,7 +136,7 @@ export default function Console() {
           {/* Filter */}
           <select
             value={filterLevel}
-            onChange={(e) => setFilterLevel(e.target.value)}
+            onChange={(e) => { setFilterLevel(e.target.value); localStorage.setItem('mc_console_filter', e.target.value); }}
             className="text-xs bg-surface-800 border border-surface-700 rounded px-2 py-1.5 text-gray-300"
           >
             <option value="all">All Levels</option>
@@ -156,7 +156,7 @@ export default function Console() {
             <Download size={16} />
           </button>
           <button
-            onClick={() => setAutoScroll(!autoScroll)}
+            onClick={() => { const next = !autoScroll; setAutoScroll(next); localStorage.setItem('mc_console_autoscroll', next ? 'true' : 'false'); }}
             className={`btn-ghost p-2 ${autoScroll ? 'text-minecraft-400' : ''}`}
             title="Auto-scroll"
           >

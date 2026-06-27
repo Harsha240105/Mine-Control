@@ -68,7 +68,9 @@ const bottomNavItems = [
 export default function Layout() {
   const { user, logout, isOwner } = useAuth();
   const navigate = useNavigate();
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useState(() => {
+    return localStorage.getItem('mc_sidebar_collapsed') === 'true';
+  });
   const [serverRunning, setServerRunning] = useState(false);
   const [serverStarting, setServerStarting] = useState(false);
   const [serverList, setServerList] = useState<any[]>([]);
@@ -399,7 +401,11 @@ export default function Layout() {
             </button>
           )}
           <button
-            onClick={() => setCollapsed(!collapsed)}
+            onClick={() => {
+              const next = !collapsed;
+              setCollapsed(next);
+              localStorage.setItem('mc_sidebar_collapsed', next ? 'true' : 'false');
+            }}
             className="w-full mt-1 p-1.5 text-gray-500 hover:text-gray-300 hover:bg-surface-800 rounded transition-colors"
           >
             {collapsed ? <ChevronRight size={16} className="mx-auto" /> : <ChevronLeft size={16} className="mx-auto" />}

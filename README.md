@@ -7,7 +7,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.44-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.45-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -64,7 +64,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 
 ## 📥 Download
 
-Latest version: **v1.0.44** — [Auto-updates from within the app]
+Latest version: **v1.0.45** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -360,6 +360,14 @@ The app checks GitHub for new releases on startup. When an update is found:
 ---
 
 ## 📋 Release History
+
+### v1.0.45 — Local Data Persistence & Storage
+- **UI State Persistence Engine** — New `ui_state` database table (key/value with timestamp) stores UI preferences server-side. New `/api/ui/state` endpoints for saving and loading UI state across app restarts.
+- **Last Active Page Restoration** — App saves the current page to `localStorage` and debounced server `ui_state` on every navigation. After login, users are redirected to their last-viewed page instead of always landing on the Servers page.
+- **Sidebar State Persistence** — Sidebar collapsed/expanded state now persists in `localStorage` (`mc_sidebar_collapsed`) and restores on next app launch.
+- **Console Preference Persistence** — Console filter level (All/INFO/WARN/ERROR/FATAL/DEBUG) and auto-scroll toggle now persist in `localStorage` across sessions.
+- **Server State Database Persistence** — Server state (running/stopped/starting/failed) is stored in the `servers` table on every transition. On app restart, if a server was previously running, it's automatically reset to `stopped` with a console notification.
+- **Updated documentation and version badges** for v1.0.45 release.
 
 ### v1.0.44 — Universal Multiplayer Connection System
 - **Connection Wizard Page** — New dedicated wizard that auto-detects all connection methods (localhost, LAN, Playit tunnel, public IP) and recommends the easiest one. Displays scenario cards for Same Computer, Local Network, and Internet Friends with live status indicators.

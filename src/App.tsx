@@ -1,8 +1,9 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect, useRef } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import Layout from './components/Layout';
+import { api } from './lib/api';
 import Login from './pages/Login';
 import Welcome from './pages/Welcome';
 import Wizard from './pages/Wizard';
@@ -85,11 +86,12 @@ export default function App() {
             path="/"
             element={
               <ProtectedRoute>
+                <PageTracker />
                 <Layout />
               </ProtectedRoute>
             }
           >
-            <Route index element={<Servers />} />
+            <Route index element={<IndexRedirect />} />
             <Route path="servers" element={<Servers />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="software" element={<Software />} />
@@ -115,6 +117,37 @@ export default function App() {
       </AuthProvider>
     </BrowserRouter>
   );
+}
+
+function PageTracker() {
+  const location = useLocation();
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const path = location.pathname;
+    if (path === '/' || path === '/login' || path === '/wizard' || path === '/import') return;
+    localStorage.setItem('mc_last_page', path);
+
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      api.saveUiState({ last_page: path }).catch(() => {});
+    }, 2000);
+
+    return () => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+    };
+  }, [location.pathname]);
+
+  return null;
+}
+
+function IndexRedirect() {
+  const lastPage = localStorage.getItem('mc_last_page');
+  const validRoutes = ['/dashboard', '/software', '/players', '/console', '/worlds', '/plugins', '/backups', '/scheduler', '/connection', '/connection/wizard', '/compatibility', '/discord', '/feedback', '/map', '/diagnostics', '/guide', '/github', '/privacy', '/settings', '/servers'];
+  if (lastPage && validRoutes.includes(lastPage)) {
+    return <Navigate to={lastPage} replace />;
+  }
+  return <Servers />;
 }
 
 function WelcomeWrapper() {
