@@ -53,7 +53,18 @@ function setupAutoUpdater() {
 
   autoUpdater.on('error', (err) => {
     console.error('AutoUpdater error:', err);
-    mainWindow?.webContents.send('update:error', 'Failed to check for updates. Please try again later.');
+    const msg = (err?.message || err?.toString() || 'Unknown error').toLowerCase();
+    let userMsg: string;
+    if (msg.includes('404') || msg.includes('not found') || msg.includes('no published') || msg.includes('no releases')) {
+      userMsg = 'No update channel configured. Updates will be available when a new version is published with installer assets.';
+    } else if (msg.includes('net_err') || msg.includes('econnrefused') || msg.includes('enotfound') || msg.includes('timeout') || msg.includes('econnreset') || msg.includes('econnaborted')) {
+      userMsg = 'Unable to reach update server. Check your internet connection.';
+    } else if (msg.includes('rate limit') || msg.includes('403') || msg.includes('unauthorized') || msg.includes('401')) {
+      userMsg = 'GitHub API rate limited. Updates will be checked again later automatically.';
+    } else {
+      userMsg = `Update check failed: ${err?.message || err?.toString() || 'Unknown error'}`;
+    }
+    mainWindow?.webContents.send('update:error', userMsg);
   });
 
   setTimeout(() => {
@@ -73,6 +84,16 @@ async function createWindow() {
   if (!isDev) {
     const userDataPath = app.getPath('userData');
     const oldDataPath = path.join(path.dirname(app.getPath('exe')), 'MineControl OS');
+
+    // Set up GitHub token for auto-updater if available
+    if (!process.env.GH_TOKEN) {
+      const ghTokenPath = path.join(userDataPath, 'config', 'github_token.txt');
+      try {
+        if (fs.existsSync(ghTokenPath)) {
+          process.env.GH_TOKEN = fs.readFileSync(ghTokenPath, 'utf-8').trim();
+        }
+      } catch {}
+    }
 
     process.env.APP_DATA_PATH = userDataPath;
     process.env.MINECRAFT_DIR = path.join(userDataPath, 'servers', 'default');
@@ -352,17 +373,16 @@ ipcMain.handle('select-file', async (_event, filters?: { name: string; extension
 });
 
 // Auto-update IPC handlers
-ipcMain.handle('check-for-updates', () => {
+ipcMain.handle('check-for-updates', async () => {
   try {
-    autoUpdater.checkForUpdates().catch((err) => {
-      console.error('Failed to manually check for updates:', err);
-    });
-  } catch (err) {
-    console.error('Synchronous error checking for updates:', err);
+    await autoUpdater.checkForUpdates();
+  } catch (err: any) {
+    console.error('Failed to check for updates:', err);
+    mainWindow?.webContents.send('update:error', err?.message || 'Failed to check for updates');
   }
 });
 
-ipcMain.handle('download-update', () => {
+ipcMain.handle('download-update', async () => {
   const userDataPath = app.getPath('userData');
   console.log('[Updater] Backing up critical files before update...');
   const backupDir = backupCriticalFiles(userDataPath);
@@ -371,9 +391,12 @@ ipcMain.handle('download-update', () => {
   } else {
     console.warn('[Updater] Backup failed, proceeding with update anyway');
   }
-  autoUpdater.downloadUpdate().catch((err) => {
+  try {
+    await autoUpdater.downloadUpdate();
+  } catch (err: any) {
     console.error('Failed to download update:', err);
-  });
+    mainWindow?.webContents.send('update:error', `Download failed: ${err?.message || 'Unknown error'}`);
+  }
 });
 
 ipcMain.handle('install-update', () => {
