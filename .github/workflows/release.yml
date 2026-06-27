@@ -11,6 +11,7 @@ jobs:
     permissions:
       contents: write
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         
@@ -39,6 +40,7 @@ jobs:
       - name: Build and Publish Electron app
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: false
         run: npx electron-rebuild -f -w better-sqlite3 && npx electron-builder --publish always
         
       - name: Upload artifacts
