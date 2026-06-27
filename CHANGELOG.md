@@ -86,6 +86,21 @@ All notable changes to MineControl OS are documented here.
 - Pre-flight validation before starting (jar, EULA, port)
 - Dashboard handles all server states
 
+## v1.0.50 — Bug Fixes & Polish Release
+
+### Bug Fixes
+- **Servers.tsx version dropdown**: Fixed `[object Object]` rendering in the version dropdown caused by storing API objects in a `string[]` array. Version keys, values, and display text now properly use `v.version`.
+- **NeoForge server creation**: Fixed download source mapping — NeoForge servers were incorrectly downloading Forge jars because both `forge` and `neoforge` were mapped to the same `downloadSource`. They now use separate sources.
+- **Backup directory resolution**: `BACKUP_DIR` and `WORLDS_DIR` in `BackupService` are now resolved lazily via getter functions instead of at module import time, preventing incorrect paths when no server is active.
+- **Console log key collision**: Log entries now use a monotonically incrementing counter instead of `Date.now() + Math.random()` for unique IDs, eliminating React key collision warnings.
+- **Removed unused `WelcomeWrapper` component**: Cleaned up dead code in `App.tsx`.
+
+### Improvements
+- **NeoForge support in UI**: NeoForge added as a distinct option in the Create Server software dropdown (cyan styling).
+
+### Build & Release
+- Version bumped to 1.0.50
+
 ## v1.0.49 — Complete Architecture Audit, Integration & Production Readiness
 
 ### Architecture Audit & Dependency Repair

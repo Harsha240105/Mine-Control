@@ -53,13 +53,14 @@ export default function Console() {
     } catch {}
   };
 
+  let logIdCounter = 0;
   const parseLogLine = (line: string): LogEntry => {
     let level: LogEntry['level'] = 'info';
     if (line.includes('[WARN]') || line.toLowerCase().includes('warn')) level = 'warn';
     else if (line.includes('[ERROR]') || line.toLowerCase().includes('error') || line.includes('[STDERR]')) level = 'error';
     else if (line.includes('[FATAL]')) level = 'fatal';
     else if (line.includes('[DEBUG]')) level = 'debug';
-    return { text: line, level, id: Date.now() + Math.random() };
+    return { text: line, level, id: ++logIdCounter };
   };
 
   const handleSendCommand = async (e: React.FormEvent) => {

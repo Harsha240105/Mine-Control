@@ -123,7 +123,8 @@ router.post('/', authMiddleware, requirePermission('server.start'), async (req: 
   if (softwareLower === 'paper' || softwareLower === 'spigot') downloadSource = 'paper';
   else if (softwareLower === 'purpur') downloadSource = 'purpur';
   else if (softwareLower === 'fabric') downloadSource = 'fabric';
-  else if (softwareLower === 'forge' || softwareLower === 'neoforge') downloadSource = 'forge';
+  else if (softwareLower === 'forge') downloadSource = 'forge';
+  else if (softwareLower === 'neoforge') downloadSource = 'neoforge';
   else downloadSource = 'vanilla';
 
   let jarFileName = 'server.jar';

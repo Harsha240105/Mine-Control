@@ -7,7 +7,7 @@
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.49-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.50-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="MIT License"/>
@@ -389,6 +389,7 @@ This ensures updates never touch user data. The uninstaller's "Keep Data" option
 - [x] Universal Java Launcher Compatibility (v1.0.47)
 - [x] Complete System Integration & Workflow Stability (v1.0.48)
 - [x] Complete Architecture Audit & Production Readiness (v1.0.49)
+- [x] Bug Fixes & Polish Release (v1.0.50)
 - [ ] Plugin marketplace expansion (Hangar)
 - [ ] Advanced automation (conditional scheduling)
 - [ ] Performance profiler integration (Spark)

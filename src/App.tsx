@@ -5,7 +5,6 @@ import { AuthProvider, useAuth } from './hooks/useAuth';
 import Layout from './components/Layout';
 import { api } from './lib/api';
 import Login from './pages/Login';
-import Welcome from './pages/Welcome';
 import Wizard from './pages/Wizard';
 import Software from './pages/Software';
 import Dashboard from './pages/Dashboard';
@@ -150,17 +149,4 @@ function IndexRedirect() {
   return <Servers />;
 }
 
-function WelcomeWrapper() {
-  const wizardComplete = localStorage.getItem('mc_wizard_complete') === 'true';
-  const hasServers = (() => {
-    try {
-      const s = localStorage.getItem('mc_servers');
-      return s && JSON.parse(s).length > 0;
-    } catch { return false; }
-  })();
 
-  if (wizardComplete || hasServers) {
-    return <Navigate to="/servers" replace />;
-  }
-  return <Welcome />;
-}

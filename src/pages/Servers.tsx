@@ -62,6 +62,7 @@ const SOFTWARE_OPTIONS = [
   { value: 'purpur', label: 'Purpur', color: 'text-purple-400', bg: 'bg-purple-500/10', border: 'border-purple-500/20' },
   { value: 'fabric', label: 'Fabric', color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
   { value: 'forge', label: 'Forge', color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
+  { value: 'neoforge', label: 'NeoForge', color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20' },
   { value: 'vanilla', label: 'Vanilla', color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/20' },
 ];
 
@@ -107,7 +108,7 @@ export default function Servers() {
     name: '', port: 25565, software: 'paper', version: '',
     minRam: 2, maxRam: 4, gamemode: 'survival', difficulty: 'easy', seed: '',
   });
-  const [availableVersions, setAvailableVersions] = useState<string[]>([]);
+  const [availableVersions, setAvailableVersions] = useState<any[]>([]);
   const [loadingVersions, setLoadingVersions] = useState(false);
 
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
@@ -591,8 +592,8 @@ export default function Servers() {
                     ) : (
                       <>
                         <option value="">Latest</option>
-                        {availableVersions.map(v => (
-                          <option key={v} value={v}>{v}</option>
+                        {availableVersions.map((v: any) => (
+                          <option key={v.version} value={v.version}>{v.version}</option>
                         ))}
                       </>
                     )}

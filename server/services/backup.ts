@@ -6,21 +6,22 @@ import { getDatabase } from '../database';
 import { v4 as uuidv4 } from 'uuid';
 import { resolveMinecraftDir } from '../paths';
 
-const BACKUP_DIR = resolveMinecraftDir('backups');
-const WORLDS_DIR = resolveMinecraftDir('worlds');
 const ENCRYPTION_KEY = process.env.BACKUP_KEY || 'minecontrol-os-secure-key-2024';
+
+function getBackupDir(): string { return resolveMinecraftDir('backups'); }
+function getWorldsDir(): string { return resolveMinecraftDir('worlds'); }
 
 export class BackupService {
   async createBackup(name: string, type: 'manual' | 'auto' = 'manual', encrypted = false): Promise<any> {
-    if (!fs.existsSync(BACKUP_DIR)) {
-      fs.mkdirSync(BACKUP_DIR, { recursive: true });
+    if (!fs.existsSync(getBackupDir())) {
+      fs.mkdirSync(getBackupDir(), { recursive: true });
     }
 
     const worlds = this.getWorldList();
     const timestamp = Date.now();
     const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '_');
     const fileName = `${safeName}-${timestamp}.zip`;
-    const filePath = path.join(BACKUP_DIR, fileName);
+    const filePath = path.join(getBackupDir(), fileName);
 
     return new Promise((resolve, reject) => {
       const output = fs.createWriteStream(filePath);
@@ -68,7 +69,7 @@ export class BackupService {
 
       // Add worlds
       for (const world of worlds) {
-        const worldPath = path.join(WORLDS_DIR, world);
+        const worldPath = path.join(getWorldsDir(), world);
         if (fs.existsSync(worldPath)) {
           archive.directory(worldPath, world);
         }
@@ -107,7 +108,7 @@ export class BackupService {
     }
 
     // Extract to temporary directory
-    const tempDir = path.join(BACKUP_DIR, 'temp_restore');
+    const tempDir = path.join(getBackupDir(), 'temp_restore');
     if (fs.existsSync(tempDir)) {
       fs.rmSync(tempDir, { recursive: true });
     }
@@ -131,7 +132,7 @@ export class BackupService {
     const worlds = JSON.parse(backup.worlds);
     for (const world of worlds) {
       const sourceWorld = path.join(tempDir, world);
-      const destWorld = path.join(WORLDS_DIR, world);
+      const destWorld = path.join(getWorldsDir(), world);
       if (fs.existsSync(sourceWorld)) {
         if (fs.existsSync(destWorld)) {
           fs.rmSync(destWorld, { recursive: true });
@@ -228,12 +229,12 @@ export class BackupService {
 
   private getWorldList(): string[] {
     const worlds: string[] = [];
-    if (fs.existsSync(WORLDS_DIR)) {
-      const entries = fs.readdirSync(WORLDS_DIR, { withFileTypes: true });
+    if (fs.existsSync(getWorldsDir())) {
+      const entries = fs.readdirSync(getWorldsDir(), { withFileTypes: true });
       for (const entry of entries) {
         if (entry.isDirectory() && !entry.name.startsWith('.')) {
           // Check if it's a Minecraft world (has level.dat)
-          const levelDat = path.join(WORLDS_DIR, entry.name, 'level.dat');
+          const levelDat = path.join(getWorldsDir(), entry.name, 'level.dat');
           if (fs.existsSync(levelDat)) {
             worlds.push(entry.name);
           }
