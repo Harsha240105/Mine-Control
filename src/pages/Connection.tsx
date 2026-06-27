@@ -152,7 +152,7 @@ export default function Connection() {
           icon={Globe}
           color="bg-purple-500/10 text-purple-400"
         />
-        <div className="card-hover relative overflow-hidden cursor-pointer" onClick={() => setShowPlayitConfig(!showPlayitConfig)}>
+        <div className="card-hover relative overflow-hidden">
           <div className="flex items-start gap-4">
             <div className="p-3 rounded-lg bg-pink-500/10 text-pink-400 flex-shrink-0">
               <ExternalLink size={22} />
@@ -161,7 +161,7 @@ export default function Connection() {
               <div className="flex items-center justify-between gap-2">
                 <h3 className="text-sm font-semibold text-gray-200 mb-1">Playit.gg Tunnel</h3>
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowPlayitConfig(!showPlayitConfig); }}
+                  onClick={() => setShowPlayitConfig(!showPlayitConfig)}
                   className="p-1 text-gray-500 hover:text-gray-300 transition-colors"
                 >
                   {showPlayitConfig ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
@@ -190,7 +190,7 @@ export default function Connection() {
 
           {/* Playit.gg Configuration Panel */}
           {showPlayitConfig && (
-            <div className="mt-4 pt-4 border-t border-surface-700/50 space-y-4">
+            <div className="mt-4 pt-4 border-t border-surface-700/50 space-y-4" onClick={(e) => e.stopPropagation()}>
               {/* Setup Guide */}
               <div className="p-4 rounded-lg bg-surface-800/50 border border-surface-700/50">
                 <h4 className="text-sm font-semibold text-gray-200 mb-3">How to set up Playit.gg</h4>

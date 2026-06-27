@@ -72,6 +72,7 @@ export default function Layout() {
   const { socket, connected } = useSocket();
   const lastSocketUpdate = useRef(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const [initialStatusLoaded, setInitialStatusLoaded] = useState(false);
 
   useEffect(() => {
     if (window.electronAPI?.getVersion) {
@@ -121,14 +122,17 @@ export default function Layout() {
     const fetchStatus = async () => {
       try {
         const s = await api.getServerStatus();
-        if (Date.now() - lastSocketUpdate.current > 3000) {
+        if (Date.now() - lastSocketUpdate.current > 5000) {
           setServerRunning(s.running);
           setServerStarting(s.starting);
         }
-      } catch {}
+        setInitialStatusLoaded(true);
+      } catch {
+        // Socket will update status when connected
+      }
     };
     fetchStatus();
-    const interval = setInterval(fetchStatus, 5000);
+    const interval = setInterval(fetchStatus, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -139,7 +143,15 @@ export default function Layout() {
       setServerRunning(data.running);
       setServerStarting(data.starting || false);
     });
-    return () => { socket.off('server:status'); };
+    socket.on('server:update', (data: any) => {
+      lastSocketUpdate.current = Date.now();
+      setServerRunning(data.running);
+      setServerStarting(data.starting || false);
+    });
+    return () => {
+      socket.off('server:status');
+      socket.off('server:update');
+    };
   }, [socket]);
 
   const handleServerAction = async (action: 'start' | 'stop' | 'restart') => {

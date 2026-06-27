@@ -75,8 +75,8 @@ export default function Plugins() {
     if (!marketplaceSearch) return;
     setLoadingModrinth(true);
     try {
-      const { data } = await api.get(`/marketplace/search?q=${encodeURIComponent(marketplaceSearch)}`);
-      setModrinthResults(data.hits || []);
+      const result = await api.get(`/marketplace/search?q=${encodeURIComponent(marketplaceSearch)}`);
+      setModrinthResults(result.hits || []);
     } catch (err) {
       toast.error('Failed to search Modrinth');
     } finally {

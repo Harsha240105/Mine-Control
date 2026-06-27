@@ -11,6 +11,29 @@ router.get('/', authMiddleware, (_req: AuthRequest, res) => {
   res.json(players);
 });
 
+// Banned players list (MUST be before /:id to avoid route capture)
+router.get('/banned', authMiddleware, (_req: AuthRequest, res) => {
+  const db = getDatabase();
+  const banned = db.prepare('SELECT * FROM banned_players ORDER BY banned_at DESC').all();
+  res.json(banned);
+});
+
+// Chat log (MUST be before /:id to avoid route capture)
+router.get('/chat', authMiddleware, (req: AuthRequest, res) => {
+  const db = getDatabase();
+  const limit = parseInt(req.query.limit as string) || 50;
+  const chat = db.prepare('SELECT * FROM chat_log ORDER BY timestamp DESC LIMIT ?').all(limit);
+  res.json(chat.reverse());
+});
+
+// Roles (MUST be before /:id to avoid route capture)
+router.get('/roles', authMiddleware, (_req: AuthRequest, res) => {
+  const db = getDatabase();
+  const roles = db.prepare('SELECT * FROM roles ORDER BY level DESC').all();
+  const parsed = roles.map((r: any) => ({ ...r, permissions: JSON.parse(r.permissions) }));
+  res.json(parsed);
+});
+
 router.get('/:id', authMiddleware, (req: AuthRequest, res) => {
   const db = getDatabase();
   const player = db.prepare('SELECT * FROM players WHERE id = ? OR username = ?').get(req.params.id, req.params.id);
@@ -234,27 +257,30 @@ router.delete('/whitelist/:username', authMiddleware, requirePermission('whiteli
   res.json({ success: true });
 });
 
-// Banned players list
-router.get('/banned', authMiddleware, (_req: AuthRequest, res) => {
+// Temp ban
+router.post('/:id/temp-ban', authMiddleware, requirePermission('player.ban'), (req: AuthRequest, res) => {
+  const { duration, reason } = req.body;
   const db = getDatabase();
-  const banned = db.prepare('SELECT * FROM banned_players ORDER BY banned_at DESC').all();
-  res.json(banned);
-});
+  const player = db.prepare('SELECT * FROM players WHERE id = ? OR username = ?').get(req.params.id, req.params.id) as any;
+  if (!player) {
+    return res.status(404).json({ error: 'Player not found' });
+  }
 
-// Chat log
-router.get('/chat', authMiddleware, (req: AuthRequest, res) => {
-  const db = getDatabase();
-  const limit = parseInt(req.query.limit as string) || 50;
-  const chat = db.prepare('SELECT * FROM chat_log ORDER BY timestamp DESC LIMIT ?').all(limit);
-  res.json(chat.reverse());
-});
+  db.prepare('UPDATE players SET status = ? WHERE id = ?').run('banned', player.id);
 
-// Roles
-router.get('/roles', authMiddleware, (_req: AuthRequest, res) => {
-  const db = getDatabase();
-  const roles = db.prepare('SELECT * FROM roles ORDER BY level DESC').all();
-  const parsed = roles.map((r: any) => ({ ...r, permissions: JSON.parse(r.permissions) }));
-  res.json(parsed);
+  const bannedPlayer = {
+    id: uuidv4(),
+    username: player.username,
+    uuid: player.uuid,
+    reason: `${reason || 'Temporarily banned'} (Duration: ${duration || 'permanent'})`,
+    banned_by: req.user?.username || 'unknown',
+    banned_at: new Date().toISOString(),
+  };
+  db.prepare(
+    'INSERT INTO banned_players (id, username, uuid, reason, banned_by, banned_at) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(...Object.values(bannedPlayer));
+
+  res.json({ success: true, message: `${player.username} has been temporarily banned` });
 });
 
 router.put('/roles/:name', authMiddleware, requirePermission('permissions.manage'), (req: AuthRequest, res) => {

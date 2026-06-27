@@ -7,7 +7,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.39-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.40-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -16,10 +16,10 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 ## 📊 Project Completion Summary
 *This section is dynamically updated by the development team after every feature sprint.*
 
-* **Overall Progress:** 92% Completed
+* **Overall Progress:** 94% Completed
 * **Current Sprint Phase:** Phase 3 (Core Stabilization & UX Overhaul)
 * **Target Deadline:** July 10, 2026
-* **Last Updated:** June 26, 2026
+* **Last Updated:** June 27, 2026
 
 ### ✅ Completed Features
 - [x] Initial Electron window configuration wrapper.
@@ -36,11 +36,11 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 - [x] **Safe App Environment Fix**: Resolved unhandled `ReferenceError: Cpu is not defined` crash on launch. Implemented `ErrorBoundary` for application-wide crash resilience and updated software tab data maps to resolve `mojangVersions` errors.
 
 ### ⏳ Current Focus / Active Task
-- Continuous state machine hardening and edge-case error recovery.
 - Cross-platform testing for Electron builds and auto-updater.
+- Plugin marketplace integration with Hangar and Modrinth.
 
 ### ❌ Known Bugs & Active Blockers
-*(No active blockers! The state machine, Java auto-detection, and Socket.IO error propagation have been fully resolved in v1.0.38.)*
+*(No active blockers! Backend communication, Socket.IO, route ordering, and Playit.gg tunnel UX fixed in v1.0.40.)*
 
 ---
 
@@ -63,7 +63,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 
 ## 📥 Download
 
-Latest version: **v1.0.39** — [Auto-updates from within the app]
+Latest version: **v1.0.40** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -360,9 +360,15 @@ The app checks GitHub for new releases on startup. When an update is found:
 
 ## 📋 Release History
 
-### v1.0.39
-- **Java 25 Support** — Confirmed compatibility with JDK 25 (class version 69.0). The `resolveJava()` auto-detection now correctly finds Java 25 installations from Eclipse Adoptium, Temurin, and standard paths. Servers using Fabric 1.21.4+ (which require Java 25 for the `net/minecraft/bundler/Main` class) are now fully supported.
-- **Updated documentation and version badges** for v1.0.39 release.
+### v1.0.40 — Backend Communication Repair
+- **Fixed `/api/players/banned` returning 404** — Route ordering bug fixed: moved `/banned`, `/chat`, and `/roles` routes before the `/:id` catch-all route in `players.ts`. Also added missing `temp-ban` route.
+- **Socket.IO Reconnection & Error Handling** — Frontend `useSocket` hook now logs connection errors, implements exponential backoff reconnection, and exposes error state. Server-side Socket.IO now logs engine errors and emits `players:update`, `server:update`, and `console:update` events.
+- **Fixed Playit.gg Tunnel Click-Jacking** — Removed click-to-toggle from the entire Playit.gg card, keeping toggle only on the chevron button. Added `stopPropagation` on the config panel so clicking input fields or Save button no longer closes the panel.
+- **Fixed Plugins Marketplace Search** — Fixed response destructuring bug where `{ data }` was expected but Modrinth API returns `{ hits }`.
+- **API Request Timeouts** — Added 15-second AbortController timeout to all API requests to prevent infinite loading states.
+- **Backend Stability** — Socket.IO server now properly handles connection errors with logging. Added `players:update` and `server:update` socket events for real-time telemetry.
+- **Dashboard Error State** — Dashboard now shows a clear "Backend Unavailable" message with retry button when server cannot be reached, instead of infinite spinner.
+- **Updated documentation and version badges** for v1.0.40 release.
 
 ### v1.0.38
 - **Complete State Machine Rewrite** — The Minecraft server process manager (`minecraftServer.ts`) has been fully rewritten with a proper 5-state lifecycle (`STOPPED → STARTING → RUNNING → STOPPING → STOPPED`, with `FAILED` for error states). All old boolean `this.running`/`this.starting` flags have been removed. State transitions are now atomic, emit `server:state` events via Socket.IO, and are reflected in real-time on the Dashboard.

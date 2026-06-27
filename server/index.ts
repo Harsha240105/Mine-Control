@@ -40,6 +40,14 @@ const io = new SocketIOServer(server, {
     origin: ['http://localhost:5173', 'http://localhost:3001', 'file://'],
     methods: ['GET', 'POST'],
   },
+  connectionStateRecovery: {
+    maxDisconnectionDuration: 120000,
+  },
+});
+
+// Log Socket.IO errors
+io.engine.on('connection_error', (err) => {
+  console.error('[Socket.IO] Connection error:', err.message || err.code);
 });
 
 const PORT = process.env.PORT || 3001;
@@ -120,9 +128,45 @@ if (clientPath) {
   });
 }
 
+// Helper: emit full player list
+function emitPlayersUpdate() {
+  try {
+    const db = getDatabase();
+    const players = db.prepare('SELECT * FROM players ORDER BY last_login DESC').all();
+    io.emit('players:update', players);
+  } catch (e) {
+    // ignore
+  }
+}
+
+// Helper: emit full server status
+function emitServerUpdate() {
+  try {
+    const db = getDatabase();
+    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+    const config = minecraftServer.getConfig();
+    const onlinePlayers = db.prepare('SELECT COUNT(*) as count FROM players WHERE status = ?').get('online') as any;
+    io.emit('server:update', {
+      running: minecraftServer.isRunning,
+      starting: minecraftServer.isStarting,
+      state: minecraftServer.state,
+      onlinePlayers: minecraftServer.isRunning ? (onlinePlayers?.count || 0) : null,
+      maxPlayers: config.maxPlayers,
+      tps: 20.0,
+    });
+  } catch (e) {
+    // ignore
+  }
+}
+
 // Socket.IO
 io.on('connection', (socket) => {
-  console.log(`Client connected: ${socket.id}`);
+  console.log(`[Socket] Client connected: ${socket.id}`);
+
+  // Send initial state to newly connected clients
+  socket.emit('server:status', { running: minecraftServer.isRunning, starting: minecraftServer.isStarting, state: minecraftServer.state });
+  emitPlayersUpdate();
+  emitServerUpdate();
 
   socket.on('authenticate', (token: string) => {
     try {
@@ -134,8 +178,8 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('disconnect', () => {
-    console.log(`Client disconnected: ${socket.id}`);
+  socket.on('disconnect', (reason) => {
+    console.log(`[Socket] Client disconnected: ${socket.id} (${reason})`);
   });
 });
 
@@ -143,18 +187,22 @@ io.on('connection', (socket) => {
 minecraftServer.on('server:state', (state: string) => {
   io.emit('server:state', state);
   io.emit('server:status', { running: state === 'running', starting: state === 'starting' || state === 'stopping' });
+  emitServerUpdate();
 });
 
 minecraftServer.on('server:output', (data: string) => {
   io.emit('server:output', data);
+  io.emit('console:update', data);
 });
 
 minecraftServer.on('player:join', (username: string) => {
   io.emit('player:join', username);
+  emitPlayersUpdate();
 });
 
 minecraftServer.on('player:leave', (username: string) => {
   io.emit('player:leave', username);
+  emitPlayersUpdate();
 });
 
 minecraftServer.on('player:chat', (username: string, message: string) => {
@@ -183,6 +231,7 @@ minecraftServer.on('server:crashed', (error: string) => {
 
 minecraftServer.on('stats:update', (stats) => {
   io.emit('stats:update', stats);
+  emitServerUpdate();
 });
 
 // Scheduled tasks

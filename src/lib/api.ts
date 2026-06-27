@@ -1,4 +1,5 @@
 const API_BASE = '/api';
+const REQUEST_TIMEOUT = 15000;
 
 async function request<T>(
   endpoint: string,
@@ -15,17 +16,30 @@ async function request<T>(
     headers['Authorization'] = `Bearer ${token}`;
   }
 
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(error.error || `Request failed: ${res.status}`);
+  try {
+    const res = await fetch(`${API_BASE}${endpoint}`, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(error.error || `Request failed: ${res.status}`);
+    }
+
+    return res.json();
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      throw new Error('Request timed out - server may be unavailable');
+    }
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return res.json();
 }
 
 export const api = {

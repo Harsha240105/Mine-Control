@@ -107,11 +107,17 @@ export default function Dashboard() {
   const formatTempStr = React.useCallback(() => Math.floor(mockTemp * 15 + 40) + '°C', [mockTemp]);
 
   useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (connecting) {
+        setConnecting(false);
+      }
+    }, 10000);
     fetchStatus();
     fetchStats();
     const interval = setInterval(fetchStatus, 5000);
     return () => {
       clearInterval(interval);
+      clearTimeout(timeoutId);
     };
   }, []);
 
@@ -249,8 +255,20 @@ export default function Dashboard() {
   if (!status) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-center">
-          <p className="text-gray-400 text-sm">Unable to connect to server. Retrying...</p>
+        <div className="text-center space-y-3">
+          <div className="w-12 h-12 mx-auto rounded-full bg-red-500/10 flex items-center justify-center">
+            <Server className="w-6 h-6 text-red-400" />
+          </div>
+          <div>
+            <p className="text-gray-300 text-sm font-medium">Backend Unavailable</p>
+            <p className="text-gray-500 text-xs mt-1">Cannot reach the server API. Make sure the backend is running on port 3001.</p>
+          </div>
+          <button
+            onClick={() => { setConnecting(true); fetchStatus(); }}
+            className="btn-primary text-xs"
+          >
+            Retry Connection
+          </button>
         </div>
       </div>
     );
