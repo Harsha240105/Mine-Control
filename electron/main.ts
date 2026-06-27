@@ -54,9 +54,10 @@ function setupAutoUpdater() {
   autoUpdater.on('error', (err) => {
     console.error('AutoUpdater error:', err);
     const msg = (err?.message || err?.toString() || 'Unknown error').toLowerCase();
+    console.error('[Updater] Raw error:', err?.message || err?.toString());
     let userMsg: string;
     if (msg.includes('404') || msg.includes('not found') || msg.includes('no published') || msg.includes('no releases')) {
-      userMsg = 'No update channel configured. Updates will be available when a new version is published with installer assets.';
+      userMsg = 'No updates available yet. A new version may have been tagged but installer assets are still being built by GitHub Actions. Check back in a few minutes.';
     } else if (msg.includes('net_err') || msg.includes('econnrefused') || msg.includes('enotfound') || msg.includes('timeout') || msg.includes('econnreset') || msg.includes('econnaborted')) {
       userMsg = 'Unable to reach update server. Check your internet connection.';
     } else if (msg.includes('rate limit') || msg.includes('403') || msg.includes('unauthorized') || msg.includes('401')) {
