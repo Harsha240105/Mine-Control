@@ -1,6 +1,8 @@
 interface ElectronAPI {
   getAppPath: () => Promise<string>;
   getDataPath: () => Promise<string>;
+  getUserDataPath: () => Promise<string>;
+  getOldDataPath: () => Promise<string>;
   selectDirectory: () => Promise<string | null>;
   selectFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>;
   onNavigate: (callback: (path: string) => void) => void;
@@ -14,6 +16,8 @@ interface ElectronAPI {
   onUpdateProgress: (callback: (percent: number) => void) => void;
   onUpdateDownloaded: (callback: () => void) => void;
   onUpdateError: (callback: (message: string) => void) => void;
+  uninstallAppOnly: () => Promise<{ success: boolean; error?: string }>;
+  uninstallCompleteRemoval: () => Promise<{ success: boolean; error?: string }>;
   removeAllListeners: (channel: string) => void;
 }
 

@@ -4,6 +4,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getVersion: () => ipcRenderer.invoke('get-version'),
   getAppPath: () => ipcRenderer.invoke('get-app-path'),
   getDataPath: () => ipcRenderer.invoke('get-data-path'),
+  getUserDataPath: () => ipcRenderer.invoke('get-user-data-path'),
+  getOldDataPath: () => ipcRenderer.invoke('get-old-data-path'),
   selectDirectory: () => ipcRenderer.invoke('select-directory'),
   selectFile: (filters?: { name: string; extensions: string[] }[]) =>
     ipcRenderer.invoke('select-file', filters),
@@ -41,6 +43,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateError: (callback: (message: string) => void) => {
     ipcRenderer.on('update:error', (_event, message: string) => callback(message));
   },
+
+  // Uninstall
+  uninstallAppOnly: () => ipcRenderer.invoke('uninstall-app-only'),
+  uninstallCompleteRemoval: () => ipcRenderer.invoke('uninstall-complete-removal'),
 
   // Remove listeners
   removeAllListeners: (channel: string) => {

@@ -140,6 +140,39 @@ export default function Settings() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteConfirmName, setDeleteConfirmName] = useState('');
 
+  const handleUninstallApp = async () => {
+    const confirmed = window.confirm(
+      'Uninstall MineControl OS?\n\nApp binaries will be removed. Your servers, worlds, and data will remain on this computer.'
+    );
+    if (!confirmed) return;
+    try {
+      const result = await window.electronAPI.uninstallAppOnly();
+      if (!result.success) {
+        toast.error(result.error || 'Failed to launch uninstaller');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to uninstall');
+    }
+  };
+
+  const handleCompleteRemoval = async () => {
+    const typed = window.prompt(
+      'This will permanently delete ALL MineControl OS data including servers, worlds, backups, and settings.\n\nThis action cannot be undone.\n\nType "DELETE" to confirm:'
+    );
+    if (typed !== 'DELETE') {
+      toast.error('You must type "DELETE" to confirm complete removal.');
+      return;
+    }
+    try {
+      const result = await window.electronAPI.uninstallCompleteRemoval();
+      if (!result.success) {
+        toast.error(result.error || 'Failed to launch uninstaller');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to uninstall');
+    }
+  };
+
   const handleDeleteServer = async () => {
     if (!activeServerId) return;
     if (deleteConfirmName !== serverName) {
@@ -507,7 +540,7 @@ export default function Settings() {
           <AlertCircle size={16} />
           Danger Zone
         </h3>
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h4 className="text-sm font-medium text-gray-200">Delete Server</h4>
             <p className="text-xs text-gray-500 mt-1">Permanently delete this server and all its files.</p>
@@ -523,6 +556,37 @@ export default function Settings() {
             Delete Server
           </button>
         </div>
+        {window.electronAPI && (
+          <>
+            <div className="border-t border-red-500/10 my-3" />
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h4 className="text-sm font-medium text-gray-200">Uninstall App</h4>
+                <p className="text-xs text-gray-500 mt-1">Remove application binaries only. Your servers, worlds, and data will remain.</p>
+              </div>
+              <button
+                onClick={handleUninstallApp}
+                className="px-4 py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-lg text-sm transition-colors border border-orange-500/20 flex items-center gap-2"
+              >
+                <Trash2 size={16} />
+                Uninstall App
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="text-sm font-medium text-gray-200">Complete Removal</h4>
+                <p className="text-xs text-gray-500 mt-1">Delete ALL MineControl OS data including servers, worlds, and backups. Cannot be undone.</p>
+              </div>
+              <button
+                onClick={handleCompleteRemoval}
+                className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors border border-red-500/20 flex items-center gap-2"
+              >
+                <Trash2 size={16} />
+                Remove All Data
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Delete Confirmation Modal */}

@@ -7,7 +7,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.45-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.46-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
 </p>
 
@@ -16,7 +16,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 ## 📊 Project Completion Summary
 *This section is dynamically updated by the development team after every feature sprint.*
 
-* **Overall Progress:** 94% Completed
+* **Overall Progress:** 96% Completed
 * **Current Sprint Phase:** Phase 3 (Core Stabilization & UX Overhaul)
 * **Target Deadline:** July 10, 2026
 * **Last Updated:** June 27, 2026
@@ -64,7 +64,7 @@ An automated, local desktop management ecosystem for Minecraft server runtimes, 
 
 ## 📥 Download
 
-Latest version: **v1.0.45** — [Auto-updates from within the app]
+Latest version: **v1.0.46** — [Auto-updates from within the app]
 
 | Platform | Download |
 |----------|----------|
@@ -360,6 +360,15 @@ The app checks GitHub for new releases on startup. When an update is found:
 ---
 
 ## 📋 Release History
+
+### v1.0.46 — Persistent Data Architecture & Safe Update System
+- **Data Directory Separation** — Application binaries and user data are now completely separated. App files remain in the installation directory (`Program Files` / `AppData/Local/Programs`), while all user data (servers, worlds, databases, backups, plugins, mods, player data, logs, settings) is stored in Electron's official `userData` directory (`AppData/Roaming/MineControl OS` on Windows).
+- **Automatic Data Migration** — On first launch after upgrade, the app detects old data stored alongside application binaries and automatically migrates it to the new persistent directory. No data is overwritten without confirmation. If migration fails, original data is left untouched.
+- **Safe Schema Migrations** — Database now uses `schema_version` table for versioned migrations. Schema is only upgraded when needed, never recreated. Existing user records are never deleted.
+- **Auto-Updater Backup** — Before downloading an update, the app automatically backs up `minecontrol.db` and `settings.json` to an `update-backups/` directory inside the user data folder. Old backups are pruned (3 most recent kept).
+- **Two-Mode Uninstaller** — Settings page includes two uninstall options: "Uninstall App" removes only application binaries while preserving all server data; "Complete Removal" requires typing "DELETE" to confirm and wipes the entire user data directory before launching the uninstaller.
+- **Uninstaller Preserves Data** — `electron-builder.yml` configured with `deleteAppDataOnUninstall: false` so the default NSIS uninstaller never touches user data.
+- **Updated documentation and version badges** for v1.0.46 release.
 
 ### v1.0.45 — Local Data Persistence & Storage
 - **UI State Persistence Engine** — New `ui_state` database table (key/value with timestamp) stores UI preferences server-side. New `/api/ui/state` endpoints for saving and loading UI state across app restarts.

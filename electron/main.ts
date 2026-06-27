@@ -1,7 +1,9 @@
-import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, Tray, Menu, nativeImage, ipcMain, dialog, shell } from 'electron';
 import path from 'path';
+import fs from 'fs';
 import net from 'net';
 import { autoUpdater } from 'electron-updater';
+import { migrateData, backupCriticalFiles, cleanupOldBackups, MigrationReport } from './migration';
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -69,9 +71,24 @@ async function createWindow() {
   const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
 
   if (!isDev) {
-    const appRoot = path.join(app.getPath('exe'), '..', 'MineControl OS');
-    process.env.APP_DATA_PATH = appRoot;
-    process.env.MINECRAFT_DIR = path.join(appRoot, 'servers', 'default');
+    const userDataPath = app.getPath('userData');
+    const oldDataPath = path.join(path.dirname(app.getPath('exe')), 'MineControl OS');
+
+    process.env.APP_DATA_PATH = userDataPath;
+    process.env.MINECRAFT_DIR = path.join(userDataPath, 'servers', 'default');
+
+    // Run data migration from old location to new persistent location
+    if (fs.existsSync(oldDataPath)) {
+      console.log('[Migration] Detected old data at:', oldDataPath);
+      console.log('[Migration] Migrating to:', userDataPath);
+      const report: MigrationReport = migrateData(oldDataPath, userDataPath);
+      if (report.completed) {
+        console.log('[Migration] Complete:', report.moved.length, 'items moved,', report.skipped.length, 'skipped');
+      } else {
+        console.error('[Migration] Failed:', report.errors);
+      }
+    }
+
     try {
       require(path.join(__dirname, '../server/index.js'));
       await waitForPort(3001);
@@ -124,7 +141,7 @@ async function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      sandbox: true, // May conflict with preload; preload runs with limited Node.js APIs when sandbox is enabled
+      sandbox: true,
       webSecurity: true,
       preload: path.join(__dirname, 'preload.js'),
     },
@@ -229,7 +246,7 @@ async function createWindow() {
         { type: 'separator' },
         {
           label: 'Documentation',
-          click: () => require('electron').shell.openExternal('https://github.com/minecontrol-os/docs'),
+          click: () => shell.openExternal('https://github.com/minecontrol-os/docs'),
         },
         {
           label: 'Feedback Center',
@@ -311,6 +328,14 @@ ipcMain.handle('get-data-path', () => {
   return path.join(app.getPath('userData'), 'data');
 });
 
+ipcMain.handle('get-user-data-path', () => {
+  return app.getPath('userData');
+});
+
+ipcMain.handle('get-old-data-path', () => {
+  return path.join(path.dirname(app.getPath('exe')), 'MineControl OS');
+});
+
 ipcMain.handle('select-directory', async () => {
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory'],
@@ -338,6 +363,14 @@ ipcMain.handle('check-for-updates', () => {
 });
 
 ipcMain.handle('download-update', () => {
+  const userDataPath = app.getPath('userData');
+  console.log('[Updater] Backing up critical files before update...');
+  const backupDir = backupCriticalFiles(userDataPath);
+  if (backupDir) {
+    console.log('[Updater] Backup saved to:', backupDir);
+  } else {
+    console.warn('[Updater] Backup failed, proceeding with update anyway');
+  }
   autoUpdater.downloadUpdate().catch((err) => {
     console.error('Failed to download update:', err);
   });
@@ -345,4 +378,56 @@ ipcMain.handle('download-update', () => {
 
 ipcMain.handle('install-update', () => {
   autoUpdater.quitAndInstall();
+});
+
+// Uninstall IPC handlers
+ipcMain.handle('uninstall-app-only', async () => {
+  const { execSync } = require('child_process');
+  const exePath = app.getPath('exe');
+  const installDir = path.dirname(path.dirname(exePath));
+  const uninstallPath = path.join(installDir, 'Uninstall MineControl OS.exe');
+
+  if (fs.existsSync(uninstallPath)) {
+    try {
+      execSync(`"${uninstallPath}"`, { detached: true });
+      app.quit();
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  }
+  return { success: false, error: 'Uninstaller not found at ' + uninstallPath };
+});
+
+ipcMain.handle('uninstall-complete-removal', async () => {
+  const userDataPath = app.getPath('userData');
+  const oldDataPath = path.join(path.dirname(app.getPath('exe')), 'MineControl OS');
+
+  try {
+    if (fs.existsSync(userDataPath)) {
+      fs.rmSync(userDataPath, { recursive: true, force: true });
+    }
+    if (fs.existsSync(oldDataPath)) {
+      fs.rmSync(oldDataPath, { recursive: true, force: true });
+    }
+  } catch (e: any) {
+    console.error('[Uninstall] Failed to remove user data:', e.message);
+    return { success: false, error: e.message };
+  }
+
+  const { execSync } = require('child_process');
+  const exePath = app.getPath('exe');
+  const installDir = path.dirname(path.dirname(exePath));
+  const uninstallPath = path.join(installDir, 'Uninstall MineControl OS.exe');
+
+  if (fs.existsSync(uninstallPath)) {
+    try {
+      execSync(`"${uninstallPath}"`, { detached: true });
+      app.quit();
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message };
+    }
+  }
+  return { success: false, error: 'Uninstaller not found at ' + uninstallPath };
 });

@@ -29,7 +29,13 @@ export function getDatabase(): Database.Database {
 }
 
 function initializeSchema() {
-  db.exec(`
+  db.exec(`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);`);
+
+  const currentVersion = (db.prepare('SELECT MAX(version) as v FROM schema_version').get() as any)?.v || 0;
+  if (currentVersion >= 2) return;
+
+  if (currentVersion < 1) {
+    db.exec(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       username TEXT UNIQUE NOT NULL,
@@ -288,71 +294,77 @@ function initializeSchema() {
     );
   `);
 
-  // Migrate legacy server_config to a named server entry
-  migrateDefaultServer();
+    // Add version columns to existing servers
+    const serverCols = db.prepare("PRAGMA table_info('servers')").all().map((r: any) => r.name);
+    if (!serverCols.includes('version')) db.exec("ALTER TABLE servers ADD COLUMN version TEXT DEFAULT ''");
+    if (!serverCols.includes('version_source')) db.exec("ALTER TABLE servers ADD COLUMN version_source TEXT DEFAULT ''");
+    if (!serverCols.includes('seed')) db.exec("ALTER TABLE servers ADD COLUMN seed TEXT DEFAULT ''");
+    if (!serverCols.includes('network')) db.exec("ALTER TABLE servers ADD COLUMN network TEXT DEFAULT 'local'");
+    db.exec("UPDATE servers SET version = REPLACE(REPLACE(REPLACE(jarFile, 'paper-', ''), 'vanilla-', ''), '.jar', ''), version_source = CASE WHEN jarFile LIKE 'paper-%' THEN 'PaperMC' WHEN jarFile LIKE 'vanilla-%' THEN 'Mojang' ELSE '' END WHERE version = '' OR version IS NULL");
 
-  // Add version columns to existing servers (schema migration)
-  try { db.exec('ALTER TABLE servers ADD COLUMN version TEXT DEFAULT \'\''); } catch {}
-  try { db.exec('ALTER TABLE servers ADD COLUMN version_source TEXT DEFAULT \'\''); } catch {}
-  try { db.exec('ALTER TABLE servers ADD COLUMN seed TEXT DEFAULT \'\''); } catch {}
-  try { db.exec('ALTER TABLE servers ADD COLUMN network TEXT DEFAULT \'local\''); } catch {}
-  // Populate version/source from jarFile for existing rows
-  db.exec("UPDATE servers SET version = REPLACE(REPLACE(REPLACE(jarFile, 'paper-', ''), 'vanilla-', ''), '.jar', ''), version_source = CASE WHEN jarFile LIKE 'paper-%' THEN 'PaperMC' WHEN jarFile LIKE 'vanilla-%' THEN 'Mojang' ELSE '' END WHERE version = '' OR version IS NULL");
+    // Add server_id to legacy tables
+    const backupCols = db.prepare("PRAGMA table_info('backups')").all().map((r: any) => r.name);
+    if (!backupCols.includes('server_id')) db.exec("ALTER TABLE backups ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE");
+    const worldCols = db.prepare("PRAGMA table_info('worlds')").all().map((r: any) => r.name);
+    if (!worldCols.includes('server_id')) db.exec("ALTER TABLE worlds ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE");
+    const chatCols = db.prepare("PRAGMA table_info('chat_log')").all().map((r: any) => r.name);
+    if (!chatCols.includes('server_id')) db.exec("ALTER TABLE chat_log ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE");
 
-  // Migration for adding server_id to legacy tables
-  try { db.exec('ALTER TABLE backups ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE'); } catch {}
-  try { db.exec('ALTER TABLE worlds ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE'); } catch {}
-  try { db.exec('ALTER TABLE chat_log ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE'); } catch {}
+    // Add player tracking columns
+    const playerCols = db.prepare("PRAGMA table_info('players')").all().map((r: any) => r.name);
+    if (!playerCols.includes('health')) db.exec("ALTER TABLE players ADD COLUMN health REAL DEFAULT 20");
+    if (!playerCols.includes('food_level')) db.exec("ALTER TABLE players ADD COLUMN food_level INTEGER DEFAULT 20");
+    if (!playerCols.includes('xp_level')) db.exec("ALTER TABLE players ADD COLUMN xp_level INTEGER DEFAULT 0");
+    if (!playerCols.includes('xp_progress')) db.exec("ALTER TABLE players ADD COLUMN xp_progress REAL DEFAULT 0");
+    if (!playerCols.includes('dimension')) db.exec("ALTER TABLE players ADD COLUMN dimension TEXT DEFAULT ''");
+    if (!playerCols.includes('pos_x')) db.exec("ALTER TABLE players ADD COLUMN pos_x REAL DEFAULT 0");
+    if (!playerCols.includes('pos_y')) db.exec("ALTER TABLE players ADD COLUMN pos_y REAL DEFAULT 0");
+    if (!playerCols.includes('pos_z')) db.exec("ALTER TABLE players ADD COLUMN pos_z REAL DEFAULT 0");
+    if (!playerCols.includes('world_name')) db.exec("ALTER TABLE players ADD COLUMN world_name TEXT DEFAULT 'world'");
+    if (!playerCols.includes('death_count')) db.exec("ALTER TABLE players ADD COLUMN death_count INTEGER DEFAULT 0");
+    if (!playerCols.includes('kills')) db.exec("ALTER TABLE players ADD COLUMN kills INTEGER DEFAULT 0");
+    if (!playerCols.includes('first_join')) db.exec("ALTER TABLE players ADD COLUMN first_join TEXT");
+    if (!playerCols.includes('last_disconnect')) db.exec("ALTER TABLE players ADD COLUMN last_disconnect TEXT");
+    if (!playerCols.includes('inventory')) db.exec("ALTER TABLE players ADD COLUMN inventory TEXT DEFAULT '[]'");
+    if (!playerCols.includes('armor')) db.exec("ALTER TABLE players ADD COLUMN armor TEXT DEFAULT '[]'");
+    if (!playerCols.includes('ender_chest')) db.exec("ALTER TABLE players ADD COLUMN ender_chest TEXT DEFAULT '[]'");
+    if (!playerCols.includes('advancements')) db.exec("ALTER TABLE players ADD COLUMN advancements TEXT DEFAULT '{}'");
+    if (!playerCols.includes('statistics')) db.exec("ALTER TABLE players ADD COLUMN statistics TEXT DEFAULT '{}'");
 
-  // Seed default roles if they don't exist
-  const defaultRoles = [
-    { name: 'Owner', level: 100, color: '#ff5555', permissions: ['*'] },
-    { name: 'Admin', level: 80, color: '#ff9900', permissions: ['server.start', 'server.stop', 'server.restart', 'backup.create', 'backup.restore', 'player.ban', 'player.unban', 'player.kick', 'player.mute', 'whitelist.manage', 'plugin.manage', 'world.manage', 'permissions.manage', 'console.send'] },
-    { name: 'Moderator', level: 60, color: '#55ff55', permissions: ['player.kick', 'player.mute', 'player.ban', 'console.read', 'chat.moderate'] },
-    { name: 'Trusted Member', level: 40, color: '#55ffff', permissions: ['server.status', 'console.read'] },
-    { name: 'Member', level: 20, color: '#aaaaaa', permissions: ['server.status'] },
-    { name: 'Guest', level: 0, color: '#555555', permissions: [] },
-  ];
+    // Seed default roles if they don't exist
+    const defaultRoles = [
+      { name: 'Owner', level: 100, color: '#ff5555', permissions: ['*'] },
+      { name: 'Admin', level: 80, color: '#ff9900', permissions: ['server.start', 'server.stop', 'server.restart', 'backup.create', 'backup.restore', 'player.ban', 'player.unban', 'player.kick', 'player.mute', 'whitelist.manage', 'plugin.manage', 'world.manage', 'permissions.manage', 'console.send'] },
+      { name: 'Moderator', level: 60, color: '#55ff55', permissions: ['player.kick', 'player.mute', 'player.ban', 'console.read', 'chat.moderate'] },
+      { name: 'Trusted Member', level: 40, color: '#55ffff', permissions: ['server.status', 'console.read'] },
+      { name: 'Member', level: 20, color: '#aaaaaa', permissions: ['server.status'] },
+      { name: 'Guest', level: 0, color: '#555555', permissions: [] },
+    ];
+    const insertRole = db.prepare('INSERT OR IGNORE INTO roles (name, level, color, permissions) VALUES (?, ?, ?, ?)');
+    for (const role of defaultRoles) {
+      insertRole.run(role.name, role.level, role.color, JSON.stringify(role.permissions));
+    }
 
-  const insertRole = db.prepare(
-    'INSERT OR IGNORE INTO roles (name, level, color, permissions) VALUES (?, ?, ?, ?)'
-  );
-  for (const role of defaultRoles) {
-    insertRole.run(role.name, role.level, role.color, JSON.stringify(role.permissions));
+    // Migrate legacy server_config to a named server entry
+    migrateDefaultServer();
+
+    // Fix existing users with lowercase roles
+    db.prepare("UPDATE users SET role = 'Owner' WHERE role = 'owner'").run();
+    db.prepare("UPDATE users SET role = 'Admin' WHERE role = 'admin'").run();
+    db.prepare("UPDATE users SET role = 'Moderator' WHERE role = 'moderator'").run();
+
+    // Seed default owner if not exists
+    const existingOwner = db.prepare("SELECT id FROM users WHERE role = 'Owner'").get();
+    if (!existingOwner) {
+      const hash = bcrypt.hashSync('OXK@6126', 10);
+      db.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)').run(uuidv4(), 'owner', hash, 'Owner');
+    }
+
+    db.prepare('INSERT INTO schema_version (version) VALUES (1)').run();
   }
 
-  // Migration: add player tracking columns
-  try { db.exec('ALTER TABLE players ADD COLUMN health REAL DEFAULT 20'); } catch {}
-  try { db.exec('ALTER TABLE players ADD COLUMN food_level INTEGER DEFAULT 20'); } catch {}
-  try { db.exec('ALTER TABLE players ADD COLUMN xp_level INTEGER DEFAULT 0'); } catch {}
-  try { db.exec('ALTER TABLE players ADD COLUMN xp_progress REAL DEFAULT 0'); } catch {}
-  try { db.exec('ALTER TABLE players ADD COLUMN dimension TEXT DEFAULT \'\''); } catch {}
-  try { db.exec('ALTER TABLE players ADD COLUMN pos_x REAL DEFAULT 0'); } catch {}
-  try { db.exec('ALTER TABLE players ADD COLUMN pos_y REAL DEFAULT 0'); } catch {}
-  try { db.exec('ALTER TABLE players ADD COLUMN pos_z REAL DEFAULT 0'); } catch {}
-  try { db.exec('ALTER TABLE players ADD COLUMN world_name TEXT DEFAULT \'world\''); } catch {}
-  try { db.exec('ALTER TABLE players ADD COLUMN death_count INTEGER DEFAULT 0'); } catch {}
-  try { db.exec('ALTER TABLE players ADD COLUMN kills INTEGER DEFAULT 0'); } catch {}
-  try { db.exec('ALTER TABLE players ADD COLUMN first_join TEXT'); } catch {}
-  try { db.exec('ALTER TABLE players ADD COLUMN last_disconnect TEXT'); } catch {}
-  try { db.exec('ALTER TABLE players ADD COLUMN inventory TEXT DEFAULT \'[]\''); } catch {}
-  try { db.exec('ALTER TABLE players ADD COLUMN armor TEXT DEFAULT \'[]\''); } catch {}
-  try { db.exec('ALTER TABLE players ADD COLUMN ender_chest TEXT DEFAULT \'[]\''); } catch {}
-  try { db.exec('ALTER TABLE players ADD COLUMN advancements TEXT DEFAULT \'{}\''); } catch {}
-  try { db.exec('ALTER TABLE players ADD COLUMN statistics TEXT DEFAULT \'{}\''); } catch {}
-
-  // Fix existing users with lowercase roles from previous versions
-  db.prepare("UPDATE users SET role = 'Owner' WHERE role = 'owner'").run();
-  db.prepare("UPDATE users SET role = 'Admin' WHERE role = 'admin'").run();
-  db.prepare("UPDATE users SET role = 'Moderator' WHERE role = 'moderator'").run();
-
-  // Seed default owner if not exists
-  const existingOwner = db.prepare("SELECT id FROM users WHERE role = 'Owner'").get();
-  if (!existingOwner) {
-    const hash = bcrypt.hashSync('OXK@6126', 10);
-    db.prepare(
-      'INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)'
-    ).run(uuidv4(), 'owner', hash, 'Owner');
+  if (currentVersion < 2) {
+    db.prepare('INSERT INTO schema_version (version) VALUES (2)').run();
   }
 }
 
