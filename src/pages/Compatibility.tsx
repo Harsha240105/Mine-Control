@@ -99,6 +99,7 @@ const joinModes: Array<{
   description: string;
   details: string[];
   warning?: string;
+  clients?: Array<{ name: string; supported: boolean; note?: string }>;
 }> = [
   {
     id: 'java_only',
@@ -110,6 +111,10 @@ const joinModes: Array<{
     details: [
       'Works with official Minecraft Java and compatible Java launchers.',
       'Best when every player uses the same Minecraft version as the server.',
+    ],
+    clients: [
+      { name: 'Official Minecraft Java', supported: true },
+      { name: 'TLauncher / Offline', supported: false, note: 'Requires offline mode' },
     ],
   },
   {
@@ -123,6 +128,12 @@ const joinModes: Array<{
       'Installs and configures Geyser and Floodgate when supported.',
       'Supports Android, iOS, Windows Bedrock, Xbox, PlayStation, and Switch where the network setup allows it.',
     ],
+    clients: [
+      { name: 'Official Minecraft Java', supported: true },
+      { name: 'TLauncher / Offline', supported: false, note: 'Requires offline mode' },
+      { name: 'Bedrock (Android/iOS/Win10)', supported: true },
+      { name: 'Bedrock (Console)', supported: false, note: 'Network dependent' },
+    ],
   },
   {
     id: 'premium_only',
@@ -132,8 +143,13 @@ const joinModes: Array<{
     tone: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20',
     description: 'Only authenticated official Java accounts can join.',
     details: [
-      'Enables online-mode authentication.',
+      'Enables online-mode authentication (online-mode=true).',
       'Recommended for public or semi-public Java servers.',
+      'Offline launchers such as TLauncher cannot join in this mode.',
+    ],
+    clients: [
+      { name: 'Official Minecraft Java', supported: true },
+      { name: 'TLauncher / Offline', supported: false, note: 'Blocked by online-mode' },
     ],
   },
   {
@@ -148,6 +164,10 @@ const joinModes: Array<{
       'Names are not verified by Mojang/Microsoft in offline mode.',
     ],
     warning: 'Security warning: offline mode reduces account protection and can allow name spoofing.',
+    clients: [
+      { name: 'Official Minecraft Java', supported: true },
+      { name: 'TLauncher / Offline', supported: true },
+    ],
   },
 ];
 
@@ -328,6 +348,8 @@ export default function Compatibility() {
         </div>
       </section>
 
+      <LauncherCompatibility mode={selectedModeInfo} />
+
       {selectedModeInfo.warning && (
         <div className="card border border-yellow-500/30 bg-yellow-500/5">
           <div className="flex items-start gap-3">
@@ -399,6 +421,30 @@ function Dashboard({ status }: { status: CompatibilityStatus }) {
               {item.label}
             </div>
             <p className="text-sm text-gray-200 leading-relaxed">{item.value}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LauncherCompatibility({ mode }: { mode: typeof joinModes[number] }) {
+  if (!mode.clients || mode.clients.length === 0) return null;
+  return (
+    <div className="card">
+      <h3 className="text-sm font-semibold text-gray-200 mb-1">Launcher Compatibility</h3>
+      <p className="text-xs text-gray-500 mb-4">Which launchers can connect in the selected mode.</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+        {mode.clients.map((client) => (
+          <div key={client.name} className={`rounded-lg border p-3 ${client.supported ? 'border-green-500/20 bg-green-500/5' : 'border-red-500/20 bg-red-500/5'}`}>
+            <div className="flex items-center gap-2 mb-2">
+              <span className={`w-2 h-2 rounded-full ${client.supported ? 'bg-green-500' : 'bg-red-500'}`} />
+              <span className={`text-xs font-medium ${client.supported ? 'text-green-300' : 'text-red-300'}`}>
+                {client.supported ? 'Ready' : 'Not Ready'}
+              </span>
+            </div>
+            <p className="text-sm text-gray-200">{client.name}</p>
+            {client.note && <p className="text-xs text-gray-500 mt-1">{client.note}</p>}
           </div>
         ))}
       </div>

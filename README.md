@@ -1,70 +1,126 @@
-# 🎮 Mine-Control OS
+# MineControl OS
 
-An automated, local desktop management ecosystem for Minecraft server runtimes, featuring an Aternos-inspired management workflow.
+> A self-hosted Minecraft Server Management Platform with a polished desktop experience.
 
 <p align="center">
   <a href="https://github.com/Harsha240105/Mine-Control/releases/latest">
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.46-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.47-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+  </a>
+  <a href="https://github.com/Harsha240105/Mine-Control/blob/main/LICENSE">
+    <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="MIT License"/>
   </a>
 </p>
 
 ---
 
-## 📊 Project Completion Summary
-*This section is dynamically updated by the development team after every feature sprint.*
+## Overview
 
-* **Overall Progress:** 96% Completed
-* **Current Sprint Phase:** Phase 3 (Core Stabilization & UX Overhaul)
-* **Target Deadline:** July 10, 2026
-* **Last Updated:** June 27, 2026
+MineControl OS is a fully offline, desktop-first Minecraft server manager. It wraps Paper, Fabric, NeoForge, and Vanilla servers into a clean Electron app — no cloud dependency, no third-party hosting, just your machine running your server.
 
-### ✅ Completed Features
-- [x] Initial Electron window configuration wrapper.
-- [x] Base Node.js Express server framework setup.
-- [x] Server creation dashboard overhauled into a multi-step Aternos-style wizard.
-- [x] The Ghost Server Bug fixed: Database now populates and triggers a state update via real API calls.
-- [x] Deletion Constraint Fault fixed: SQLite `ON DELETE CASCADE` applied.
-- [x] **Zero-State Server Fix**: Dashboard dynamically redirects to wizard when zero servers are present.
-- [x] **Dynamic Version APIs**: Replaced mock data with real-time Mojang/PaperMC API version fetching.
-- [x] **CRUD Capabilities UI**: Settings tab now supports renaming, online-mode premium toggles, and deletion.
-- [x] **Scheduler Crash Patch**: Fixed fatal UI crash during scheduler unboxing.
-- [x] **Deep Player Analytics**: Engine to parse `.dat` and `.json` files for rich user analytics and player inventory tracking.
-- [x] **Aternos Dashboard Overhaul**: Live animated Speedometers for hardware metrics and a Connected Players panel.
-- [x] **Safe App Environment Fix**: Resolved unhandled `ReferenceError: Cpu is not defined` crash on launch. Implemented `ErrorBoundary` for application-wide crash resilience and updated software tab data maps to resolve `mojangVersions` errors.
+### Three Connection Modes
 
-### ⏳ Current Focus / Active Task
-- Cross-platform testing for Electron builds and auto-updater.
-- Plugin marketplace integration with Hangar and Modrinth.
-- UI improvements for player analytics and inventory viewer.
+**Mode 1 — Same Laptop**  
+MineControl OS + Minecraft on one PC. Connect with `localhost:25565`.
 
-### ❌ Known Bugs & Active Blockers
-*(No active blockers! Server Library, player tracking, TPS parsing, connection verification, Playit status, auto-recovery, and local-first data persistence completed in v1.0.41.)*
+**Mode 2 — Two Laptops (LAN)**  
+Laptop A runs MineControl OS, Laptop B runs Minecraft. Connect using the auto-detected LAN IP (e.g. `192.168.x.x:25565`).
+
+**Mode 3 — Internet**  
+MineControl OS + Playit.gg tunnel or port forwarding. Friends connect using your Playit domain or public IP.
+
+The app automatically detects which mode you're in and recommends the correct connection address.
 
 ---
 
-## 🛠 Target Core Architecture
+## Features
 
-### 1. Frontend Layer
-- **Framework:** React 18, TypeScript, Vite, Tailwind CSS
-- **State Management:** Isolated Context Providers for Socket connections and telemetry tracking.
+### Server Management
+- Create, import, and switch between multiple servers
+- One-click start / stop / restart with proper state machine
+- Auto-restart on crash (max 3 attempts)
+- Port conflict detection and orphan process cleanup
+- EULA auto-accept
+- Java pre-check with auto-detection
 
-### 2. Backend Layer
-- **Runtime:** Node.js, Express, Socket.IO
-- **Database:** SQLite via `better-sqlite3` (Prepared statements enforced)
-- **Process Lifecycle:** Native `child_process.spawn` for intercepting PaperMC, Fabric, and Forge jar streams.
+### Software Support
+- PaperMC — Latest builds via PaperMC API
+- Fabric — Latest loader + API versions
+- NeoForge — Latest recommended builds
+- Vanilla — Official Mojang releases
+- Auto-download server jars on creation
 
-### 3. Desktop Application Environment
-- **Container:** Electron 28 with strict `contextIsolation: true` and secure whitelisted IPC preload bridges.
-- **Resource Boundary:** Configured for low-overhead operation to guarantee stable development testing alongside heavy local Java instances.
+### Connection & Networking
+- **Same Laptop** — `localhost:25565`
+- **LAN** — Auto-detected LAN IP, firewall auto-config
+- **Internet** — Playit.gg tunnel setup and monitoring
+- Connection Wizard auto-detects all methods
+- Minecraft protocol ping for live status verification
+- Windows Firewall auto-configuration
+
+### Player Management
+- Real-time online player tracking
+- Role-based access (Owner / Admin / Moderator / Member / Guest)
+- Ban / Kick / Mute / Temp-Ban
+- Whitelist control
+- Chat log with search
+- Deep player analytics (health, inventory, stats, advancements)
+
+### World Management
+- Create worlds with custom seed, gamemode, difficulty
+- Clone existing worlds
+- Download / Export worlds as `.zip`
+- Import worlds from other servers
+
+### Backups
+- Local-only (no cloud dependency)
+- Auto-backup on configurable interval (default: every hour)
+- Manual one-click backup
+- Restore to any backup point
+- Optional encryption
+
+### Plugins & Mods
+- One-click install popular plugins (LuckPerms, EssentialsX, WorldEdit, etc.)
+- Custom install by URL or `.jar` file
+- Enable / Disable without removing
+- Modrinth marketplace search and install
+
+### Compatibility
+- **Official Minecraft Java** — Full support
+- **TLauncher / Offline Launchers** — Supported in Offline Mode
+- **Bedrock (Java + Bedrock mode)** — Geyser + Floodgate auto-setup
+- **Cross-version** — ViaVersion / ViaBackwards auto-setup
+- Compatibility Manager with launcher-specific status indicators
+
+### Monitoring
+- Live Dashboard with CPU, RAM, TPS, player count
+- 30-minute performance charts
+- Real-time console with log levels and search
+- Live player cards (health, location, ping, gamemode)
+- Connection quality indicators
+
+### Security
+- JWT authentication
+- Password management
+- Audit log for admin actions
+- Two uninstall options (keep data or complete removal)
 
 ---
 
-## 📥 Download
+## Installation
 
-Latest version: **v1.0.46** — [Auto-updates from within the app]
+### Requirements
+
+| Component | Requirement |
+|-----------|-------------|
+| OS | Windows 10/11 (x64), macOS (Intel/Apple Silicon), Linux (x64) |
+| RAM | 2 GB minimum (server RAM is configurable) |
+| Storage | 500 MB for app + variable for servers/worlds |
+| Java | Java 17+ (auto-detected; downloaded if missing) |
+
+### Download
 
 | Platform | Download |
 |----------|----------|
@@ -75,141 +131,196 @@ Latest version: **v1.0.46** — [Auto-updates from within the app]
 
 The desktop app bundles everything — no Node.js, no separate backend. **Install and run.**
 
----
+### Quick Start
 
-## 🚀 Features
-
-### v1.0.24 — New in this release
-- **Missing Dependencies Fix** — Properly saved `prismarine-nbt` and `react-gauge-chart` to package.json to resolve Rollup build failures on GitHub Actions runner.
-- **TypeScript Build Fixes** — Resolved strict compilation errors preventing successful production builds of the backend analytics server.
-- **CI Build Fix** — Downgraded Node.js to v20 LTS in GitHub Actions to fix better-sqlite3 native build failures during app packaging.
-- **Deep Player Analytics Engine** — Extracts and visualizes raw NBT (`.dat`) and `.json` player data into a clean UI (Inventory, Health, Location, Statistics).
-- **Speedometer Dashboard** — An Aternos-style hardware UI overhaul replacing standard charts with elegant animated gauges and a live Connected Players panel.
-- **Robust Server Deletion** — Re-engineered database relations with `ON DELETE CASCADE` preventing any UI ghosting or database lock crashes.
-
-### v1.0.19 — Previous release
-- **Massive UX Overhaul** — Entire creation flow was redesigned to mirror Aternos-style wizards with centralized creation/import points.
-- **Critical Bug Fixes** — Fixed the "Ghost Server" bug where created servers didn't show up in the UI, and the server deletion constraints bug by adding ON DELETE CASCADE cascades to the SQLite database.
-- **Settings Menu Purge** — Removed Version Selection and Connection Mode from Settings, shifting these configurations natively into the Creation Wizard.
-- **Task Scheduler** — Automate server commands, backups, and state changes with a full `node-cron` system and a dedicated UI tab.
-- **Modrinth Marketplace Integration** — Search, browse, and install server plugins directly from Modrinth within the app.
-- **Java Runtime Detector** — Automatically scans your system (Windows/macOS/Linux) to find and list all installed Java versions.
-- **Aikar's JVM Flags** — Automatically applies highly optimized garbage collection flags for maximum performance on Paper and Purpur servers.
-- **In-App Notifications** — Real-time event notifications (player joins, crashes, backups) stored in a new database-backed panel.
-- **Release & Documentation Refresh** — All version strings, badges, and docs aligned to v1.0.24.
-- **CI/CD Ready** — GitHub Actions `release.yml` automatically builds Windows, macOS, and Linux binaries on every new tag.
-
-### Server Control
-- **Start / Stop / Restart** — One-click server control from the Dashboard.
-- **Auto-restart on crash** — Automatically recovers from crashes (max 3 attempts).
-- **Port conflict detection** — Auto-detects if port 25565 is in use and kills orphaned Java processes.
-- **EULA auto-accept** — Accepts Minecraft EULA automatically.
-- **Java pre-check** — Validates Java installation before starting.
-- **Version auto-download** — Switch PaperMC versions without manual downloads.
-- **Multi-server library** — Create, switch between, and delete multiple server instances.
-
-### Player Management
-- **Role-based access** — Owner / Admin / Moderator / Trusted Member / Member / Guest.
-- **Player tracking** — Online/offline status, join/leave history, real-time coordinates.
-- **Ban / Kick / Mute / Temp-Ban** — Full moderation toolkit.
-- **Whitelist** — Control who can join.
-- **Chat log** — Message history with search.
-
-### Connection Modes
-- **Cracked Mode** — TLauncher / any launcher, no Mojang account needed.
-- **Premium Mode** — Official Minecraft accounts only.
-- **Playit.gg Tunnel** — No port forwarding required. Works behind CGNAT.
-- **Switch with one click** — Toggle in Settings, restart server.
-
-### Monitoring
-- **Live Dashboard** — CPU, RAM (MC + System), TPS, Disk, Player count.
-- **30-min charts** — System resources and performance trends.
-- **Real-time Console** — See server output as it happens.
-- **Real-Time Player Cards** — Username, world, coordinates, health, ping, gamemode.
-- **Live Events Feed** — Join, leave, death, and chat events.
-
-### World Management
-- **Create worlds** — Custom seed, gamemode, difficulty.
-- **Clone worlds** — Duplicate existing worlds.
-- **Download / Upload** — Transfer worlds as `.zip` files.
-- **World seed setting** — Configure in Settings.
-
-### Backups
-- **Local-only** — All backups stored on your machine (no cloud).
-- **Auto-backup** — Configurable interval (default: every hour).
-- **Manual backup** — One-click backup creation.
-- **Restore** — Roll back to any backup point.
-- **Encryption** — Optional backup encryption.
-
-### Plugins
-- **One-click install** — Quick-install popular plugins (LuckPerms, EssentialsX, WorldEdit, Vault, etc.).
-- **Custom install** — Add any plugin by URL or `.jar` file.
-- **Enable / Disable** — Toggle plugins without removing them.
-
-### Desktop App
-- **Installable** — Windows, macOS, Linux native builds.
-- **Auto-update** — App updates itself from GitHub releases.
-- **System tray** — Minimize to tray, background operation.
-
-### Security
-- **JWT authentication** — Token-based login.
-- **Role-based permissions** — Granular access control.
-- **Password management** — Change your password from Settings.
-- **Audit log** — Track all admin actions.
+1. **Install** the app using the installer for your platform
+2. **Launch** MineControl OS
+3. **Create a server** — Choose Paper, Fabric, NeoForge, or Vanilla
+4. **Start** the server — The app downloads the server jar and configures everything
+5. **Connect** — Open Minecraft and connect using the address shown in the app
 
 ---
 
-## 🎮 How to Connect
+## Creating a Server
 
-### You (on the same laptop):
-1. Launch the app → click **Start Server**.
-2. Wait for the server to be **Online**.
-3. Open **Minecraft** → **Multiplayer** → **Add Server**.
-4. Address: **`localhost:25565`**
-5. Click **Join Server**.
+1. Click **Create New Server** on the Server Library page
+2. Choose a **Name** for your server
+3. Select **Software** (Paper, Fabric, NeoForge, or Vanilla)
+4. Select **Version** (auto-fetched from official APIs)
+5. Configure **RAM** (min/max), **Gamemode**, **Difficulty**, **Seed**
+6. Click **Create** — The server is created and configured automatically
 
-### Friend via Playit.gg (Recommended - No Port Forwarding):
-1. Go to **Connection** tab in MineControl OS.
-2. Set up Playit.gg tunnel (see Settings).
-3. Share your Playit.gg DNS address (e.g. `minecontrol.playit.gg`).
-4. Friend connects using that address — no router configuration needed.
-5. Works even if your ISP uses CGNAT (Jio, Airtel, BSNL).
+## Importing a Server
 
-### Friend via Public IP (Requires Port Forwarding):
-1. Share your **Public IP** from the Connection page.
-2. Set up port forwarding on your router: TCP 25565 → your laptop.
-3. Friend connects using your public IP.
+1. Click **Import Server** on the Server Library page
+2. Select the server directory containing `server.jar`
+3. The app detects existing configuration and imports it
+4. Your worlds, plugins, and settings are preserved
 
-### Same WiFi (LAN):
-- No port forwarding needed.
-- Friends connect using your **LAN IP** shown on the Connection page.
+## Playit.gg Setup
 
----
+1. Go to **Settings** → **Playit.gg**
+2. Enter your Playit.gg tunnel token
+3. Click **Save** — The app starts the Playit agent automatically
+4. Share your Playit.gg DNS address (shown on the Connection page)
 
-## ⚙️ Configuration
+## LAN Hosting
 
-| Setting | Location | Description |
-|---------|----------|-------------|
-| Server Version | Settings | Paper 1.20.1 through latest |
-| Playit.gg Token | Settings | Tunnel token from playit.gg |
-| Playit.gg DNS | Settings | Your custom tunnel address |
-| Server Name (MOTD) | Settings | Message shown in server list |
-| Connection Mode | Settings | Cracked / Premium / Playit.gg |
-| World Seed | Settings | Seed for new world generation |
-| Max Players | Settings | Player slot limit |
-| Difficulty | Settings | Peaceful / Easy / Normal / Hard |
-| Gamemode | Settings | Survival / Creative / Adventure / Spectator |
-| PvP | Settings | Toggle player combat |
-| Server Port | Settings | Default: 25565 |
-| View Distance | Settings | Chunks loaded per player |
-| Min / Max RAM | Settings | Java heap allocation |
-| Whitelist | Settings | Only allowed players can join |
-| Auto Backup | Settings | Automatic world backups |
-| Map Plugin | Settings | BlueMap / Dynmap configuration |
+1. Start your server in MineControl OS
+2. Go to **Connection** → **Local Network** tab
+3. The app shows your LAN IP address (e.g. `192.168.1.100:25565`)
+4. Share this address with friends on the same Wi-Fi/LAN
+5. No port forwarding required
+
+## Localhost Hosting
+
+1. Start your server
+2. Open Minecraft → Multiplayer → Add Server
+3. Address: `localhost:25565`
+4. Click Join Server
 
 ---
 
-## 🛠 Dev Quick Start
+## Authentication Modes
+
+MineControl OS supports two authentication modes that determine which launchers can connect.
+
+### Online Mode (Authenticated)
+
+```json
+{
+  "online-mode": true,
+  "enforce-secure-profile": true
+}
+```
+
+| Client | Status |
+|--------|--------|
+| Official Minecraft Java | ✓ Ready |
+| TLauncher / Offline | ✗ Blocked |
+
+Select **Premium Only** in the Compatibility Manager. Intended for public servers where account verification matters.
+
+### Offline Mode (Private / LAN / Cracked)
+
+```json
+{
+  "online-mode": false,
+  "enforce-secure-profile": false
+}
+```
+
+| Client | Status |
+|--------|--------|
+| Official Minecraft Java | ✓ Ready |
+| TLauncher / Offline | ✓ Ready |
+
+Select **Offline / Non-Premium** in the Compatibility Manager. Intended for private LAN servers and testing. **Important:** Offline mode does not verify usernames — only use with trusted players.
+
+---
+
+## Backups
+
+- Go to **Backups** tab
+- Click **Create Backup** for a manual backup
+- Auto-backups run every hour (configurable in Settings)
+- Click **Restore** to roll back to any backup point
+- Backups are stored locally in your servers directory
+
+## Plugins
+
+- Go to **Plugins** tab
+- Browse the marketplace or install by URL/`.jar`
+- Toggle plugins on/off without removing them
+- Supported marketplaces: Modrinth
+
+## Mods
+
+- Install mods through the Plugins tab (for Fabric/NeoForge servers)
+- Modrinth integration for search and install
+
+---
+
+## FAQ
+
+**Q: Do I need port forwarding?**  
+A: Not for localhost or LAN play. For internet play, you can use Playit.gg (no port forwarding required) or traditional port forwarding.
+
+**Q: Which Minecraft versions are supported?**  
+A: All versions that Paper, Fabric, NeoForge, or Vanilla support (1.16.5 through latest). The app fetches available versions from official APIs.
+
+**Q: Can I run multiple servers at once?**  
+A: Yes, but only one at a time per MineControl OS instance. You can create multiple servers and switch between them.
+
+**Q: Is my data safe during updates?**  
+A: Yes. User data (servers, worlds, databases) is stored separately from application binaries in `%APPDATA%/MineControl OS`. Updates only replace the application files.
+
+**Q: How do I uninstall?**  
+A: Go to Settings → Danger Zone for two options: **Uninstall App** (keeps your servers and data) or **Complete Removal** (deletes everything).
+
+**Q: Can I use this on Linux?**  
+A: Yes, Linux is supported via AppImage and deb packages.
+
+---
+
+## Troubleshooting
+
+### Server won't start
+- Check that Java 17+ is installed
+- Check the port (25565) is not in use by another process
+- Check the Console tab for error messages
+- Use the Compatibility Checker to validate settings
+
+### Can't connect from another computer
+- Make sure the server is running (Dashboard shows green "Online")
+- Check the Connection tab for the correct LAN IP
+- Make sure Windows Firewall allows port 25565 (use the "Add Firewall Rule" button)
+- Try connecting with `localhost:25565` on the hosting machine first
+
+### Update check fails
+- The update checker requires internet access to reach GitHub
+- If GitHub is unreachable, the app shows a meaningful error message
+- The auto-updater only looks for releases with installer assets (`.exe`, `.dmg`, `.AppImage`)
+- You can always download the latest version manually from the [Releases page](https://github.com/Harsha240105/Mine-Control/releases)
+
+### Data not persisting after update
+- Verify your data exists in `%APPDATA%/MineControl OS/` (Windows) or `~/Library/Application Support/MineControl OS/` (macOS)
+- If you installed a pre-v1.0.46 version and upgraded, the app auto-migrates data on first launch
+- The database is never deleted or recreated during updates
+
+---
+
+## Project
+
+### Repository Owner
+
+**Harshavardhan H S** — Creator, Lead Developer, Maintainer
+
+MineControl OS is a solo-maintained project. There are no external contributors at this time.
+
+### Repository Structure
+
+```
+MineControl-OS/
+├── client/          # React frontend source (via src/)
+├── server/          # Express + Socket.IO backend
+├── electron/        # Electron main process
+├── docs/            # Documentation
+│   ├── screenshots/
+│   ├── architecture/
+│   ├── installation/
+│   └── faq/
+├── scripts/         # Utility scripts
+├── tests/           # Test files
+├── build/           # Build resources
+├── assets/          # Application assets
+├── installer/       # Installer configuration
+└── .github/         # CI/CD and issue templates
+```
+
+---
+
+## Development
 
 ```bash
 git clone https://github.com/Harsha240105/Mine-Control.git
@@ -218,368 +329,81 @@ npm install
 npm run dev
 ```
 
-### Default Login
-| Username | Password |
-|----------|----------|
-| `owner` | `OXK@6126` |
+### Commands
 
-### Access
-- **Web UI:** http://localhost:5173 (dev) or http://localhost:3001 (production)
-- **API:** http://localhost:3001/api
-- **Minecraft Server:** `localhost:25565`
+| Command | Description |
+|---------|-------------|
+| `npm run dev` | Start development mode (frontend + backend) |
+| `npm run build` | Build frontend + backend for production |
+| `npm run build:desktop` | Build full desktop application |
+| `npm test` | Run tests |
 
----
-
-## 🏗 Project Structure
+### Architecture
 
 ```
-Mine-Control/
-├── .github/workflows/   # CI/CD release pipeline
-├── electron/            # Electron desktop app
-│   ├── main.ts          # Main process (window, tray, menus, auto-updater)
-│   └── preload.ts       # Context bridge for IPC
-├── server/              # Express.js backend
-│   ├── index.ts         # Entry point (Express + Socket.IO)
-│   ├── routes/          # API route handlers
-│   │   ├── auth.ts      # Login, password change
-│   │   ├── server.ts    # Status, start/stop, config, versions, diagnostics, connection, events
-│   │   ├── players.ts   # Player management, roles, whitelist
-│   │   ├── worlds.ts    # World CRUD, clone, download/upload
-│   │   ├── plugins.ts   # Plugin management
-│   │   ├── backup.ts    # Backup create/restore/delete
-│   │   ├── claims.ts    # Land claim system
-│   │   ├── builds.ts    # Build tagging system
-│   │   └── github.ts    # Bug reports & feature requests
-│   ├── services/
-│   │   ├── minecraftServer.ts  # Java process manager, version management, diagnostics
-│   │   └── backup.ts           # Backup engine
-│   ├── middleware/
-│   │   └── auth.ts      # JWT + role-based permissions
-│   ├── database.ts      # SQLite schema + seed
-│   └── paths.ts         # Path resolution helpers
-├── src/                 # React frontend
-│   ├── pages/           # Route-level page components
-│   │   ├── Dashboard.tsx
-│   │   ├── Connection.tsx
-│   │   ├── Console.tsx
-│   │   ├── Players.tsx
-│   │   ├── Worlds.tsx
-│   │   ├── MapView.tsx
-│   │   ├── Plugins.tsx
-│   │   ├── Backups.tsx
-│   │   ├── Diagnostics.tsx
-│   │   ├── Guide.tsx
-│   │   ├── GitHub.tsx
-│   │   ├── Settings.tsx
-│   │   ├── Servers.tsx
-│   │   ├── Compatibility.tsx
-│   │   └── Import.tsx
-│   ├── components/      # Reusable components
-│   │   ├── Layout.tsx
-│   │   ├── UpdateBanner.tsx
-│   │   └── NotificationPanel.tsx
-│   ├── hooks/           # React hooks + contexts
-│   │   ├── useAuth.tsx
-│   │   ├── useSocket.ts
-│   │   └── useNotifications.ts
-│   └── lib/
-│       └── api.ts       # Typed API client
-├── minecraft/           # Server runtime directory
-│   ├── server.jar       # PaperMC (version selectable)
-│   ├── plugins/         # Server plugins
-│   ├── worlds/          # World data
-│   ├── backups/         # Local backups
-│   └── logs/            # Server logs
-├── package.json         # Root package + npm scripts
-├── electron-builder.yml # Packaging config
-├── tailwind.config.js   # Tailwind theme
-└── README.md            # This file
+┌────────────────────────────────────┐
+│          Electron Window           │
+│  ┌──────────────────────────────┐  │
+│  │     React Frontend (Vite)    │  │
+│  │     Tailwind CSS Styling     │  │
+│  └──────────┬───────────────────┘  │
+│             │ HTTP + Socket.IO     │
+│  ┌──────────▼───────────────────┐  │
+│  │   Express + Socket.IO API   │  │
+│  │   Minecraft Process Manager │  │
+│  │   SQLite (better-sqlite3)   │  │
+│  └──────────────────────────────┘  │
+│             │ spawn                │
+│  ┌──────────▼───────────────────┐  │
+│  │   Minecraft Java Process    │  │
+│  └──────────────────────────────┘  │
+└────────────────────────────────────┘
 ```
 
----
+### Data Storage
 
-## 📡 API Overview
+All user data is stored separately from application binaries:
 
-| Method | Endpoint | Permission | Description |
-|--------|----------|-----------|-------------|
-| POST | `/api/auth/login` | None | Login, get JWT |
-| GET | `/api/server/status` | auth | Status + system resources |
-| POST | `/api/server/start` | server.start | Start Minecraft server |
-| POST | `/api/server/stop` | server.stop | Stop server |
-| POST | `/api/server/restart` | server.restart | Restart server |
-| GET | `/api/server/versions` | auth | List available PaperMC versions |
-| POST | `/api/server/version` | server.start | Download and switch Paper version |
-| POST | `/api/server/gamemode` | server.start | Switch survival/creative/adventure/spectator |
-| GET | `/api/server/connection` | auth | Local, LAN, Public IP, Playit.gg info |
-| GET | `/api/server/diagnostics` | auth | Firewall, port binding, CGNAT checks |
-| POST | `/api/server/health-check` | auth | Full connectivity test |
-| GET | `/api/server/properties` | auth | Read server.properties |
-| PUT | `/api/server/properties` | server.start | Update server.properties |
-| GET | `/api/server/config` | auth | Read app config (SQLite) |
-| PUT | `/api/server/config` | server.start | Update app config |
-| POST | `/api/server/command` | console.send | Send console command |
-| GET | `/api/server/logs` | console.read | Get server logs |
-| GET | `/api/players` | auth | List all players |
-| GET | `/api/backups` | auth | List backups |
-| GET | `/api/plugins` | auth | List plugins |
-| GET | `/api/worlds` | auth | List worlds |
-| GET | `/api/claims` | auth | List land claims |
-| POST | `/api/claims` | world.manage | Create a claim |
-| DELETE | `/api/claims/:id` | world.manage | Delete a claim |
-| GET | `/api/builds` | auth | List build tags |
-| POST | `/api/builds` | auth | Create a build tag |
-| DELETE | `/api/builds/:id` | world.manage | Delete a build tag |
-| POST | `/api/github/bug-report` | auth | Submit bug report |
-| POST | `/api/github/feature-request` | auth | Submit feature request |
-| GET | `/api/github/issues` | auth | List all reports |
+| Platform | Path |
+|----------|------|
+| Windows | `%APPDATA%/MineControl OS/` |
+| macOS | `~/Library/Application Support/MineControl OS/` |
+| Linux | `~/.config/MineControl OS/` |
+
+This ensures updates never touch user data. The uninstaller's "Keep Data" option works because the uninstaller only removes the application directory.
 
 ---
 
-## 🧩 One-Click Plugins
+## Roadmap
 
-Available from the Plugins page:
-- **LuckPerms** — Advanced permissions
-- **EssentialsX** — Essential commands
-- **WorldEdit** — In-game world editing
-- **Vault** — Economy/permissions API
-- **ClearLag** — Lag reduction
-- **CoreProtect** — Block logging and rollback
-- **BlueMap** — 3D world map viewer
-- **Dynmap** — Google-maps-style world map
-
----
-
-## 🔄 Auto-Update
-
-The app checks GitHub for new releases on startup. When an update is found:
-1. A banner appears: "Update vX.X.X available".
-2. Click **Download** → progress bar appears.
-3. Click **Restart & Update** → app installs and relaunches.
-4. No manual uninstall/reinstall needed.
+- [x] Server creation and management
+- [x] Multiple server software support (Paper, Fabric, NeoForge, Vanilla)
+- [x] Real-time console and player tracking
+- [x] Plugin/mod marketplace integration
+- [x] Connection Wizard with auto-detection
+- [x] Windows Firewall auto-configuration
+- [x] Bedrock support via Geyser/Floodgate
+- [x] Cross-version support via ViaVersion
+- [x] Backup and restore system
+- [x] Persistent data architecture (v1.0.46)
+- [x] Universal Java Launcher Compatibility (v1.0.47)
+- [ ] Plugin marketplace expansion (Hangar)
+- [ ] Advanced automation (conditional scheduling)
+- [ ] Performance profiler integration (Spark)
+- [ ] Multi-language support
 
 ---
 
-## 📋 Release History
+## Changelog
 
-### v1.0.46 — Persistent Data Architecture & Safe Update System
-- **Data Directory Separation** — Application binaries and user data are now completely separated. App files remain in the installation directory (`Program Files` / `AppData/Local/Programs`), while all user data (servers, worlds, databases, backups, plugins, mods, player data, logs, settings) is stored in Electron's official `userData` directory (`AppData/Roaming/MineControl OS` on Windows).
-- **Automatic Data Migration** — On first launch after upgrade, the app detects old data stored alongside application binaries and automatically migrates it to the new persistent directory. No data is overwritten without confirmation. If migration fails, original data is left untouched.
-- **Safe Schema Migrations** — Database now uses `schema_version` table for versioned migrations. Schema is only upgraded when needed, never recreated. Existing user records are never deleted.
-- **Auto-Updater Backup** — Before downloading an update, the app automatically backs up `minecontrol.db` and `settings.json` to an `update-backups/` directory inside the user data folder. Old backups are pruned (3 most recent kept).
-- **Two-Mode Uninstaller** — Settings page includes two uninstall options: "Uninstall App" removes only application binaries while preserving all server data; "Complete Removal" requires typing "DELETE" to confirm and wipes the entire user data directory before launching the uninstaller.
-- **Uninstaller Preserves Data** — `electron-builder.yml` configured with `deleteAppDataOnUninstall: false` so the default NSIS uninstaller never touches user data.
-- **Updated documentation and version badges** for v1.0.46 release.
-
-### v1.0.45 — Local Data Persistence & Storage
-- **UI State Persistence Engine** — New `ui_state` database table (key/value with timestamp) stores UI preferences server-side. New `/api/ui/state` endpoints for saving and loading UI state across app restarts.
-- **Last Active Page Restoration** — App saves the current page to `localStorage` and debounced server `ui_state` on every navigation. After login, users are redirected to their last-viewed page instead of always landing on the Servers page.
-- **Sidebar State Persistence** — Sidebar collapsed/expanded state now persists in `localStorage` (`mc_sidebar_collapsed`) and restores on next app launch.
-- **Console Preference Persistence** — Console filter level (All/INFO/WARN/ERROR/FATAL/DEBUG) and auto-scroll toggle now persist in `localStorage` across sessions.
-- **Server State Database Persistence** — Server state (running/stopped/starting/failed) is stored in the `servers` table on every transition. On app restart, if a server was previously running, it's automatically reset to `stopped` with a console notification.
-- **Updated documentation and version badges** for v1.0.45 release.
-
-### v1.0.44 — Universal Multiplayer Connection System
-- **Connection Wizard Page** — New dedicated wizard that auto-detects all connection methods (localhost, LAN, Playit tunnel, public IP) and recommends the easiest one. Displays scenario cards for Same Computer, Local Network, and Internet Friends with live status indicators.
-- **Connection Tabbed Redesign** — Connection Manager now has three scenario tabs (Same Computer / Local Network / Internet) with tailored instructions and one-click actions per scenario.
-- **Auto-Detection Engine** — Backend automatically detects local address, LAN IP, public IP, Playit tunnel status (with DNS verification and latency), Windows Firewall state, and server reachability. Returns a recommended connection method.
-- **Minecraft Server Status Ping** — New `/api/server/mc-ping` endpoint performs a real Minecraft protocol handshake (server list ping) to verify the server is truly accepting connections. Returns MOTD, version, player count, latency, and player samples.
-- **Comprehensive Server Validation** — New `POST /api/server/validate` checks server process, TCP port, socket acceptance, Minecraft ping response, LAN accessibility, and firewall status in one call.
-- **Dashboard Connection Mode** — Dashboard now shows the current connection mode (Local / LAN / Playit Tunnel) with quality indicator (Ready / Reachable / Online / Offline) in the connection info header, updated every 15 seconds.
-- **Updated documentation and version badges** for v1.0.44 release.
-
-### v1.0.43 — Server Connectivity Fix & Windows Firewall Auto-Configuration
-- **Dynamic `enforce-secure-profile`** — Now mirrors `online-mode` automatically in `server.properties` generation, ensuring cracked clients (TLauncher) are never silently blocked.
-- **Offline Mode Toggle Sync** — Toggling online mode via Compatibility Manager now also updates `enforce-secure-profile` to match, preventing the common "offline mode but still blocking unauthenticated clients" bug.
-- **Server Settings API Sync** — Updating `onlineMode` through the server settings endpoint now also writes `enforce-secure-profile` to `server.properties`.
-- **Windows Firewall Auto-Configuration** — New Connection Manager section shows firewall status (active/inactive) with a one-click "Add Firewall Rule" button using `netsh advfirewall`. No more manual Windows Firewall configuration.
-- **Misconfiguration Warning** — Connection Manager now shows a red warning banner when `enforce-secure-profile=true` but `online-mode=false`, alerting users to the mismatch.
-- **Updated documentation and version badges** for v1.0.43 release.
-
-### v1.0.41 — Complete Local-First Stability, Persistence & Multiplayer Repair
-- **Server Library Landing** — Server selection screen now opens first. Shows all locally created servers with version, status, players, world size, dates, and action buttons (Start/Stop/Open/Settings/Delete). "Create New Server" modal with software/version/RAM/gamemode/difficulty/seed fields. Import and search support. Empty state with CTA.
-- **Player Tracking Enrichment** — Automatically reads `playerdata/*.dat`, `stats/*.json`, and `advancements/*.json` when players join. Stores health, food, XP, position, dimension, inventory, armor, ender chest, death count, kills, statistics, advancements, first_join, last_disconnect, playtime. Data survives server and application restart.
-- **TPS Parsing** — TPS is now parsed from Minecraft console output instead of hardcoded 20.0. Parses Vanilla, Paper, and plugin TPS reports. Updates stats database and dashboard in real-time.
-- **Server Status Persistence** — Server state (running/stopped/starting/failed) is now stored in the database. Closing and reopening the app preserves the last known state.
-- **Backend Auto-Recovery** — Electron main process monitors backend health every 10 seconds. If the API becomes unreachable, it automatically restarts the backend server. Frontend shows "Backend Offline" or "Reconnecting..." banner while recovering.
-- **API Health Endpoint** — New `GET /api/server/health` lightweight check (no auth). Frontend uses it for 5-second health polling.
-- **Connection Verification** — New `GET /api/server/verify-connection` endpoint performs TCP port tests to 127.0.0.1, 0.0.0.0, and LAN address with latency measurement.
-- **Playit Tunnel Status** — New `GET /api/server/playit-status` endpoint checks if playit agent process is running and DNS resolves. Returns tunnel address, auth status, agent state.
-- **Server Config File Management** — New endpoints for `ops.json`, `whitelist.json`, `banned-players.json`, `banned-ips.json`, `usercache.json` with GET/PUT for read/write access.
-- **Data Directory Standardization** — Data now stored under `MineControl OS/` folder with proper subdirectories: `data/`, `servers/`, `downloads/`, `java/`, `playit/`, `cache/`, `temp/`.
-- **Connection Status Indicators** — Layout top bar now shows real-time "Backend Offline" or "Reconnecting..." badges based on health polling.
-- **Updated documentation and version badges** for v1.0.41 release.
-
-### v1.0.40 — Backend Communication Repair
-- **Fixed `/api/players/banned` returning 404** — Route ordering bug fixed: moved `/banned`, `/chat`, and `/roles` routes before the `/:id` catch-all route in `players.ts`. Also added missing `temp-ban` route.
-- **Socket.IO Reconnection & Error Handling** — Frontend `useSocket` hook now logs connection errors, implements exponential backoff reconnection, and exposes error state. Server-side Socket.IO now logs engine errors and emits `players:update`, `server:update`, and `console:update` events.
-- **Fixed Playit.gg Tunnel Click-Jacking** — Removed click-to-toggle from the entire Playit.gg card, keeping toggle only on the chevron button. Added `stopPropagation` on the config panel so clicking input fields or Save button no longer closes the panel.
-- **Fixed Plugins Marketplace Search** — Fixed response destructuring bug where `{ data }` was expected but Modrinth API returns `{ hits }`.
-- **API Request Timeouts** — Added 15-second AbortController timeout to all API requests to prevent infinite loading states.
-- **Backend Stability** — Socket.IO server now properly handles connection errors with logging. Added `players:update` and `server:update` socket events for real-time telemetry.
-- **Dashboard Error State** — Dashboard now shows a clear "Backend Unavailable" message with retry button when server cannot be reached, instead of infinite spinner.
-- **Updated documentation and version badges** for v1.0.40 release.
-
-### v1.0.38
-- **Complete State Machine Rewrite** — The Minecraft server process manager (`minecraftServer.ts`) has been fully rewritten with a proper 5-state lifecycle (`STOPPED → STARTING → RUNNING → STOPPING → STOPPED`, with `FAILED` for error states). All old boolean `this.running`/`this.starting` flags have been removed. State transitions are now atomic, emit `server:state` events via Socket.IO, and are reflected in real-time on the Dashboard.
-- **Automatic Java Runtime Resolution** — `resolveJava()` scans the server jar's `.class` files to determine the required Java version, then checks the configured path. If it's absent or too old, it auto-selects a compatible JDK from all installed runtimes (via `JavaDetector.scan()`). If none is found, the error message lists every installed JDK with versions and direct download links.
-- **Pre-Flight Validation Before Starting** — `validatePreFlight()` checks jar existence (with download-in-progress wait), EULA auto-accept, and port availability (with auto-kill of orphaned Java processes) **before** the server enters the STARTING state. This ensures the Dashboard never gets stuck at "Starting..." when validation fails.
-- **Dashboard Handles All States** — The status indicator now shows the correct color and text for all 5 states: green "Online" (running), yellow pulsing "Starting..." / "Stopping...", red "Failed", and gray "Offline". The Dashboard subscribes to `server:state` Socket.IO events for instant UI updates.
-- **Child Process Error Handling** — When the Java process exits with a non-zero code, the state transitions to `FAILED` and the error message is captured. Crash logs are preserved. The close handler correctly defers to a graceful `stop()` when already in the STOPPING state, preventing race conditions.
-- **Server Status API Enhancement** — The `/api/server/status` endpoint now includes the `state` field (one of `stopped`, `starting`, `running`, `stopping`, `failed`) alongside the existing `running`/`starting` booleans, enabling the frontend to distinguish between "stopped", "failed", and other states.
-- **Fixed Dashboard crash on null status** — When `/api/server/status` returns a 500 error (e.g., broken `require` path for package.json), the Dashboard no longer crashes with `Cannot read properties of null (reading 'onlinePlayers')`. Added a null-status guard that shows "Unable to connect to server. Retrying..." instead of crashing. All null guards changed from `!== null` (which fails for `undefined`) to `!= null` (which catches both).
-- **Fixed production `package.json` path resolution** — The `/api/server/status` endpoint used `require('../../package.json')` which resolves to `dist/package.json` in the production ASAR bundle, causing a 500 error. Added a try-catch fallback chain that works in both development (`tsx watch`) and production (Electron ASAR) environments.
-- **Null-safe Dashboard rendering** — All computed values (`cpuPercent`, `ramPercent`, `sysRamPercent`, `diskPercent`) now use optional chaining with `??` fallbacks, so they never crash when `status` is `null` or partially initialized.
-
-### v1.0.36
-- **Automatic Java Version Detection** — `minecraftServer.start()` now scans all installed JDKs via `JavaDetector.scan()` when the configured Java is too old. If the server jar requires Java 25+ (class version 69.0) but the default `java` on PATH is only Java 21, MineControl will automatically find a compatible JDK among installed runtimes and use it. If none is found, the error message lists every installed JDK with versions and provides direct download links.
-- **Dashboard "Connecting..." State** — Dashboard now shows a spinner with "Connecting to server..." on initial load, instead of immediately rendering placeholder values. Once the first `/api/server/status` response arrives, real data is shown. If an error occurs during startup, the RepairFlow appears immediately.
-- **Error Propagation Fix** — `POST /api/server/start` now awaits the `minecraftServer.start()` promise directly, so pre-check failures (missing jar, incompatible Java) return an HTTP 400 with the error message instead of being silently swallowed by `catch()`. Combined with the Socket.IO `server:error` handler fix, start errors always reach the frontend.
-- **Socket.IO Error Handler Fix** — The Dashboard's `server:error` listener no longer filters out errors when `status.starting` is true. Start-time errors (Java mismatch, port conflicts) now display the RepairFlow instead of being hidden.
-- **Enhanced Diagnostics** — The `/api/server/diagnostics` endpoint now runs `JavaDetector.scan()` to list all installed JDKs, compares their versions against the required Java version detected from the server jar's class files, and reports exactly which version is needed vs. what's available. The health-check endpoint also reports detailed Java status.
-- **useSocket Hook Enhancement** — The `useSocket` hook now exposes an `on<T>(event, handler)` method that returns an unsubscribe function, enabling cleaner subscription management in components.
-- **Null-Safe Dashboard Rendering** — Replaced all `||` fallback operators (which masked null/offline values) with `??` nullish coalescing, ensuring the Dashboard never shows "20.0 TPS", "0 GB RAM", or "0/4 players" when the server is offline.
-
-### v1.0.35
-- **Atomic Server Provisioning** — Server creation now downloads the jar BEFORE creating the database record. If the download fails, no orphaned server record is created and the directory is cleaned up. The wizard sends all data in a single API call.
-- **Forge 404 Fix** — Forge download now returns "This Forge version is unavailable. Choose another version." when a version has no matching build in the Forge API, instead of a cryptic error.
-- **Dashboard Offline State** — Dashboard now shows "Server Offline" / "Not yet started" instead of fake zero values for CPU, RAM, TPS, and Players when the server is not running. The version display shows "Not configured" when no version is selected.
-- **Global JSON Error Handler** — Added JSON parse error middleware for malformed request bodies and an API 404 handler that returns `application/json` for unknown API routes. Existing global error handler now respects `err.status` for proper HTTP status codes.
-- **Software Installation Badges** — Software page now shows granular badges per version: "Active" (currently in use), "Downloaded" (on disk but not active), and "Install" button. Software type cards show "Active", "Downloaded", "Not Installed", or "Popular" as appropriate.
-- **Plugin Install Progress** — Plugin install buttons now show a spinner and "Downloading..." text during installation, with disabled state to prevent duplicate clicks. Works for both popular plugins and Modrinth marketplace.
-- **Plugin Directory Resolution** — Fixed `plugins.ts` to resolve the plugins directory at request time instead of module load time, ensuring plugins are always installed to the correct server directory when switching between servers.
-- **Expanded Diagnostics** — Added 8 new diagnostic checks: World Data, server.properties, Disk Space, Java Memory, Folder Permissions, Download Cache, Minecraft Version, and Server Software Type detection. All checks now include detailed messages.
-- **Download Service Refactor** — Extracted all download functions into a shared `server/services/download.ts` module, eliminating code duplication between `server.ts` and `servers.ts`. The module exports type-safe functions for Paper, Fabric, Purpur, Forge, and Vanilla downloads.
-- **Startup Jar Validation** — Improved `minecraftServer.start()` error message to show the exact missing jar filename and suggest running a Repair or downloading from the Software page, instead of hardcoding "PaperMC server jar".
-
-### v1.0.34
-- **Dashboard Live Stats Reliability** — Fixed CPU seeding to use a 100ms delay (not same-tick) so the first dashboard load shows real CPU, not NaN. Removed outer try-catch that silently killed all stats. Switched disk detection from deprecated `wmic` to PowerShell `Get-CimInstance`. Changed `\|\|` to `??` for CPU fallback to preserve legitimate zero values.
-- **Plugin Download Fixes** — Replaced Safe Sources external links (`<a target="_blank">`) with info cards so users stop downloading plugins to their browser's Downloads folder. Fixed the Modrinth Marketplace "View / Install" button to actually download via the backend API. Fixed hardcoded "60s" timeout message to show the actual 120s timeout.
-- **Settings Save Reliability** — `handleSave()` no longer fails entirely when `server.properties` doesn't exist (pre-first-start state); gracefully skips the properties write instead. Button text changed from "Save & Restart Server" to "Save Settings".
-- **viewDistance Persistence** — `getConfig()` now returns `viewDistance` from the database, so the Settings page loads your saved value instead of always falling back to 10.
-- **Java Version Detection** — `detectRequiredJava()` now scans ALL `.class` files in the jar and returns the highest class version, catching Fabric bundles where the main class is Java 21-compatible but `net/minecraft/bundler/Main` requires Java 25.
-- **Wizard Download Errors** — The silent `catch {}` around the server jar download in the wizard now shows an error toast when the download fails, instead of silently showing "Server Ready!" with no jar.
-- **Dashboard Software Badge** — Dashboard now shows the software source (Paper, Fabric, Purpur, etc.) alongside the Minecraft version in the connection info section.
-- **Multi-Server Management** — Server cards on the Servers page now have a delete button for quick deletion. The server list dropdown in the sidebar already supports switching between servers.
-
-### v1.0.33
-- **Java Version Validation** — Server jar is now scanned for its class file version before starting. If the jar requires a newer Java (e.g. Java 25+ for Minecraft 1.21.11), a clear error is shown with the required version and a download link to Adoptium.
-- **Plugin Download Fix** — Fixed variable shadowing bug where the `https.get` callback parameter shadowed the Express response object, causing plugin downloads to silently fail and hang the frontend.
-- **Dashboard Server Name** — Dashboard now shows the wizard-configured server name even before the first server start, falling back to the `servers` database table when the runtime config is empty.
-- **Dashboard CPU on First Load** — Seeded the CPU stats baseline so the Dashboard shows real CPU usage on the very first page load, instead of 0% until the 5-second tick fires.
-- **Fabric Version Filtering** — Fabric version list now only shows Minecraft game versions (e.g. 1.21.11), excluding Fabric Loader version entries (e.g. 26.2) that were previously mixed in.
-- **Fabric Download Reliability** — Changed Fabric download to use the game-version-specific loader endpoint, ensuring the installed loader is compatible with the selected Minecraft version.
-- **View Distance Cap Raised** — Settings view distance input now supports values up to 128 (was capped at 32).
-- **Discord Field Cleanup** — Removed the spurious Voice Chat Invite Link field from Discord settings, leaving only Bot Token, Chat Channel ID, and Voice Channel ID.
-
-### v1.0.32
-- **Wizard Version Filtering** — Server creation wizard now correctly filters versions by selected software type (Paper, Fabric, Purpur, Forge, Vanilla, etc.) instead of showing all versions regardless of selection.
-- **Live Dashboard Telemetry** — Dashboard now shows live CPU usage from `os.cpus()` even when the Minecraft server is offline, eliminating 0% CPU / 0GB RAM / 0GB DISK readings.
-- **Auto-Download on Creation** — Server jar is now automatically downloaded immediately after the wizard creates a server, eliminating the "Server jar not found" error on first start.
-- **Discord Voice Channel ID** — Added separate Voice Channel ID field alongside Chat Channel ID in Discord settings, enabling independent chat and voice channel configuration.
-- **Download Timeout Increased** — Increased download timeout from 60s to 120s for server jars and plugins, preventing timeout failures on slow connections.
-- **Path Import Cleanup** — Replaced dynamic `require('path')` calls with static imports in server creation route.
-
-### v1.0.31
-- **Path Resolution Fix** — Fixed `resolveMinecraftDir()` to prefer the active server directory over the `MINECRAFT_DIR` env var, resolving the "Server jar not found" error when starting servers on Windows.
-- **Forge Download Support** — Added `downloadForgeVersion()` handler for automatic Forge server jar downloads via the Forge maven repository.
-- **Software Catalog Unlocked** — All software types (NeoForge, Quilt, Bedrock, Pocketmine-MP) are now enabled and ready for selection, removing all "Coming Soon" placeholders.
-- **Plugin Download Reliability** — Fixed Modrinth plugin version selection to prefer `release` type versions over potentially unstable builds.
-- **Dashboard Telemetry** — Added Windows disk usage fallback via `wmic` when `systeminformation` fails, ensuring dashboard shows live hardware specs (CPU, RAM, DISK) without zeros.
-- **Version Source Mapping** — Fixed `/api/server/version` to correctly save the software source name (PaperMC, Fabric, Purpur, Forge, Mojang) instead of always defaulting to "PaperMC" or "Mojang".
-
-### v1.0.17
-- **Import Existing Server UI** — Easily import existing Minecraft servers from ZIP files or uncompressed folders.
-- **GitHub Release Automation** — Full CI/CD pipeline with GitHub Actions for Windows, macOS, and Linux builds.
-- **In-App Auto-Updater UI** — One-click update installation.
-- **Beginner's Guide Tab** — Step-by-step guide covering start server, versions, plugins, map, connection, and modes.
-- **GitHub Community Hub** — Submit bug reports and feature requests from within the app.
-- **Land Claim System** — Track player claims and boundaries.
-- **Build Tagging System** — Tag buildings and locations (house, base, farm, spawn, shop).
-- **Live World Map Tab** — Embedded BlueMap/Dynmap viewer.
-- **Server Diagnostics Tab** — Configuration checks, port binding analysis, CGNAT detection.
-- **Connection Manager Tab** — Localhost, LAN, Public IP, and Playit.gg addresses.
-- **Game Mode Quick Switch** — Survival / Creative / Adventure / Spectator toggles.
-- **Minecraft Version Selector** — PaperMC versions from 1.20.1 through latest.
-- **Codebase Cleanup** — Removed stale duplicate directories.
-
----
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18, TypeScript, Vite, Tailwind CSS, Recharts |
-| Backend | Node.js, Express, Socket.IO |
-| Database | SQLite (better-sqlite3) |
-| Desktop | Electron 28, electron-builder, electron-updater |
-| Minecraft | PaperMC (version selectable: 1.20.1 - latest) |
-| Tunneling | Playit.gg |
-| World Maps | BlueMap / Dynmap |
-
----
-
-## 📄 Specification
-
-For the full Software Requirements Specification and Product Requirements Document, see [`SPECIFICATION-v1.0.17.md`](./SPECIFICATION-v1.0.17.md).
-
----
+See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 ## License
 
-MIT
+MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
 <p align="center">
-  <a href="https://github.com/Harsha240105/Mine-Control/releases/latest">
-    <img src="https://img.shields.io/badge/Download%20from%20GitHub-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub"/>
-  </a>
-  <br/>
-  <sub>100% Free. No paid tiers. No subscriptions. Self-hosted on your hardware.</sub>
+  <sub>Built with ❤️ by Harshavardhan H S</sub>
 </p>
-
-## Changelog
-
-### v1.0.25
-- **Bug Fixes**: Fixed jar download race condition, resolved plugin download 404s, synchronized dashboard server name, and optimized background performance.
-- **New Features**: Added Aternos-style Software tab for seamless version hot-swapping.
-- **Discord Integration**: Complete integration to sync game chat, logs, and events to Discord.
-
-### v1.0.26
-- **Hotfix**: Fixed global React Error Boundary and Discord Bot safe initialization to prevent black screens.
-
-### v1.0.27
-- **Deadlock Fixes**: Resolved infinite loading on login and async execution of server start to prevent Express hangs.
-- **Performance**: Optimized dashboard gauges with React.memo() to prevent full-app UI lag.
-- **Software**: Fabric metadata parsing integrated into the backend versions API.
-- **UI**: Added Import Server button and dynamic app version display.
-
-### v1.0.29
-- **Stability**: Refactored server launch sequence with strict Java 21+, Port availability, and EULA validations.
-- **Repair Flow**: Introduced a dedicated UI to seamlessly handle and resolve startup errors (RepairFlow).
-- **Discord Settings**: Added dedicated Discord configuration UI for easily modifying the bot token and channel ID.
-- **Forge Integration**: Expanded server software versions to fetch and support Forge dynamically.
-- **Import Scanning**: Import flow now scans existing files to automatically detect `server.properties` and EULA acceptance.
-- **Reliability**: Implemented magic-byte verification on downloads to prevent JAR corruption, and added timeout fallbacks.
-
-### v1.0.30
-- **Modrinth Transition**: Replaced broken Hangar endpoints with Modrinth API for seamless plugin downloads.
-- **UI Optimization**: Memoized the Dashboard telemetry pipeline to eliminate lag spikes during continuous updates.
-- **Discord Voice Link**: Added Discord Voice Invite Link appending to Server Start messages.
-- **Purpur & Expanded Catalog**: Fully integrated Purpur API fetching and prepared placeholders for Bedrock, Pocketmine, NeoForge, and Quilt.
-- **Portable Executable Pathing**: Fixed roaming AppData issue by forcing the server structure directly into the executable installation path.
-
-### v1.0.32
-- **Wizard Version Filtering**: Wizard now filters versions by selected software type.
-- **Live Dashboard Telemetry**: CPU/RAM/DISK now show live OS stats when server is offline.
-- **Auto-Download on Creation**: Server jar auto-downloaded after wizard finishes.
-- **Discord Voice Channel ID**: Added separate voice channel ID field in Discord settings.
-- **Download Timeout Increased**: 60s → 120s for jars and plugins.
-
-### v1.0.31
-- **Path Resolution Fix**: Fixed resolveMinecraftDir() to prefer the active server directory, fixing "Server jar not found" errors.
-- **Forge Download Support**: Added downloadForgeVersion() for automatic Forge server jar downloads.
-- **Software Catalog Unlocked**: All software types enabled (NeoForge, Quilt, Bedrock, Pocketmine-MP), no more "Coming Soon".
-- **Plugin Download Reliability**: Modrinth version selection now prefers release builds.
-- **Dashboard Telemetry**: Windows disk fallback via wmic when systeminformation fails; no more zeros.
-- **Version Source Mapping**: /api/server/version correctly saves the software source name.

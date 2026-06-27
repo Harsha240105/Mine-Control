@@ -35,3 +35,9 @@ public/favicon.svg
 public/steve-walk-hq.gif
 scripts/
 /opt/minecraft/
+server-err.log
+server-out.log
+*.db-journal
+*.db-wal
+update-backups/
+
