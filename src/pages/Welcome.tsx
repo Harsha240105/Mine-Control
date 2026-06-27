@@ -66,28 +66,44 @@ export default function Welcome() {
           <p className="text-gray-500 mt-2 text-lg">Create and manage your Minecraft servers with ease.</p>
         </div>
 
-        {servers.length === 0 ? (
-          // THE CROSSROADS
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl w-full mb-10">
-            <button onClick={startWizard} className="group relative p-8 rounded-2xl bg-gradient-to-br from-minecraft-600/20 to-minecraft-700/10 border-2 border-minecraft-500/30 hover:border-minecraft-500/60 hover:shadow-[0_0_30px_rgba(34,197,94,0.15)] transition-all duration-300 text-center">
-              <div className="w-16 h-16 mx-auto rounded-full bg-minecraft-500/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Plus className="w-8 h-8 text-minecraft-400" />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-100 mb-2">Create Server</h3>
-              <p className="text-sm text-gray-400 leading-relaxed">Start fresh. Set up a brand new Minecraft server tailored exactly to your liking.</p>
-            </button>
+        {/* Three options always visible */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl w-full mb-10">
+          <button onClick={startWizard} className="group relative p-8 rounded-2xl bg-gradient-to-br from-minecraft-600/20 to-minecraft-700/10 border-2 border-minecraft-500/30 hover:border-minecraft-500/60 hover:shadow-[0_0_30px_rgba(34,197,94,0.15)] transition-all duration-300 text-center">
+            <div className="w-16 h-16 mx-auto rounded-full bg-minecraft-500/20 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+              <Plus className="w-8 h-8 text-minecraft-400" />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-100 mb-2">Create Server</h3>
+            <p className="text-sm text-gray-400 leading-relaxed">Start fresh. Set up a brand new Minecraft server tailored exactly to your liking.</p>
+          </button>
 
-            <button onClick={() => navigate('/import')} className="group relative p-8 rounded-2xl bg-surface-800/50 border-2 border-surface-700/50 hover:border-surface-600 hover:bg-surface-800 transition-all duration-300 text-center">
-              <div className="w-16 h-16 mx-auto rounded-full bg-surface-700 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Download className="w-8 h-8 text-gray-400 group-hover:text-white transition-colors" />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-100 mb-2">Import Server</h3>
-              <p className="text-sm text-gray-400 leading-relaxed">Have an existing server folder or ZIP archive? Bring it straight into MineControl OS.</p>
-            </button>
-          </div>
-        ) : (
-          // Recent Servers
-          <div className="w-full max-w-3xl">
+          <button onClick={() => {
+            if (servers.length > 0) {
+              document.getElementById('your-servers')?.scrollIntoView({ behavior: 'smooth' });
+            }
+          }} className="group relative p-8 rounded-2xl bg-surface-800/50 border-2 border-surface-700/50 hover:border-surface-600 hover:bg-surface-800 transition-all duration-300 text-center">
+            <div className="w-16 h-16 mx-auto rounded-full bg-surface-700 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+              <Play className="w-8 h-8 text-gray-400 group-hover:text-white transition-colors" />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-100 mb-2">Open Existing Server</h3>
+            <p className="text-sm text-gray-400 leading-relaxed">
+              {servers.length > 0
+                ? `Select from ${servers.length} ${servers.length === 1 ? 'server' : 'servers'} and pick up where you left off.`
+                : 'No servers yet. Create or import one to get started.'}
+            </p>
+          </button>
+
+          <button onClick={() => navigate('/import')} className="group relative p-8 rounded-2xl bg-surface-800/50 border-2 border-surface-700/50 hover:border-surface-600 hover:bg-surface-800 transition-all duration-300 text-center">
+            <div className="w-16 h-16 mx-auto rounded-full bg-surface-700 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
+              <Download className="w-8 h-8 text-gray-400 group-hover:text-white transition-colors" />
+            </div>
+            <h3 className="text-2xl font-bold text-gray-100 mb-2">Import Server</h3>
+            <p className="text-sm text-gray-400 leading-relaxed">Have an existing server folder or ZIP archive? Bring it straight into MineControl OS.</p>
+          </button>
+        </div>
+
+        {/* Your Servers list */}
+        {servers.length > 0 && (
+          <div id="your-servers" className="w-full max-w-3xl">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-medium text-gray-400 flex items-center gap-2">
                 <Clock size={14} />

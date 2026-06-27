@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Server, Plus, Search, Settings, Play, Square, Trash2,
   Globe, Wifi, HardDrive, Calendar, Clock, Import, X, Save,
-  CheckCircle, XCircle, Hash, Layers, Bookmark,
+  CheckCircle, XCircle, Hash, Layers, Bookmark, Download, ChevronRight,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
@@ -276,6 +276,52 @@ export default function Servers() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Three option cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <button
+          onClick={() => setShowCreate(true)}
+          className="group relative p-6 rounded-2xl bg-gradient-to-br from-minecraft-600/20 to-minecraft-700/10 border-2 border-minecraft-500/30 hover:border-minecraft-500/60 hover:shadow-[0_0_30px_rgba(34,197,94,0.15)] transition-all duration-300 text-center"
+        >
+          <div className="w-12 h-12 mx-auto rounded-full bg-minecraft-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform duration-300">
+            <Plus className="w-6 h-6 text-minecraft-400" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-100 mb-1">Create Server</h3>
+          <p className="text-xs text-gray-400 leading-relaxed">Set up a brand new Minecraft server from scratch.</p>
+        </button>
+
+        <button
+          onClick={() => {
+            if (servers.length > 0) {
+              document.getElementById('server-grid')?.scrollIntoView({ behavior: 'smooth' });
+            } else {
+              setShowCreate(true);
+            }
+          }}
+          className="group relative p-6 rounded-2xl bg-surface-800/50 border-2 border-surface-700/50 hover:border-surface-600 hover:bg-surface-800 transition-all duration-300 text-center"
+        >
+          <div className="w-12 h-12 mx-auto rounded-full bg-surface-700 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform duration-300">
+            <Play className="w-6 h-6 text-gray-400 group-hover:text-white transition-colors" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-100 mb-1">Open Existing Server</h3>
+          <p className="text-xs text-gray-400 leading-relaxed">
+            {servers.length > 0
+              ? `Select from ${servers.length} ${servers.length === 1 ? 'server' : 'servers'} and pick up where you left off.`
+              : 'No servers yet. Create one to get started.'}
+          </p>
+        </button>
+
+        <button
+          onClick={() => navigate('/import')}
+          className="group relative p-6 rounded-2xl bg-surface-800/50 border-2 border-surface-700/50 hover:border-surface-600 hover:bg-surface-800 transition-all duration-300 text-center"
+        >
+          <div className="w-12 h-12 mx-auto rounded-full bg-surface-700 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform duration-300">
+            <Download className="w-6 h-6 text-gray-400 group-hover:text-white transition-colors" />
+          </div>
+          <h3 className="text-lg font-bold text-gray-100 mb-1">Import Server</h3>
+          <p className="text-xs text-gray-400 leading-relaxed">Bring an existing server folder or ZIP into MineControl OS.</p>
+        </button>
+      </div>
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -351,7 +397,7 @@ export default function Servers() {
 
       {/* Server Grid */}
       {filteredServers.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        <div id="server-grid" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredServers.map(server => {
             const isActive = server.id === activeId;
             const sw = getSoftwareStyle(server.version_source);

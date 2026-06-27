@@ -90,8 +90,7 @@ export default function App() {
               </ProtectedRoute>
             }
           >
-            <Route index element={<IndexRedirect />} />
-            <Route path="servers" element={<Servers />} />
+            <Route index element={<Servers />} />
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="software" element={<Software />} />
             <Route path="players" element={<Players />} />
@@ -140,13 +139,5 @@ function PageTracker() {
   return null;
 }
 
-function IndexRedirect() {
-  const lastPage = localStorage.getItem('mc_last_page');
-  const validRoutes = ['/dashboard', '/software', '/players', '/console', '/worlds', '/plugins', '/backups', '/scheduler', '/connection', '/connection/wizard', '/compatibility', '/discord', '/feedback', '/map', '/diagnostics', '/guide', '/github', '/privacy', '/settings', '/servers'];
-  if (lastPage && validRoutes.includes(lastPage)) {
-    return <Navigate to={lastPage} replace />;
-  }
-  return <Servers />;
-}
 
 
