@@ -6,6 +6,7 @@ import toast from 'react-hot-toast';
 export default function Feedback() {
   const [type, setType] = useState<'bug' | 'feature' | 'general'>('general');
   const [message, setMessage] = useState('');
+  const [title, setTitle] = useState('');
   const [sending, setSending] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -13,9 +14,10 @@ export default function Feedback() {
     if (!message.trim()) return;
     setSending(true);
     try {
-      await api.post('/feedback', { type, message: message.trim() });
+      await api.post('/feedback', { type, message: message.trim(), title: title.trim() || undefined });
       toast.success('Feedback submitted! Thank you.');
       setMessage('');
+      setTitle('');
     } catch (err: any) {
       toast.error(err.message || 'Failed to submit feedback');
     }
@@ -52,6 +54,19 @@ export default function Feedback() {
             ))}
           </div>
         </div>
+
+        {type === 'bug' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">Title</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="input w-full"
+              placeholder="Brief summary of the bug..."
+            />
+          </div>
+        )}
 
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-2">Message</label>

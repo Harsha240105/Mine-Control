@@ -159,6 +159,7 @@ export const api = {
 
   // Diagnostics
   getDiagnostics: () => request<any[]>('/server/diagnostics'),
+  getCrashLogs: () => request<any[]>('/server/crash-logs'),
   healthCheck: () => request<any>('/server/health-check'),
 
   // Version Management

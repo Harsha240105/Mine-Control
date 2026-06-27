@@ -8,6 +8,7 @@ export const MOJANG_MANIFEST = 'https://launchermeta.mojang.com/mc/game/version_
 export const FABRIC_API = 'https://meta.fabricmc.net/v2';
 export const FORGE_API = 'https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json';
 export const PURPUR_API = 'https://api.purpurmc.org/v2/purpur/';
+export const NEOFORGE_API = 'https://api.neoforged.net/v1';
 
 export interface MojangVersion {
   id: string;
@@ -29,6 +30,12 @@ export function cacheSet(key: string, data: any, ttlMs = 300000) {
   cache[key] = { data, expiry: Date.now() + ttlMs };
 }
 
+export function clearCache() {
+  for (const key of Object.keys(cache)) {
+    delete cache[key];
+  }
+}
+
 export async function httpsGet(url: string, timeoutMs = 15000): Promise<string> {
   return new Promise((resolve, reject) => {
     const req = https.get(url, (resp) => {
@@ -48,6 +55,27 @@ export async function httpsGet(url: string, timeoutMs = 15000): Promise<string> 
 }
 
 export function downloadFile(url: string, destPath: string, timeoutMs = 120000): Promise<void> {
+  return downloadWithRetry(url, destPath, timeoutMs, 3);
+}
+
+async function downloadWithRetry(url: string, destPath: string, timeoutMs: number, maxRetries: number): Promise<void> {
+  let lastError: Error | null = null;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      await downloadOnce(url, destPath, timeoutMs);
+      return;
+    } catch (err: any) {
+      lastError = err;
+      if (attempt < maxRetries) {
+        const delay = Math.min(1000 * Math.pow(2, attempt), 10000);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastError || new Error('Download failed');
+}
+
+function downloadOnce(url: string, destPath: string, timeoutMs: number): Promise<void> {
   return new Promise((resolve, reject) => {
     const tempPath = destPath + '.download';
     const file = fs.createWriteStream(tempPath);
@@ -57,7 +85,7 @@ export function downloadFile(url: string, destPath: string, timeoutMs = 120000):
       const client = requestUrl.startsWith('https') ? https : http;
       const options = {
         headers: {
-          'User-Agent': 'MineControl-OS/1.0.35 (contact@minecontrol.dev)'
+          'User-Agent': 'MineControl-OS/1.0.48 (contact@minecontrol.dev)'
         }
       };
       const req = client.get(requestUrl, options, (resp: any) => {
@@ -73,7 +101,7 @@ export function downloadFile(url: string, destPath: string, timeoutMs = 120000):
         if (resp.statusCode !== 200) {
           file.close();
           if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-          return reject(new Error(`Failed to download: HTTP ${resp.statusCode}`));
+          return reject(new Error(`Failed to download: HTTP ${resp.statusCode} from ${requestUrl}`));
         }
         resp.pipe(file);
         file.on('finish', () => {
@@ -87,7 +115,7 @@ export function downloadFile(url: string, destPath: string, timeoutMs = 120000):
               fs.closeSync(fd);
               if (buffer[0] !== 0x50 || buffer[1] !== 0x4B || buffer[2] !== 0x03 || buffer[3] !== 0x04) {
                 if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-                return reject(new Error('Downloaded file is not a valid ZIP/JAR archive.'));
+                return reject(new Error('Downloaded file is not a valid ZIP/JAR archive (bad magic bytes).'));
               }
             } catch (err) {
               if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
@@ -198,6 +226,21 @@ export async function downloadForgeVersion(version: string, jarPath: string): Pr
   }
 }
 
+export async function downloadNeoForgeVersion(version: string, jarPath: string): Promise<void> {
+  try {
+    const neoforgeData = await httpsGet(`${NEOFORGE_API}/versions/${version}`);
+    const parsed = JSON.parse(neoforgeData);
+    const latest = parsed?.versions?.[parsed.versions.length - 1];
+    if (!latest) {
+      throw new Error(`No NeoForge builds found for Minecraft ${version}`);
+    }
+    const downloadUrl = `https://maven.neoforged.net/releases/net/neoforged/neoforge/${latest}/neoforge-${latest}-server.jar`;
+    await downloadFile(downloadUrl, jarPath);
+  } catch (err: any) {
+    throw new Error(`Failed to download NeoForge ${version}: ${err.message}`);
+  }
+}
+
 export async function downloadVanillaVersion(version: string, jarPath: string): Promise<void> {
   try {
     let mojangVersions: MojangVersion[] = [];
@@ -232,6 +275,7 @@ export async function downloadVersion(version: string, source: string | undefine
   const useFabric = sourceLower === 'fabric';
   const usePurpur = sourceLower === 'purpur';
   const useForge = sourceLower === 'forge';
+  const useNeoForge = sourceLower === 'neoforge';
   const useVanilla = sourceLower === 'vanilla' || sourceLower === 'mojang';
 
   if (useFabric) {
@@ -240,6 +284,8 @@ export async function downloadVersion(version: string, source: string | undefine
     await downloadPurpurVersion(version, jarPath);
   } else if (useForge) {
     await downloadForgeVersion(version, jarPath);
+  } else if (useNeoForge) {
+    await downloadNeoForgeVersion(version, jarPath);
   } else if (usePaper) {
     await downloadPaperVersion(version, jarPath);
   } else {
@@ -252,6 +298,7 @@ export async function downloadVersion(version: string, source: string | undefine
   else if (useFabric) { sourceName = 'Fabric'; displaySource = 'Fabric'; }
   else if (usePurpur) { sourceName = 'Purpur'; displaySource = 'Purpur'; }
   else if (useForge) { sourceName = 'Forge'; displaySource = 'Forge'; }
+  else if (useNeoForge) { sourceName = 'NeoForge'; displaySource = 'NeoForge'; }
 
   return { sourceName, displaySource };
 }

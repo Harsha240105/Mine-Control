@@ -368,7 +368,10 @@ class MinecraftServerManager extends EventEmitter {
     this.crashLog = [];
 
     try {
-      // ── Phase 1: Pre-flight validation (no state change yet) ──
+      // Enter STARTING state immediately so the UI reflects the transition
+      this.setState(ServerState.STARTING);
+
+      // ── Phase 1: Pre-flight validation ──
       this.emit('server:output', '[MineControl] Pre-flight validation...\n');
       const { config, jarFileName, jarPath } = await this.validatePreFlight();
 
@@ -376,8 +379,7 @@ class MinecraftServerManager extends EventEmitter {
       this.emit('server:output', '[MineControl] Resolving Java runtime...\n');
       const { javaPath, javaMajor } = await this.resolveJava(jarPath, config);
 
-      // ── All checks passed — enter STARTING state and spawn ──
-      this.setState(ServerState.STARTING);
+      // ── All checks passed — spawn the process ──
       this.emit('server:output', `[MineControl] Starting with Java ${javaMajor} at "${javaPath}"...\n`);
 
       // Log file
@@ -486,6 +488,24 @@ class MinecraftServerManager extends EventEmitter {
         this.emit('server:output', `[MineControl] Runtime error: ${err.message}\n`);
       });
 
+      // Done detection timeout — if server hasn't printed 'Done' within 120s, mark as failed
+      const doneTimeout = setTimeout(() => {
+        if (!this.hasStartedSuccessfully && (this._state === ServerState.STARTING)) {
+          const snippet = this.outputBuffer.slice(-20).join('\n');
+          this._lastError = `Server did not finish starting within 120 seconds. Possible causes: wrong Java version, corrupted jar, or insufficient RAM.\n\nLast output:\n${snippet}`;
+          this.emit('server:error', this._lastError);
+          this.emit('server:output', `\n[MineControl] ERROR: ${this._lastError}\n`);
+          if (this.process) {
+            try { this.process.kill(); } catch {}
+          }
+          this.cleanup();
+          this.setState(ServerState.FAILED);
+        }
+      }, 120000);
+
+      // Clear done timeout on successful start
+      this.once('server:started', () => clearTimeout(doneTimeout));
+
       // Start process telemetry monitoring
       this.startStatsMonitoring();
 
@@ -539,8 +559,11 @@ class MinecraftServerManager extends EventEmitter {
         continue;
       }
 
-      // Done loading
-      if (line.includes('Done') && line.includes('For help')) {
+      // Done loading — match common Minecraft done message patterns
+      const doneMatch = line.match(/Done\s*\([^)]+\)!\s*For\s+help/i) ||
+                        line.includes('Done') && line.includes('For help') ||
+                        line.includes('Done (') && line.includes(')! For help');
+      if (doneMatch) {
         this.startedAt = new Date();
         this.hasStartedSuccessfully = true;
         this.setState(ServerState.RUNNING);

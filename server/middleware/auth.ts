@@ -10,6 +10,7 @@ export interface AuthRequest extends Request {
     username: string;
     role: string;
   };
+  file?: Express.Multer.File;
 }
 
 export function generateToken(user: { id: string; username: string; role: string }): string {

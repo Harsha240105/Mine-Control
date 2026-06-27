@@ -407,7 +407,7 @@ ipcMain.handle('install-update', () => {
 ipcMain.handle('uninstall-app-only', async () => {
   const { execSync } = require('child_process');
   const exePath = app.getPath('exe');
-  const installDir = path.dirname(path.dirname(exePath));
+  const installDir = path.dirname(exePath);
   const uninstallPath = path.join(installDir, 'Uninstall MineControl OS.exe');
 
   if (fs.existsSync(uninstallPath)) {
@@ -440,7 +440,7 @@ ipcMain.handle('uninstall-complete-removal', async () => {
 
   const { execSync } = require('child_process');
   const exePath = app.getPath('exe');
-  const installDir = path.dirname(path.dirname(exePath));
+  const installDir = path.dirname(exePath);
   const uninstallPath = path.join(installDir, 'Uninstall MineControl OS.exe');
 
   if (fs.existsSync(uninstallPath)) {

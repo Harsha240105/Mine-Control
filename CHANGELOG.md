@@ -4,6 +4,17 @@ All notable changes to MineControl OS are documented here.
 
 ---
 
+## v1.0.47 — Repository Organization & Universal Java Launcher Compatibility
+
+- Repository restructured with standard open-source files: LICENSE, CHANGELOG.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md
+- Added GitHub issue templates (bug report, feature request) and pull request template
+- Cleaned up unused files: removed old specs, temp task files, unused test scripts, IDE settings
+- Removed 110 unused npm packages including `@react-three/drei`, `chokidar`, `express-rate-limit`, `systeminformation`, and others
+- README completely rewritten with comprehensive sections: features, installation, connection modes, authentication modes, FAQ, troubleshooting, architecture, and roadmap
+- Launcher Compatibility section added to Compatibility Manager showing which launchers work in each join mode
+- Updated auto-updater error handling with contextual messages for network errors, rate limiting, and missing assets
+- Added `GH_TOKEN` support from env var or config file for authenticated GitHub API access
+
 ## v1.0.46 — Persistent Data Architecture & Safe Update System
 
 - Data directory separation: app binaries and user data now stored separately (userData = AppData/Roaming/MineControl OS)
@@ -74,6 +85,43 @@ All notable changes to MineControl OS are documented here.
 - Automatic Java Runtime Resolution from .class files
 - Pre-flight validation before starting (jar, EULA, port)
 - Dashboard handles all server states
+
+## v1.0.48 — Complete System Integration, Workflow & Stability
+
+### Critical Bug Fixes
+- **Feedback System**: UI now sends correct `{ type, message, title }` format matching server expectations; server accepts `general` type and `message` alias for `description`; diagnostics auto-collect real crash reports, server logs, firewall status, and Minecraft dir info
+- **Uninstaller Path**: Fixed `path.dirname(path.dirname(exePath))` → `path.dirname(exePath)` so the uninstaller is found at `C:\Program Files\MineControl OS\` instead of `C:\Program Files\`
+- **Server Startup**: State immediately transitions to STARTING before pre-flight validation so the UI reflects progress; done-detection uses regex matching for locale-independent `Done (XXs)! For help` patterns; added 120-second done-timeout to prevent infinite STARTING state on corrupted jars
+- **Diagnostics**: `osVersion` field now returns actual OS version (`Windows NT 10.0`) instead of app version
+
+### Software Download Improvements
+- **NeoForge support**: Added `downloadNeoForgeVersion()` using the NeoForge API (`api.neoforged.net/v1`)
+- **Auto-retry**: Downloads automatically retry up to 3 times with exponential backoff (1s, 2s, 4s) on failure
+- **Clear error messages**: HTTP status codes include the URL in error output for easier debugging
+- **Cache clear**: Added `clearCache()` function to reset in-memory version caches
+
+### Plugin Manager Fixes
+- Plugins now immediately refresh after install (removed arbitrary 3-second timeout)
+- User message explicitly says "Restart the server for it to take effect"
+- Modrinth marketplace installs also refresh immediately
+
+### Backup System Fixes
+- Added `GET /backups/settings` and `POST /backups/settings` endpoints (UI was calling these but they didn't exist)
+- Backup records now include `server_id` foreign key for multi-server support
+
+### API Enhancements
+- Added `GET /server/crash-logs` endpoint returning latest crash report contents (up to 3 files, 5000 chars each)
+- Added `api.getCrashLogs()` to frontend API library
+
+### World Import/Export
+- World upload now supports proper multipart file upload via `multer` (1 GB limit)
+- All world endpoints sanitize path names to prevent directory traversal (`sanitizeWorldName`)
+- World records now include `server_id` foreign key on create/upload/clone
+
+### Build & Release
+- Version bumped to 1.0.48
+- All TypeScript compilations (server, electron, client) pass with zero errors
+- Vite production build succeeds (848 KB JS, 60 KB CSS)
 
 ## Earlier Versions
 

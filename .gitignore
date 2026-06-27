@@ -40,4 +40,5 @@ server-out.log
 *.db-journal
 *.db-wal
 update-backups/
+SPECIFICATION-*.md
 

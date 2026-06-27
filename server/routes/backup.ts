@@ -45,4 +45,40 @@ router.delete('/:id', authMiddleware, requirePermission('backup.create'), (req: 
   }
 });
 
+// Backup settings
+router.get('/settings', authMiddleware, (_req: AuthRequest, res) => {
+  try {
+    const db = require('../database').getDatabase();
+    const getVal = (key: string, def: any = null) => {
+      const row = db.prepare("SELECT value FROM server_config WHERE key = ?").get(`backup_${key}`) as any;
+      return row ? row.value : def;
+    };
+    res.json({
+      customFolder: getVal('customFolder', ''),
+      customFolderEnabled: getVal('customFolderEnabled') === 'true',
+      saveToBoth: getVal('saveToBoth') === 'true',
+      autoBackup: getVal('autoBackup') === 'true',
+    });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
+router.post('/settings', authMiddleware, (req: AuthRequest, res) => {
+  try {
+    const db = require('../database').getDatabase();
+    const { customFolder, customFolderEnabled, saveToBoth, autoBackup } = req.body;
+    const upsert = (key: string, value: string) => {
+      db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)").run(`backup_${key}`, value);
+    };
+    if (customFolder !== undefined) upsert('customFolder', customFolder);
+    if (customFolderEnabled !== undefined) upsert('customFolderEnabled', String(customFolderEnabled));
+    if (saveToBoth !== undefined) upsert('saveToBoth', String(saveToBoth));
+    if (autoBackup !== undefined) upsert('autoBackup', String(autoBackup));
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(400).json({ error: error.message });
+  }
+});
+
 export default router;

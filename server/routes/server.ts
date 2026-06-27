@@ -15,7 +15,7 @@ import { JavaDetector } from '../services/JavaDetector';
 import {
   cacheGet, cacheSet, httpsGet, downloadFile, isPaperAvailable,
   downloadPaperVersion, downloadFabricVersion, downloadPurpurVersion,
-  downloadForgeVersion, downloadVanillaVersion, downloadVersion,
+  downloadForgeVersion, downloadNeoForgeVersion, downloadVanillaVersion, downloadVersion,
   MojangVersion, PAPER_API, MOJANG_MANIFEST, FABRIC_API, FORGE_API, PURPUR_API
 } from '../services/download';
 
@@ -187,7 +187,7 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
     mcDirSize: cachedSysStats.mcDirSize,
     uptime: minecraftServer.uptime,
     startedAt: minecraftServer.startedAtISO,
-    osVersion: (() => { try { return require('../../package.json').version; } catch { return require('../../../package.json').version; } })(),
+    osVersion: `${os.type()} ${os.release()}`,
   };
 
   res.json(status);
@@ -806,6 +806,26 @@ router.get('/diagnostics', authMiddleware, async (_req: AuthRequest, res) => {
   res.json(checks);
 });
 
+// Crash logs — latest crash report content
+router.get('/crash-logs', authMiddleware, async (_req: AuthRequest, res) => {
+  const mcDir = resolveMinecraftDir();
+  const logsDir = path.join(mcDir, 'logs');
+  const crashFiles: any[] = [];
+  if (fs.existsSync(logsDir)) {
+    const files = fs.readdirSync(logsDir).filter(f => f.startsWith('crash-') || f.includes('hs_err'));
+    files.sort().reverse();
+    for (const file of files.slice(0, 3)) {
+      try {
+        crashFiles.push({
+          name: file,
+          content: fs.readFileSync(path.join(logsDir, file), 'utf-8').slice(0, 5000),
+        });
+      } catch {}
+    }
+  }
+  res.json(crashFiles);
+});
+
 // Health Check
 router.post('/health-check', authMiddleware, async (_req: AuthRequest, res) => {
   const checks: any[] = [];
@@ -1141,12 +1161,14 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
     const useFabric = sourceLower === 'fabric';
     const usePurpur = sourceLower === 'purpur';
     const useForge = sourceLower === 'forge';
+    const useNeoForge = sourceLower === 'neoforge';
     const useVanilla = sourceLower === 'vanilla' || sourceLower === 'mojang';
     let jarPrefix = 'vanilla';
     if (usePaper) jarPrefix = 'paper';
     else if (useFabric) jarPrefix = 'fabric';
     else if (usePurpur) jarPrefix = 'purpur';
     else if (useForge) jarPrefix = 'forge';
+    else if (useNeoForge) jarPrefix = 'neoforge';
     const jarFile = `${jarPrefix}-${version}.jar`;
     const jarPath = path.join(mcDir, jarFile);
 
@@ -1157,6 +1179,8 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
         await downloadPurpurVersion(version, jarPath);
       } else if (useForge) {
         await downloadForgeVersion(version, jarPath);
+      } else if (useNeoForge) {
+        await downloadNeoForgeVersion(version, jarPath);
       } else if (usePaper) {
         await downloadPaperVersion(version, jarPath);
       } else {
@@ -1185,6 +1209,7 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
       else if (useFabric) sourceName = 'Fabric';
       else if (usePurpur) sourceName = 'Purpur';
       else if (useForge) sourceName = 'Forge';
+      else if (useNeoForge) sourceName = 'NeoForge';
       db.prepare("UPDATE servers SET version = ?, version_source = ?, updated_at = datetime('now') WHERE id = ?").run(version, sourceName, activeId);
     }
     let displaySource = 'Vanilla';
@@ -1192,6 +1217,7 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
     else if (useFabric) displaySource = 'Fabric';
     else if (usePurpur) displaySource = 'Purpur';
     else if (useForge) displaySource = 'Forge';
+    else if (useNeoForge) displaySource = 'NeoForge';
     res.json({ success: true, message: `Switched to ${displaySource} ${version}. Start the server to apply.` });
   } catch (error: any) {
     res.status(400).json({ error: error.message });

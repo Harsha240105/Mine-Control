@@ -42,9 +42,18 @@ export class BackupService {
           path: filePath,
         };
 
-        db.prepare(
-          'INSERT INTO backups (id, name, size, created_at, type, worlds, encrypted, path) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-        ).run(...Object.values(backup));
+        // Include server_id in backup
+        let serverId = null;
+        try {
+          const db2 = getDatabase();
+          const activeRow = db2.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any;
+          serverId = activeRow?.value || null;
+        } catch {}
+        const backupData: Record<string, any> = { ...backup, server_id: serverId };
+        const cols = ['id', 'name', 'size', 'created_at', 'type', 'worlds', 'encrypted', 'path', 'server_id'];
+        const vals = cols.map(c => backupData[c]);
+        const placeholders = cols.map(() => '?').join(', ');
+        db.prepare(`INSERT INTO backups (${cols.join(', ')}) VALUES (${placeholders})`).run(...vals);
 
         if (encrypted) {
           await this.encryptFile(filePath);

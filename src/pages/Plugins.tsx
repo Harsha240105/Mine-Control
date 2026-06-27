@@ -99,9 +99,9 @@ export default function Plugins() {
     setInstallingPlugins(prev => new Set(prev).add(name));
     try {
       await api.installPlugin(name, url);
-      toast.success(`Installing ${name}...`);
+      toast.success(`${name} installed! Restart the server for it to take effect.`);
       if (e) { setPluginName(''); setPluginUrl(''); setShowInstall(false); }
-      setTimeout(fetchPlugins, 3000);
+      await fetchPlugins();
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -118,8 +118,8 @@ export default function Plugins() {
     setInstallingPlugins(prev => new Set(prev).add(p.name));
     try {
       await api.installPlugin(p.name, p.url);
-      toast.success(`Installing ${p.name}...`);
-      setTimeout(fetchPlugins, 3000);
+      toast.success(`${p.name} installed! Restart the server for it to take effect.`);
+      await fetchPlugins();
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -389,7 +389,7 @@ export default function Plugins() {
                       setInstallingPlugins(prev => new Set(prev).add(mod.title));
                       try {
                         await api.installPlugin(mod.title, `modrinth:${mod.slug || mod.project_id}`);
-                        toast.success(`Installing ${mod.title}...`);
+                        toast.success(`${mod.title} installed! Restart the server for it to take effect.`);
                       } catch (err: any) {
                         toast.error(err.message);
                       } finally {

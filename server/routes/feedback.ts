@@ -15,17 +15,17 @@ router.get('/', authMiddleware, (_req: AuthRequest, res) => {
 });
 
 router.post('/', authMiddleware, (req: AuthRequest, res) => {
-  const { title, description, type, screenshots } = req.body;
-  if (!title || !description || !type) {
-    return res.status(400).json({ error: 'title, description, and type are required' });
-  }
-  if (type !== 'bug' && type !== 'feature') {
-    return res.status(400).json({ error: 'type must be "bug" or "feature"' });
+  const { title, description, type, screenshots, message } = req.body;
+  const finalType = type === 'bug' ? 'bug' : type === 'feature' ? 'feature' : 'general';
+  const finalTitle = title || (finalType === 'bug' ? 'Bug Report' : finalType === 'feature' ? 'Feature Request' : 'Feedback');
+  const finalDescription = description || message || '';
+  if (!finalDescription) {
+    return res.status(400).json({ error: 'description or message is required' });
   }
   const ticket = feedbackService.createTicket({
-    title,
-    description,
-    type,
+    title: finalTitle,
+    description: finalDescription,
+    type: finalType,
     username: req.user!.username,
     screenshots: screenshots || [],
   });

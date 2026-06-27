@@ -9,8 +9,8 @@ function random5(): string {
   return String(Math.floor(10000 + Math.random() * 90000));
 }
 
-function generateTicketId(type: 'bug' | 'feature'): string {
-  const prefix = type === 'bug' ? 'BUG' : 'MC';
+function generateTicketId(type: 'bug' | 'feature' | 'general'): string {
+  const prefix = type === 'bug' ? 'BUG' : type === 'feature' ? 'MC' : 'GEN';
   return `${prefix}-${random5()}`;
 }
 
@@ -55,8 +55,43 @@ function collectDiagnostics(): Record<string, any> {
   const cpus = os.cpus();
   const cpuModel = cpus.length > 0 ? cpus[0].model : 'unknown';
 
+  // Collect crash reports from logs directory
+  let crashReports: string[] = [];
+  try {
+    const logDir = path.join(process.cwd(), 'logs');
+    if (fs.existsSync(logDir)) {
+      const crashFiles = fs.readdirSync(logDir).filter(f => f.startsWith('crash-') || f.includes('hs_err'));
+      for (const cf of crashFiles.slice(-3)) {
+        crashReports.push(cf + ': ' + fs.readFileSync(path.join(logDir, cf), 'utf-8').slice(0, 2000));
+      }
+    }
+  } catch {}
+
+  // Minecraft server log tail
+  let serverLogTail: string[] = [];
+  try {
+    const mcDir = process.env.MINECRAFT_DIR || '';
+    const logsDir = path.join(mcDir, 'logs');
+    if (fs.existsSync(logsDir)) {
+      const logFiles = fs.readdirSync(logsDir).filter(f => f.startsWith('server-') && f.endsWith('.log')).sort().reverse();
+      if (logFiles.length > 0) {
+        const latest = fs.readFileSync(path.join(logsDir, logFiles[0]), 'utf-8');
+        serverLogTail = latest.split(/\r?\n/).filter(Boolean).slice(-100);
+      }
+    }
+  } catch {}
+
+  let firewallStatus = 'unknown';
+  try {
+    const { execSync } = require('child_process');
+    const fwOut = execSync('netsh advfirewall firewall show rule name="MineControl OS Minecraft" dir=in verbose', { encoding: 'utf-8', timeout: 3000 });
+    firewallStatus = fwOut.includes('Enabled:               Yes') ? 'active' : 'inactive';
+  } catch {
+    firewallStatus = 'no_rule';
+  }
+
   return {
-    app_version: process.env.npm_package_version || '1.0.44',
+    app_version: process.env.npm_package_version || '1.0.48',
     os: `${os.type()} ${os.release()}`,
     cpu: cpuModel,
     cpu_cores: cpus.length,
@@ -64,11 +99,15 @@ function collectDiagnostics(): Record<string, any> {
     free_ram_gb: Math.round((os.freemem() / (1024 ** 3)) * 100) / 100,
     java: javaInfo,
     minecraft_version: minecraftVersion,
+    minecraft_dir: process.env.MINECRAFT_DIR || '',
     plugins: pluginsList,
     last_50_console_lines: consoleLines,
+    server_log_tail: serverLogTail,
+    crash_reports: crashReports,
     socket_io_state: 'connected',
     network_state: 'active',
     playit_status: playitStatus,
+    firewall_status: firewallStatus,
     platform: process.platform,
     arch: process.arch,
     hostname: os.hostname(),
@@ -95,7 +134,7 @@ export const feedbackService = {
   createTicket(data: {
     title: string;
     description: string;
-    type: 'bug' | 'feature';
+    type: 'bug' | 'feature' | 'general';
     username: string;
     screenshots?: string[];
   }) {
