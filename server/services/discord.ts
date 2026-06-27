@@ -67,7 +67,7 @@ class DiscordService {
   private setupHooks() {
     minecraftServer.on('server:started', () => {
       const db = getDatabase();
-      const voiceRow = db.prepare("SELECT value FROM server_config WHERE key = 'discordVoiceUrl'").get() as any;
+      const voiceRow = db.prepare("SELECT value FROM server_config WHERE key = 'discordVoiceChannelId'").get() as any;
       const voiceUrl = voiceRow?.value;
       
       let msg = '✅ Minecraft Server has started!';

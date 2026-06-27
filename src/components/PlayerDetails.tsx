@@ -27,7 +27,7 @@ export default function PlayerDetails({ serverId, uuid, username, onClose }: Pla
     const fetchPlayerData = async () => {
       try {
         const response = await fetch(`/api/server/${serverId}/player/${uuid}?username=${username}`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('mc_token')}` }
         });
         if (!response.ok) throw new Error('Failed to load player data');
         const resData = await response.json();
@@ -193,7 +193,7 @@ export default function PlayerDetails({ serverId, uuid, username, onClose }: Pla
                       <div className="text-xs text-gray-500 mb-1 flex items-center gap-1.5"><Package size={12}/> Blocks Broken</div>
                       <div className="text-lg font-bold text-gray-200">
                         {data.stats?.stats?.['minecraft:mined'] 
-                          ? Object.values(data.stats.stats['minecraft:mined']).reduce((a: any, b: any) => a + b, 0)
+                          ? (Object.values(data.stats.stats['minecraft:mined']) as number[]).reduce((a: number, b: number) => a + b, 0)
                           : '0'}
                       </div>
                     </div>
@@ -201,7 +201,7 @@ export default function PlayerDetails({ serverId, uuid, username, onClose }: Pla
                       <div className="text-xs text-gray-500 mb-1 flex items-center gap-1.5"><Crosshair size={12}/> Entities Killed</div>
                       <div className="text-lg font-bold text-gray-200">
                         {data.stats?.stats?.['minecraft:killed'] 
-                          ? Object.values(data.stats.stats['minecraft:killed']).reduce((a: any, b: any) => a + b, 0)
+                          ? (Object.values(data.stats.stats['minecraft:killed']) as number[]).reduce((a: number, b: number) => a + b, 0)
                           : '0'}
                       </div>
                     </div>

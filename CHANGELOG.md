@@ -86,6 +86,35 @@ All notable changes to MineControl OS are documented here.
 - Pre-flight validation before starting (jar, EULA, port)
 - Dashboard handles all server states
 
+## v1.0.51 — Architecture Audit & Critical Fixes Release
+
+### Critical Bug Fixes
+- **schedules.ts auth bypass**: POST/PUT/DELETE routes for server schedules were completely broken — missing `authMiddleware` caused all requests to fail with 401. Fixed by adding proper auth middleware and permission checks.
+- **feedback.ts unauthenticated routes**: GET `/:id` and POST `/:id/vote` had no authentication middleware, allowing anyone to view tickets and vote. Both routes now require authentication.
+- **Player auto-register crash**: When a new player joined, `uuid = ''` was inserted into the `players` table, violating the UNIQUE constraint on the second unknown player. Now generates a proper UUID if none is available from the game server.
+- **Discord voice channel mismatch**: The Discord service looked up voice channel data using key `discordVoiceUrl`, but the settings route stores it as `discordVoiceChannelId`. Aligned both to use `discordVoiceChannelId`.
+- **Race condition on server startup**: The `server:started` event listener was registered after the `doneTimeout` was set, but the process was already spawned. If the server printed "Done" between spawn and listener registration, the timeout would never be cleared, causing a false failure after 120s. Now registers the listener before the timeout.
+
+### Security Improvements
+- **Default owner password**: Removed hardcoded `OXK@6126` from source code. Now read from `DEFAULT_OWNER_PASSWORD` env var, defaults to `minecontrol` with a startup warning.
+- **JWT secret**: Default fallback now logs a warning at startup recommending users set `JWT_SECRET` env var.
+- **builds.ts permission gap**: POST `/api/builds` route was missing `requirePermission`, allowing any authenticated user to create build tags. Now requires `world.manage`.
+- **CGNAT detection fixed**: Previously only checked `firstOctet === 100`, which would miss CGNAT addresses (range is 100.64.0.0/10). Now correctly checks second octet (64–127).
+
+### Persistence & Route Fixes
+- **privacy.ts hardcoded count**: `tickets_count` was hardcoded to `0` instead of querying the `feedback_tickets` table. Now uses a proper COUNT query.
+- **import.ts routes mounted**: The import server routes (analyze, execute, supported-formats) were never mounted in index.ts. Now mounted at `/api/import`.
+- **Duplicate `/api/server` prefix**: Analytics routes were mounted at `/api/server`, conflicting with the server status routes. Moved to `/api/analytics`.
+- **Scheduler restart delay**: Scheduled restart tasks now wait 1 second between `stop` and `start` to prevent port-release race conditions, matching the behavior of the manual restart route.
+
+### Electron Improvements
+- **Tray icon**: Replaced invisible `nativeImage.createEmpty()` with app icon from `public/logo.png` (falls back to empty if file missing).
+- **Update backup cleanup**: `cleanupOldBackups()` is now called after each update backup creation, keeping the last 5 backups and pruning older ones.
+- **Removed dead variable**: Removed unused `serverModule` variable from auto-recovery code.
+
+### Build & Release
+- Version bumped to 1.0.51
+
 ## v1.0.50 — Bug Fixes & Polish Release
 
 ### Bug Fixes

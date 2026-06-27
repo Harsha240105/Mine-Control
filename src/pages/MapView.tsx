@@ -13,7 +13,7 @@ export default function MapView() {
   const [selectedPlugin, setSelectedPlugin] = useState('bluemap');
   const [customPort, setCustomPort] = useState('8100');
   const [mapUrl, setMapUrl] = useState('');
-  const [loadError, setLoadError] = useState(false);
+  const [loadError] = useState(false);
   const [config, setConfig] = useState<any>({});
   const [checking, setChecking] = useState(false);
   const [status, setStatus] = useState<'unknown' | 'online' | 'offline'>('unknown');
@@ -123,7 +123,7 @@ export default function MapView() {
       </div>
 
       <div className="flex-1 card p-0 overflow-hidden bg-surface-900 relative">
-        {loadError || status === 'offline' ? (
+        {status === 'offline' ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500">
             <Map size={48} className="mb-3 opacity-30" />
             <p className="text-sm font-medium">Map not available</p>
@@ -132,7 +132,7 @@ export default function MapView() {
               Expected at: <code className="text-minecraft-400 bg-surface-800 px-1.5 py-0.5 rounded">{url}</code>
             </p>
             <button
-              onClick={() => { setLoadError(false); checkMapStatus(); }}
+              onClick={() => checkMapStatus()}
               className="mt-3 text-xs bg-minecraft-600/20 hover:bg-minecraft-600/30 text-minecraft-400 px-3 py-1.5 rounded-lg transition-colors"
             >
               <RefreshCw size={12} className="inline mr-1" />
@@ -144,7 +144,7 @@ export default function MapView() {
             src={url}
             className="w-full h-full border-0"
             title="Live World Map"
-            onError={() => setLoadError(true)}
+            onLoad={() => {}}
             sandbox="allow-scripts allow-same-origin"
           />
         )}

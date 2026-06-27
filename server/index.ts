@@ -33,6 +33,7 @@ import discordRoutes from './routes/discord';
 import feedbackRoutes from './routes/feedback';
 import privacyRoutes from './routes/privacy';
 import uiRoutes from './routes/ui';
+import importRoutes from './routes/import';
 import { SchedulerService } from './services/scheduler';
 import { discordService } from './services/discord';
 
@@ -87,10 +88,11 @@ app.use('/api/github', githubRoutes);
 app.use('/api/compatibility', compatibilityRoutes);
 app.use('/api/schedules', scheduleRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
-app.use('/api/server', analyticsRoutes);
+app.use('/api/analytics', analyticsRoutes);
 app.use('/api/discord', discordRoutes);
 app.use('/api/feedback', feedbackRoutes);
 app.use('/api/privacy', privacyRoutes);
+app.use('/api/import', importRoutes);
 app.use('/api/ui', uiRoutes);
 
 // API 404 handler (unknown API routes return JSON, not HTML)

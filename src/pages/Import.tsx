@@ -49,10 +49,10 @@ export default function Import() {
         const result = await window.electronAPI.selectFile([
           { name: 'Archives', extensions: ['zip', 'rar', '7z', 'tar', 'gz'] }
         ]);
-        if (result && result.length > 0) selectedPath = result[0];
+        if (result) selectedPath = result;
       } else {
         const result = await window.electronAPI.selectDirectory();
-        if (result && result.length > 0) selectedPath = result[0];
+        if (result) selectedPath = result;
       }
 
       if (selectedPath) {

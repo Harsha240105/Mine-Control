@@ -340,7 +340,7 @@ export default function Players() {
                           }`}
                           title={player.muted ? 'Unmute' : 'Mute'}
                         >
-                          {player.muted ? <Volume2 size={14} /> : <VolumeX size={14} />}
+                          {player.muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
                         </button>
                         {player.role !== 'Owner' && (
                           <button

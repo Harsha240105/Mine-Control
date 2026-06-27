@@ -356,7 +356,12 @@ function initializeSchema() {
     // Seed default owner if not exists
     const existingOwner = db.prepare("SELECT id FROM users WHERE role = 'Owner'").get();
     if (!existingOwner) {
-      const hash = bcrypt.hashSync('OXK@6126', 10);
+      const defaultPassword = process.env.DEFAULT_OWNER_PASSWORD || 'minecontrol';
+      console.log('[DB] Creating default owner account. Change password immediately via Settings.');
+      if (!process.env.DEFAULT_OWNER_PASSWORD) {
+        console.log('[DB] Default owner password is "minecontrol". Set DEFAULT_OWNER_PASSWORD env var to override.');
+      }
+      const hash = bcrypt.hashSync(defaultPassword, 10);
       db.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)').run(uuidv4(), 'owner', hash, 'Owner');
     }
 

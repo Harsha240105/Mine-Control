@@ -14,7 +14,7 @@ router.get('/data', authMiddleware, (_req: AuthRequest, res) => {
     const servers_count = (db.prepare('SELECT COUNT(*) as c FROM servers').get() as any)?.c || 0;
     const players_count = (db.prepare('SELECT COUNT(*) as c FROM players').get() as any)?.c || 0;
     const backups_count = (db.prepare('SELECT COUNT(*) as c FROM backups').get() as any)?.c || 0;
-    const tickets_count = 0;
+    const tickets_count = (db.prepare('SELECT COUNT(*) as c FROM feedback_tickets').get() as any)?.c || 0;
     const chat_logs_count = (db.prepare('SELECT COUNT(*) as c FROM chat_log').get() as any)?.c || 0;
 
     // Calculate server logs size

@@ -46,13 +46,13 @@ export default function GitHub() {
     }
     setSubmitting(true);
     try {
-      await api.submitBugReport({
-        title: bugTitle,
-        description: bugDescription,
-        logs: bugLogs,
-        images: bugImages.map(f => f.name),
-        videos: bugVideos.map(f => f.name),
-      });
+      const formData = new FormData();
+      formData.append('title', bugTitle);
+      formData.append('description', bugDescription);
+      formData.append('logs', bugLogs);
+      bugImages.forEach(f => formData.append('images', f));
+      bugVideos.forEach(f => formData.append('videos', f));
+      await api.postFormData('/github/bug-report', formData);
       toast.success('Bug report submitted!');
       setBugTitle(''); setBugDescription(''); setBugLogs(''); setBugImages([]); setBugVideos([]);
       fetchIssues();

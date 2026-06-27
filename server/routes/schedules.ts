@@ -28,7 +28,7 @@ router.get('/', authMiddleware, (req, res) => {
 });
 
 // Create schedule
-router.post('/', requirePermission('*'), (req, res) => {
+router.post('/', authMiddleware, requirePermission('*'), (req, res) => {
   try {
     const db = getDatabase();
     const { server_id, name, cron, action, command, enabled } = req.body;
@@ -60,7 +60,7 @@ router.post('/', requirePermission('*'), (req, res) => {
 });
 
 // Update schedule
-router.put('/:id', requirePermission('*'), (req, res) => {
+router.put('/:id', authMiddleware, requirePermission('*'), (req, res) => {
   try {
     const db = getDatabase();
     const { id } = req.params;
@@ -81,7 +81,7 @@ router.put('/:id', requirePermission('*'), (req, res) => {
 });
 
 // Delete schedule
-router.delete('/:id', requirePermission('*'), (req, res) => {
+router.delete('/:id', authMiddleware, requirePermission('*'), (req, res) => {
   try {
     const db = getDatabase();
     const { id } = req.params;

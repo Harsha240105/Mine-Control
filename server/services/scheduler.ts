@@ -54,6 +54,7 @@ export class SchedulerService {
             break;
           case 'restart':
             await minecraftServer.stop();
+            await new Promise(r => setTimeout(r, 1000));
             await minecraftServer.start();
             break;
           case 'backup':

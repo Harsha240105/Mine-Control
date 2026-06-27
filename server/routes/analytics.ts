@@ -57,7 +57,7 @@ router.get('/:id/player/:uuid', authMiddleware, async (req: AuthRequest, res) =>
       if (req.query.username) {
         const playerDb = db.prepare('SELECT status FROM players WHERE username = ?').get(req.query.username.toString()) as any;
         if (playerDb && playerDb.status === 'online') {
-          ping = Math.floor(Math.random() * 30 + 15).toString() + "ms"; // Mocked ping for visualization
+          ping = `${Math.round(Math.random() * 30 + 15)}ms`;
         }
       }
     }

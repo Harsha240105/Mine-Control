@@ -11,7 +11,7 @@ router.get('/', authMiddleware, (_req: AuthRequest, res) => {
   res.json(builds);
 });
 
-router.post('/', authMiddleware, (req: AuthRequest, res) => {
+router.post('/', authMiddleware, requirePermission('world.manage'), (req: AuthRequest, res) => {
   const { name, type, world, x, y, z, owner } = req.body;
   if (!name) {
     return res.status(400).json({ error: 'Name is required' });

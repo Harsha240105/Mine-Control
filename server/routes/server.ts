@@ -849,10 +849,12 @@ router.post('/health-check', authMiddleware, async (_req: AuthRequest, res) => {
     checks.push({ name: 'Public IP', status: 'warn', message: 'Could not determine public IP' });
   }
 
-  // Check if IP is in CGNAT range
+  // Check if IP is in CGNAT range (100.64.0.0/10)
   if (publicIp) {
-    const firstOctet = parseInt(publicIp.split('.')[0]);
-    if (firstOctet >= 100 && firstOctet <= 100) {
+    const parts = publicIp.split('.');
+    const firstOctet = parseInt(parts[0]);
+    const secondOctet = parseInt(parts[1]);
+    if (firstOctet === 100 && secondOctet >= 64 && secondOctet <= 127) {
       cgnat = true;
       cgnatReason = `Your IP (${publicIp}) appears to be in a CGNAT range. Port forwarding may not work. Use Playit.gg tunnel instead.`;
       checks.push({ name: 'CGNAT Detection', status: 'warn', message: cgnatReason });

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
 
 // Use current origin (Vite proxy in dev, Express in prod both handle /socket.io)
@@ -11,16 +11,22 @@ interface UseSocketReturn {
   on: <T = any>(event: string, handler: (data: T) => void) => () => void;
 }
 
-export function useSocket(): UseSocketReturn {
-  const socketRef = useRef<Socket | null>(null);
-  const [connected, setConnected] = useState(false);
-  const [socketInstance, setSocketInstance] = useState<Socket | null>(null);
-  const [error, setError] = useState<string | null>(null);
+let globalSocket: Socket | null = null;
+let globalInitPromise: Promise<void> | null = null;
+let globalConnected = false;
+let globalError: string | null = null;
+const listeners = new Set<() => void>();
 
-  useEffect(() => {
-    const token = localStorage.getItem('mc_token');
-    if (!token) return;
+function notifyListeners() {
+  listeners.forEach(fn => fn());
+}
 
+function initSocket() {
+  if (globalInitPromise) return globalInitPromise;
+  const token = localStorage.getItem('mc_token');
+  if (!token) return;
+
+  globalInitPromise = new Promise<void>((resolve) => {
     const socket = io({
       auth: { token },
       transports: ['websocket', 'polling'],
@@ -32,22 +38,25 @@ export function useSocket(): UseSocketReturn {
     });
 
     socket.on('connect', () => {
-      setConnected(true);
-      setError(null);
+      globalConnected = true;
+      globalError = null;
       socket.emit('authenticate', token);
+      notifyListeners();
     });
 
     socket.on('disconnect', (reason) => {
-      setConnected(false);
+      globalConnected = false;
       if (reason !== 'io client disconnect') {
         console.warn(`[Socket] Disconnected: ${reason}`);
       }
+      notifyListeners();
     });
 
     socket.on('connect_error', (err) => {
-      setConnected(false);
-      setError(`Connection failed: ${err.message}`);
+      globalConnected = false;
+      globalError = `Connection failed: ${err.message}`;
       console.error('[Socket] Connection error:', err.message);
+      notifyListeners();
     });
 
     socket.on('authenticated', (data: { success: boolean }) => {
@@ -56,26 +65,43 @@ export function useSocket(): UseSocketReturn {
       }
     });
 
-    socketRef.current = socket;
-    setSocketInstance(socket);
+    globalSocket = socket;
+    resolve();
+  });
 
+  return globalInitPromise;
+}
+
+export function useSocket(): UseSocketReturn {
+  const [, forceUpdate] = useState(0);
+  const [connected, setConnected] = useState(globalConnected);
+  const [error, setError] = useState<string | null>(globalError);
+
+  useEffect(() => {
+    initSocket();
+
+    const onNotify = () => {
+      setConnected(globalConnected);
+      setError(globalError);
+      forceUpdate(n => n + 1);
+    };
+
+    listeners.add(onNotify);
     return () => {
-      socket.disconnect();
-      socketRef.current = null;
-      setSocketInstance(null);
+      listeners.delete(onNotify);
     };
   }, []);
 
   const emit = useCallback((event: string, data?: any) => {
-    socketRef.current?.emit(event, data);
+    globalSocket?.emit(event, data);
   }, []);
 
   const on = useCallback(<T = any>(event: string, handler: (data: T) => void): (() => void) => {
-    socketRef.current?.on(event, handler);
+    globalSocket?.on(event, handler);
     return () => {
-      socketRef.current?.off(event, handler);
+      globalSocket?.off(event, handler);
     };
   }, []);
 
-  return { socket: socketInstance, connected, error, emit, on };
+  return { socket: globalSocket, connected, error, emit, on };
 }

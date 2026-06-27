@@ -488,8 +488,12 @@ class MinecraftServerManager extends EventEmitter {
         this.emit('server:output', `[MineControl] Runtime error: ${err.message}\n`);
       });
 
+      // Clear done timeout on successful start (register BEFORE timeout to avoid race)
+      let doneTimeout: NodeJS.Timeout;
+      this.once('server:started', () => clearTimeout(doneTimeout));
+
       // Done detection timeout — if server hasn't printed 'Done' within 120s, mark as failed
-      const doneTimeout = setTimeout(() => {
+      doneTimeout = setTimeout(() => {
         if (!this.hasStartedSuccessfully && (this._state === ServerState.STARTING)) {
           const snippet = this.outputBuffer.slice(-20).join('\n');
           this._lastError = `Server did not finish starting within 120 seconds. Possible causes: wrong Java version, corrupted jar, or insufficient RAM.\n\nLast output:\n${snippet}`;
@@ -502,9 +506,6 @@ class MinecraftServerManager extends EventEmitter {
           this.setState(ServerState.FAILED);
         }
       }, 120000);
-
-      // Clear done timeout on successful start
-      this.once('server:started', () => clearTimeout(doneTimeout));
 
       // Start process telemetry monitoring
       this.startStatsMonitoring();
@@ -627,7 +628,7 @@ class MinecraftServerManager extends EventEmitter {
       } else {
         // Auto-register unknown player
         const id = require('uuid').v4();
-        const uuid = player?.uuid || '';
+        const uuid = player?.uuid || id;
         db.prepare(
           'INSERT INTO players (id, username, uuid, status, last_login, first_join, join_date) VALUES (?, ?, ?, ?, ?, ?, ?)'
         ).run(id, username, uuid, 'online', now, now, now);

@@ -111,7 +111,7 @@ export default function Discord() {
                 value={token}
                 onChange={(e) => setToken(e.target.value)}
                 placeholder="MTE..."
-                className="input-field font-mono text-sm"
+                className="input font-mono text-sm"
               />
               <p className="text-xs text-gray-500 mt-2">Keep this token secret. It gives full access to your Discord bot.</p>
             </div>
@@ -123,7 +123,7 @@ export default function Discord() {
                 value={channelId}
                 onChange={(e) => setChannelId(e.target.value)}
                 placeholder="123456789012345678"
-                className="input-field font-mono text-sm"
+                className="input font-mono text-sm"
               />
               <p className="text-xs text-gray-500 mt-2">Enable Developer Mode in Discord to right-click a channel and copy its ID.</p>
             </div>
@@ -135,7 +135,7 @@ export default function Discord() {
                 value={voiceChannelId}
                 onChange={(e) => setVoiceChannelId(e.target.value)}
                 placeholder="123456789012345678"
-                className="input-field font-mono text-sm"
+                className="input font-mono text-sm"
               />
               <p className="text-xs text-gray-500 mt-2">The bot will use this for voice integrations (e.g., channel status updates).</p>
             </div>

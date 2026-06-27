@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Settings as SettingsIcon, Save, Key, Shield, Server, RefreshCw,
   Eye, EyeOff, Globe, Users, Wifi, Download, CheckCircle, AlertCircle,
-  ChevronDown, ChevronRight, Search, Cpu, Trash2, MessageSquare
+  ChevronDown, ChevronRight, Search, Cpu, Trash2
 } from 'lucide-react';
 import pkg from '../../package.json';
 import { api } from '../lib/api';
@@ -38,10 +38,6 @@ export default function Settings() {
   const [serverName, setServerName] = useState('');
   const [onlineMode, setOnlineMode] = useState(true);
 
-  useEffect(() => {
-    Promise.all([fetchConfig(), fetchProps(), fetchActiveServer()]).finally(() => setLoading(false));
-  }, []);
-
   const fetchActiveServer = async () => {
     try {
       const data = await api.getServers();
@@ -65,6 +61,10 @@ export default function Settings() {
   const fetchProps = async () => {
     try { setProps(await api.getServerProperties()); } catch {}
   };
+
+  useEffect(() => {
+    Promise.all([fetchConfig(), fetchProps(), fetchActiveServer()]).finally(() => setLoading(false));
+  }, []);
 
   const fetchVersions = async () => {
     setVersionsLoading(true);
@@ -436,42 +436,6 @@ export default function Settings() {
           </button>
         </div>
       </div>
-        {/* Discord Integration */}
-        <div className="card">
-          <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
-            <MessageSquare size={16} className="text-blue-500" />
-            Discord Integration
-          </h3>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="col-span-full">
-              <p className="text-xs text-gray-400 mb-4">
-                Connect your server to a Discord bot to sync chat, track server status, and send logs. You must restart the MineControl backend for changes to take effect.
-              </p>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">Bot Token</label>
-              <input
-                type="password"
-                value={config.discordToken || ''}
-                onChange={(e) => setConfig({ ...config, discordToken: e.target.value })}
-                className="input"
-                placeholder="ODk..."
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">Channel ID</label>
-              <input
-                type="text"
-                value={config.discordChannel || ''}
-                onChange={(e) => setConfig({ ...config, discordChannel: e.target.value })}
-                className="input"
-                placeholder="1234567890"
-              />
-            </div>
-          </div>
-        </div>
-
       <div className="card">
         <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
           <Shield size={16} className="text-minecraft-500" />

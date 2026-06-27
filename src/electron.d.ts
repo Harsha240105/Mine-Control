@@ -18,8 +18,11 @@ interface ElectronAPI {
   onUpdateError: (callback: (message: string) => void) => void;
   uninstallAppOnly: () => Promise<{ success: boolean; error?: string }>;
   uninstallCompleteRemoval: () => Promise<{ success: boolean; error?: string }>;
+  getVersion: () => Promise<string>;
   removeAllListeners: (channel: string) => void;
 }
+
+declare module 'react-gauge-chart';
 
 interface Window {
   electronAPI: ElectronAPI;

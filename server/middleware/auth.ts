@@ -2,7 +2,10 @@ import { Request, Response, NextFunction } from 'express';
 import { getDatabase } from '../database';
 import jwt from 'jsonwebtoken';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'minecontrol-os-secret-key-2024';
+const JWT_SECRET = process.env.JWT_SECRET || (() => {
+  console.warn('[Auth] WARNING: Using default JWT secret. Set JWT_SECRET env var for production.');
+  return 'minecontrol-os-secret-key-2024';
+})();
 
 export interface AuthRequest extends Request {
   user?: {

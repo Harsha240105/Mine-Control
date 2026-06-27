@@ -7,10 +7,15 @@ async function request<T>(
 ): Promise<T> {
   const token = localStorage.getItem('mc_token');
 
+  const isFormData = options.body instanceof FormData;
+
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     ...((options.headers as Record<string, string>) || {}),
   };
+
+  if (!isFormData) {
+    headers['Content-Type'] = 'application/json';
+  }
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -45,6 +50,7 @@ async function request<T>(
 export const api = {
   get: (endpoint: string) => request<any>(endpoint),
   post: (endpoint: string, data?: any) => request<any>(endpoint, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
+  postFormData: (endpoint: string, formData: FormData) => request<any>(endpoint, { method: 'POST', body: formData }),
   put: (endpoint: string, data?: any) => request<any>(endpoint, { method: 'PUT', body: data ? JSON.stringify(data) : undefined }),
   delete: (endpoint: string) => request<any>(endpoint, { method: 'DELETE' }),
 

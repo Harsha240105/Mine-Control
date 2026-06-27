@@ -37,7 +37,7 @@ router.get('/pending', authMiddleware, (_req: AuthRequest, res) => {
   res.json(tickets);
 });
 
-router.get('/:id', (req, res) => {
+router.get('/:id', authMiddleware, (req: AuthRequest, res) => {
   const ticket = feedbackService.getTicket(req.params.id);
   if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
   res.json(ticket);
@@ -54,7 +54,7 @@ router.put('/:id/status', authMiddleware, (req: AuthRequest, res) => {
   }
 });
 
-router.post('/:id/vote', (req, res) => {
+router.post('/:id/vote', authMiddleware, (req: AuthRequest, res) => {
   const ticket = feedbackService.voteTicket(req.params.id);
   if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
   res.json(ticket);

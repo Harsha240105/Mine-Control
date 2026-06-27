@@ -119,7 +119,6 @@ async function createWindow() {
     }
 
     // Auto-recovery: if the backend process dies, restart it
-    let serverModule: any = null;
     const recoveryInterval = setInterval(async () => {
       try {
         const client = new net.Socket();
@@ -134,7 +133,7 @@ async function createWindow() {
           console.log('[Auto-Recovery] Backend unreachable, attempting restart...');
           try {
             delete require.cache[require.resolve(path.join(__dirname, '../server/index.js'))];
-            serverModule = require(path.join(__dirname, '../server/index.js'));
+            require(path.join(__dirname, '../server/index.js'));
             await waitForPort(3001, 20000);
             console.log('[Auto-Recovery] Backend restarted successfully');
           } catch (restartErr: any) {
@@ -284,7 +283,8 @@ async function createWindow() {
 }
 
 function createTray() {
-  const icon = nativeImage.createEmpty();
+  const iconPath = path.join(__dirname, '../public/logo.png');
+  const icon = fs.existsSync(iconPath) ? nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 }) : nativeImage.createEmpty();
   tray = new Tray(icon);
 
   const contextMenu = Menu.buildFromTemplate([
@@ -332,9 +332,7 @@ app.on('activate', () => {
   }
 });
 
-app.on('before-quit', () => {
-  // Backend server runs in-process and will be cleaned up by app quit
-});
+// before-quit cleanup is handled at line 149
 
 // IPC handlers
 ipcMain.handle('get-version', () => {
@@ -391,6 +389,7 @@ ipcMain.handle('download-update', async () => {
   } else {
     console.warn('[Updater] Backup failed, proceeding with update anyway');
   }
+  cleanupOldBackups(userDataPath, 5);
   try {
     await autoUpdater.downloadUpdate();
   } catch (err: any) {
