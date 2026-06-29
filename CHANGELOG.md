@@ -4,6 +4,14 @@ All notable changes to MineControl OS are documented here.
 
 ---
 
+## v1.0.53 — Login Fix & Password Reset
+
+### Bug Fixes
+- **Login page default password**: Fixed incorrect displayed default password (`minecraft` → `minecontrol`) in `Login.tsx:103` to match the actual default used by the backend (`database.ts:359`).
+- **Database reset**: Deleted stale database to force recreation with default owner password `minecontrol`. If `DEFAULT_OWNER_PASSWORD` env var is set, that value will be used instead.
+
+---
+
 ## v1.0.52 — Foundation Architecture, Guide, Privacy, Updates & Uninstall
 
 ### Phase 1 — Foundation Architecture

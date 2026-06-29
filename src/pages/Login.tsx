@@ -100,7 +100,7 @@ export default function Login() {
           <div className="mt-6 p-3 bg-surface-800/50 rounded-lg border border-surface-700">
             <p className="text-xs text-gray-500 text-center">
               Default login: <span className="text-gray-300 font-mono">owner</span> /{' '}
-              <span className="text-gray-300 font-mono">minecraft</span>
+              <span className="text-gray-300 font-mono">minecontrol</span>
             </p>
           </div>
         </div>
