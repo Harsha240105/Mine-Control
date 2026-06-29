@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Terminal, Send, Download, Search, X, Trash2, ChevronDown } from 'lucide-react';
+import { Terminal, Send, Download, Search, X, Trash2, ChevronDown, Server } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
+import { useActiveServer } from '../hooks/useActiveServer';
 import toast from 'react-hot-toast';
 
 interface LogEntry {
@@ -11,6 +12,7 @@ interface LogEntry {
 }
 
 export default function Console() {
+  const { server: activeServer } = useActiveServer();
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [command, setCommand] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
@@ -124,6 +126,20 @@ export default function Console() {
       default: return <span className="text-gray-400">INFO</span>;
     }
   };
+
+  if (!activeServer) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <div className="w-12 h-12 mx-auto rounded-full bg-gray-800 flex items-center justify-center">
+            <Server className="w-6 h-6 text-gray-500" />
+          </div>
+          <p className="text-gray-400 text-sm font-medium">No server selected</p>
+          <p className="text-gray-600 text-xs">Select a server from the Server Library to access its console.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-[calc(100vh-7rem)] animate-fade-in">

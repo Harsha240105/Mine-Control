@@ -9,6 +9,7 @@ export const FABRIC_API = 'https://meta.fabricmc.net/v2';
 export const FORGE_API = 'https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json';
 export const PURPUR_API = 'https://api.purpurmc.org/v2/purpur/';
 export const NEOFORGE_API = 'https://api.neoforged.net/v1';
+export const QUILT_API = 'https://meta.quiltmc.org/v3';
 
 export interface MojangVersion {
   id: string;
@@ -85,7 +86,7 @@ function downloadOnce(url: string, destPath: string, timeoutMs: number): Promise
       const client = requestUrl.startsWith('https') ? https : http;
       const options = {
         headers: {
-          'User-Agent': 'MineControl-OS/1.0.48 (contact@minecontrol.dev)'
+          'User-Agent': 'MineControl-OS/1.0.52 (contact@minecontrol.dev)'
         }
       };
       const req = client.get(requestUrl, options, (resp: any) => {
@@ -241,6 +242,45 @@ export async function downloadNeoForgeVersion(version: string, jarPath: string):
   }
 }
 
+export async function downloadQuiltVersion(version: string, jarPath: string): Promise<void> {
+  try {
+    const loadersData = await httpsGet(`${QUILT_API}/versions/loader/${version}`);
+    const loaders = JSON.parse(loadersData);
+    if (!loaders || loaders.length === 0) {
+      throw new Error(`No Quilt loaders found for Minecraft ${version}`);
+    }
+    const loaderVersion = loaders[0].loader.version;
+    const downloadUrl = `${QUILT_API}/versions/loader/${version}/${loaderVersion}/server/jar`;
+    await downloadFile(downloadUrl, jarPath);
+  } catch (err: any) {
+    throw new Error(`Failed to download Quilt ${version}: ${err.message}`);
+  }
+}
+
+export async function downloadSpigotVersion(version: string, jarPath: string): Promise<void> {
+  try {
+    const downloadUrl = `https://download.getbukkit.org/spigot/spigot-${version}.jar`;
+    await downloadFile(downloadUrl, jarPath);
+  } catch (err: any) {
+    throw new Error(`Failed to download Spigot ${version}: ${err.message}`);
+  }
+}
+
+export async function downloadFoliaVersion(version: string, jarPath: string): Promise<void> {
+  try {
+    const buildsData = await httpsGet(`https://api.papermc.io/v2/projects/folia/versions/${version}/builds`);
+    const builds = JSON.parse(buildsData);
+    const latestBuild = builds.builds && builds.builds[builds.builds.length - 1];
+    if (!latestBuild) {
+      throw new Error(`No builds found for Folia ${version}`);
+    }
+    const downloadUrl = `https://api.papermc.io/v2/projects/folia/versions/${version}/builds/${latestBuild.build}/downloads/${latestBuild.downloads.application.name}`;
+    await downloadFile(downloadUrl, jarPath);
+  } catch (err: any) {
+    throw new Error(`Failed to download Folia ${version}: ${err.message}`);
+  }
+}
+
 export async function downloadVanillaVersion(version: string, jarPath: string): Promise<void> {
   try {
     let mojangVersions: MojangVersion[] = [];
@@ -276,6 +316,9 @@ export async function downloadVersion(version: string, source: string | undefine
   const usePurpur = sourceLower === 'purpur';
   const useForge = sourceLower === 'forge';
   const useNeoForge = sourceLower === 'neoforge';
+  const useQuilt = sourceLower === 'quilt';
+  const useSpigot = sourceLower === 'spigot';
+  const useFolia = sourceLower === 'folia';
   const useVanilla = sourceLower === 'vanilla' || sourceLower === 'mojang';
 
   if (useFabric) {
@@ -286,6 +329,12 @@ export async function downloadVersion(version: string, source: string | undefine
     await downloadForgeVersion(version, jarPath);
   } else if (useNeoForge) {
     await downloadNeoForgeVersion(version, jarPath);
+  } else if (useQuilt) {
+    await downloadQuiltVersion(version, jarPath);
+  } else if (useSpigot) {
+    await downloadSpigotVersion(version, jarPath);
+  } else if (useFolia) {
+    await downloadFoliaVersion(version, jarPath);
   } else if (usePaper) {
     await downloadPaperVersion(version, jarPath);
   } else {
@@ -299,6 +348,9 @@ export async function downloadVersion(version: string, source: string | undefine
   else if (usePurpur) { sourceName = 'Purpur'; displaySource = 'Purpur'; }
   else if (useForge) { sourceName = 'Forge'; displaySource = 'Forge'; }
   else if (useNeoForge) { sourceName = 'NeoForge'; displaySource = 'NeoForge'; }
+  else if (useQuilt) { sourceName = 'Quilt'; displaySource = 'Quilt'; }
+  else if (useSpigot) { sourceName = 'Spigot'; displaySource = 'Spigot'; }
+  else if (useFolia) { sourceName = 'Folia'; displaySource = 'Folia'; }
 
   return { sourceName, displaySource };
 }

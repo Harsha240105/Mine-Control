@@ -3,6 +3,7 @@ import { getDatabase } from '../database';
 import { SchedulerService, Schedule } from '../services/scheduler';
 import { authMiddleware, requirePermission } from '../middleware/auth';
 import { v4 as uuidv4 } from 'uuid';
+import { emitToAll } from '../socketManager';
 
 const router = Router();
 
@@ -52,7 +53,8 @@ router.post('/', authMiddleware, requirePermission('*'), (req, res) => {
     if (schedule.enabled) {
       SchedulerService.scheduleTask(schedule);
     }
-    
+
+    emitToAll('schedule:created', schedule);
     res.json(schedule);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -73,7 +75,8 @@ router.put('/:id', authMiddleware, requirePermission('*'), (req, res) => {
     `).run(name, cron, action, command || null, enabled ? 1 : 0, id);
     
     SchedulerService.reloadTask(id);
-    
+
+    emitToAll('schedule:updated', { id, name, cron, action, command, enabled: enabled ? 1 : 0 });
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -88,7 +91,8 @@ router.delete('/:id', authMiddleware, requirePermission('*'), (req, res) => {
     
     db.prepare('DELETE FROM schedules WHERE id = ?').run(id);
     SchedulerService.removeTask(id);
-    
+
+    emitToAll('schedule:deleted', { id });
     res.json({ success: true });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

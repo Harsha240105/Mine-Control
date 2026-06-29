@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Server, ArrowLeft, ArrowRight, Check, ChevronRight, Search,
@@ -8,6 +8,7 @@ import {
   Loader2, Sparkles, Play, AlertTriangle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useActiveServer } from '../hooks/useActiveServer';
 
 const STEPS = [
   'Identification', 'Compatibility', 'Software', 'Version', 'World', 'Settings', 'Java',
@@ -104,6 +105,7 @@ type WizardData = {
 };
 
 export default function Wizard() {
+  const { server: activeServer } = useActiveServer();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [versions, setVersions] = useState<any[]>([]);
@@ -278,6 +280,20 @@ export default function Wizard() {
               Open Dashboard
             </button>
           )}
+        </div>
+      </div>
+    );
+  }
+
+  if (!activeServer) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <div className="w-12 h-12 mx-auto rounded-full bg-gray-800 flex items-center justify-center">
+            <Server className="w-6 h-6 text-gray-500" />
+          </div>
+          <p className="text-gray-400 text-sm font-medium">No server selected</p>
+          <p className="text-gray-600 text-xs">Select a server from the Server Library to manage this page.</p>
         </div>
       </div>
     );

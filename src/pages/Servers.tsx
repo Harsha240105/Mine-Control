@@ -1,12 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Server, Plus, Search, Settings, Play, Square, Trash2,
   Globe, Wifi, HardDrive, Calendar, Clock, Import, X, Save,
   CheckCircle, XCircle, Hash, Layers, Bookmark, Download, ChevronRight,
+  AlertTriangle, Loader2,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
+import { useActiveServer } from '../hooks/useActiveServer';
 
 interface ServerRecord {
   id: string;
@@ -76,12 +78,12 @@ function formatBytes(bytes: number): string {
   return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`;
 }
 
-function formatDate(dateStr: string): string {
+function formatDate(dateStr: string | undefined | null): string {
   if (!dateStr) return '---';
   return new Date(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-function formatRelativeTime(dateStr: string): string {
+function formatRelativeTime(dateStr: string | undefined | null): string {
   if (!dateStr) return 'Never';
   const diffMs = Date.now() - new Date(dateStr).getTime();
   const diffMins = Math.floor(diffMs / 60000);
@@ -96,9 +98,7 @@ function formatRelativeTime(dateStr: string): string {
 
 export default function Servers() {
   const navigate = useNavigate();
-  const [servers, setServers] = useState<ServerRecord[]>([]);
-  const [activeId, setActiveId] = useState<string>('');
-  const [loading, setLoading] = useState(true);
+  const { servers: contextServers, server: activeServer, loading, selectServer, refresh } = useActiveServer();
   const [searchQuery, setSearchQuery] = useState('');
   const [activeStatus, setActiveStatus] = useState<ServerStatus | null>(null);
 
@@ -114,28 +114,13 @@ export default function Servers() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchServers();
-    const interval = setInterval(fetchServers, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  useEffect(() => {
     fetchStatus();
     const interval = setInterval(fetchStatus, 10000);
     return () => clearInterval(interval);
-  }, [activeId]);
-
-  const fetchServers = async () => {
-    try {
-      const data = await api.getServers();
-      setServers(data.servers);
-      setActiveId(data.activeServerId);
-    } catch {}
-    setLoading(false);
-  };
+  }, [activeServer?.id]);
 
   const fetchStatus = async () => {
-    if (!activeId) return;
+    if (!activeServer?.id) return;
     try {
       const status = await api.getServerStatus();
       setActiveStatus(status);
@@ -166,24 +151,17 @@ export default function Servers() {
   }, [showCreate, formData.software]);
 
   const handleSelect = async (id: string) => {
-    if (id === activeId) return;
-    const server = servers.find(s => s.id === id);
+    if (id === activeServer?.id) return;
+    const server = contextServers.find(s => s.id === id);
     if (!server) return;
-    try {
-      await api.selectServer(id);
-      setActiveId(id);
-      toast.success(`Switched to ${server.name}`);
-      setTimeout(() => window.location.reload(), 1000);
-    } catch (err: any) {
-      toast.error(err.message);
-    }
+    await selectServer(id);
   };
 
   const handleNavigateWithSelect = async (serverId: string, path: string) => {
-    if (serverId !== activeId) {
+    if (serverId !== activeServer?.id) {
       try {
         await api.selectServer(serverId);
-        setActiveId(serverId);
+        await refresh();
       } catch (err: any) {
         toast.error(err.message);
         return;
@@ -193,10 +171,10 @@ export default function Servers() {
   };
 
   const handleServerAction = async (serverId: string, action: 'start' | 'stop') => {
-    if (serverId !== activeId) {
+    if (serverId !== activeServer?.id) {
       try {
         await api.selectServer(serverId);
-        setActiveId(serverId);
+        await refresh();
       } catch (err: any) {
         toast.error(err.message);
         return;
@@ -233,7 +211,7 @@ export default function Servers() {
         difficulty: formData.difficulty,
         seed: formData.seed || undefined,
       });
-      setServers(prev => [...prev, result.server]);
+      await refresh();
       setShowCreate(false);
       setFormData({
         name: '', port: 25565, software: 'paper', version: '',
@@ -247,11 +225,11 @@ export default function Servers() {
   };
 
   const handleDelete = async (id: string) => {
-    const server = servers.find(s => s.id === id);
+    const server = contextServers.find(s => s.id === id);
     if (!server) return;
     try {
       await api.deleteServer(id);
-      setServers(prev => prev.filter(s => s.id !== id));
+      await refresh();
       setDeleteConfirm(null);
       toast.success(`Server "${server.name}" deleted`);
     } catch (err: any) {
@@ -259,12 +237,12 @@ export default function Servers() {
     }
   };
 
-  const filteredServers = servers.filter(s =>
+  const filteredServers = contextServers.filter(s =>
     s.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const getSoftwareStyle = (source: string) =>
-    SOFTWARE_OPTIONS.find(s => s.value === source?.toLowerCase()) || SOFTWARE_OPTIONS[0];
+  const getSoftwareStyle = (source: string | undefined) =>
+    SOFTWARE_OPTIONS.find(s => s.value === (source || '').toLowerCase()) || SOFTWARE_OPTIONS[0];
 
   if (loading) {
     return (
@@ -291,7 +269,7 @@ export default function Servers() {
 
         <button
           onClick={() => {
-            if (servers.length > 0) {
+            if (contextServers.length > 0) {
               document.getElementById('server-grid')?.scrollIntoView({ behavior: 'smooth' });
             } else {
               setShowCreate(true);
@@ -304,8 +282,8 @@ export default function Servers() {
           </div>
           <h3 className="text-lg font-bold text-gray-100 mb-1">Open Existing Server</h3>
           <p className="text-xs text-gray-400 leading-relaxed">
-            {servers.length > 0
-              ? `Select from ${servers.length} ${servers.length === 1 ? 'server' : 'servers'} and pick up where you left off.`
+            {contextServers.length > 0
+              ? `Select from ${contextServers.length} ${contextServers.length === 1 ? 'server' : 'servers'} and pick up where you left off.`
               : 'No servers yet. Create one to get started.'}
           </p>
         </button>
@@ -322,12 +300,15 @@ export default function Servers() {
         </button>
       </div>
 
+      {/* Restore Detection */}
+      <DetectionBanner serverCount={contextServers.length} />
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-100">Server Library</h1>
           <p className="text-sm text-gray-500 mt-1">
-            {servers.length} {servers.length === 1 ? 'server' : 'servers'} configured
+            {contextServers.length} {contextServers.length === 1 ? 'server' : 'servers'} configured
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -399,7 +380,7 @@ export default function Servers() {
       {filteredServers.length > 0 && (
         <div id="server-grid" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {filteredServers.map(server => {
-            const isActive = server.id === activeId;
+            const isActive = server.id === activeServer?.id;
             const sw = getSoftwareStyle(server.version_source);
             const showActiveStats = isActive && activeStatus;
 
@@ -755,6 +736,71 @@ export default function Servers() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function DetectionBanner({ serverCount }: { serverCount: number }) {
+  const [detection, setDetection] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [restoring, setRestoring] = useState(false);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (serverCount > 0) { setLoading(false); return; }
+    (async () => {
+      try {
+        const d = await api.detectExistingInstallation();
+        setDetection(d);
+      } catch {}
+      setLoading(false);
+    })();
+  }, [serverCount]);
+
+  if (loading || serverCount > 0 || !detection?.installationFound) return null;
+
+  return (
+    <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-xl p-4">
+      <div className="flex items-start gap-3">
+        <AlertTriangle size={20} className="text-yellow-400 shrink-0 mt-0.5" />
+        <div className="flex-1">
+          <h4 className="text-sm font-medium text-yellow-400 mb-1">Existing Installation Detected</h4>
+          <p className="text-xs text-gray-400">
+            MineControl OS data was found in the local storage directory.
+            You can restore your previous servers and settings.
+          </p>
+          <div className="flex gap-2 mt-3">
+            <button
+              onClick={async () => {
+                setRestoring(true);
+                try {
+                  const result = await api.restoreInstallation();
+                  if (result.success) {
+                    toast.success(result.message);
+                    window.location.reload();
+                  } else {
+                    toast.error(result.message);
+                  }
+                } catch (e: any) {
+                  toast.error(e.message || 'Restore failed');
+                }
+                setRestoring(false);
+              }}
+              disabled={restoring}
+              className="px-3 py-1.5 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5"
+            >
+              {restoring ? <Loader2 size={12} className="animate-spin" /> : null}
+              Restore
+            </button>
+            <button
+              onClick={() => navigate('/uninstall')}
+              className="px-3 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg text-xs font-medium transition-all"
+            >
+              Manage Data
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

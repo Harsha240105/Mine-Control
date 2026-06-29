@@ -48,6 +48,29 @@ async function request<T>(
 }
 
 export const api = {
+  // Guide & Knowledge Center
+  getGuideSections: () => request<any>('/guide/sections'),
+  getGuideArticle: (sectionId: string, articleId: string) => request<any>(`/guide/article/${sectionId}/${articleId}`),
+  searchGuide: (q: string) => request<any>(`/guide/search?q=${encodeURIComponent(q)}`),
+  getGuideDetections: () => request<any>('/guide/detections'),
+  getGuideBookmarks: () => request<any>('/guide/bookmarks'),
+  addGuideBookmark: (sectionId: string, articleId: string, title: string) =>
+    request<any>('/guide/bookmarks', { method: 'POST', body: JSON.stringify({ sectionId, articleId, title }) }),
+  removeGuideBookmark: (sectionId: string, articleId: string) =>
+    request<any>(`/guide/bookmarks/${sectionId}/${articleId}`, { method: 'DELETE' }),
+  getGuideRecentlyViewed: () => request<any>('/guide/recently-viewed'),
+  getGuideSearchHistory: () => request<any>('/guide/search-history'),
+  getGuideTutorialProgress: () => request<any>('/guide/tutorial-progress'),
+  updateGuideTutorialProgress: (tutorialId: string, stepIndex: number, completed: boolean) =>
+    request<any>('/guide/tutorial-progress', { method: 'POST', body: JSON.stringify({ tutorialId, stepIndex, completed }) }),
+  getGuidePreferences: () => request<any>('/guide/preferences'),
+  setGuidePreference: (key: string, value: string) =>
+    request<any>('/guide/preferences', { method: 'POST', body: JSON.stringify({ key, value }) }),
+  getGuideDashboardWidget: () => request<any>('/guide/dashboard-widget'),
+  getGuideRandomTip: () => request<any>('/guide/random-tip'),
+  getGuideReleaseNotes: () => request<any>('/guide/release-notes'),
+  getGuideQuickStart: () => request<any>('/guide/quick-start'),
+
   get: (endpoint: string) => request<any>(endpoint),
   post: (endpoint: string, data?: any) => request<any>(endpoint, { method: 'POST', body: data ? JSON.stringify(data) : undefined }),
   postFormData: (endpoint: string, formData: FormData) => request<any>(endpoint, { method: 'POST', body: formData }),
@@ -217,6 +240,36 @@ export const api = {
       body: JSON.stringify({ duration, reason }),
     }),
 
+  // Player management
+  getPlayerHistory: (id: string) => request<any[]>(`/players/${id}/history`),
+  getPlayerSessions: (id: string) => request<any[]>(`/players/${id}/sessions`),
+  approvePlayer: (id: string) =>
+    request<any>(`/players/${id}/approve`, { method: 'POST' }),
+  rejectPlayer: (id: string) =>
+    request<any>(`/players/${id}/reject`, { method: 'POST' }),
+  opPlayer: (id: string) =>
+    request<any>(`/players/${id}/op`, { method: 'POST' }),
+  deopPlayer: (id: string) =>
+    request<any>(`/players/${id}/deop`, { method: 'POST' }),
+  whitelistPlayer: (id: string) =>
+    request<any>(`/players/${id}/whitelist`, { method: 'POST' }),
+  unwhitelistPlayer: (id: string) =>
+    request<any>(`/players/${id}/unwhitelist`, { method: 'POST' }),
+  detectPlayers: () =>
+    request<any>('/players/detect', { method: 'POST' }),
+  getActivity: () =>
+    request<any[]>('/players/activity'),
+  getRecentJoins: () =>
+    request<any[]>('/players/recent-joins'),
+  getPendingCount: () =>
+    request<{ count: number }>('/players/pending-count'),
+  exportPlayer: (id: string) =>
+    request<any>(`/players/${id}/export`),
+  importPlayer: (data: any) =>
+    request<any>('/players/import', { method: 'POST', body: JSON.stringify({ data }) }),
+  exportAllPlayers: () =>
+    request<any>('/players/export/all'),
+
   // Whitelist
   getWhitelist: () => request<any[]>('/players/whitelist/all'),
   addToWhitelist: (username: string, uuid?: string) =>
@@ -244,8 +297,13 @@ export const api = {
 
   // Worlds
   getWorlds: () => request<any[]>('/worlds'),
+  getWorld: (name: string) => request<any>(`/worlds/${name}`),
   createWorld: (data: any) =>
     request<any>('/worlds', { method: 'POST', body: JSON.stringify(data) }),
+  updateWorld: (name: string, data: any) =>
+    request<any>(`/worlds/${name}`, { method: 'PUT', body: JSON.stringify(data) }),
+  renameWorld: (name: string, newName: string) =>
+    request<any>(`/worlds/${name}/rename`, { method: 'POST', body: JSON.stringify({ newName }) }),
   deleteWorld: (name: string) =>
     request<{ success: boolean }>(`/worlds/${name}`, { method: 'DELETE' }),
   cloneWorld: (name: string, newName: string) =>
@@ -253,12 +311,30 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ newName }),
     }),
+  optimizeWorld: (name: string) =>
+    request<any>(`/worlds/${name}/optimize`, { method: 'POST' }),
+  repairWorld: (name: string) =>
+    request<any>(`/worlds/${name}/repair`, { method: 'POST' }),
+  getWorldDimensions: (name: string) =>
+    request<any[]>(`/worlds/${name}/dimensions`),
   downloadWorld: (name: string) => `${API_BASE}/worlds/${name}/download`,
+  importWorldZip: (formData: FormData) =>
+    request<any>('/worlds/import/zip', { method: 'POST', body: formData }),
+  importWorldFolder: (sourcePath: string, worldName?: string) =>
+    request<any>('/worlds/import/folder', { method: 'POST', body: JSON.stringify({ sourcePath, worldName }) }),
   uploadWorld: (filePath: string, worldName: string) =>
     request<any>('/worlds/upload', {
       method: 'POST',
       body: JSON.stringify({ filePath, worldName }),
     }),
+  detectWorlds: () =>
+    request<any>('/worlds/detect', { method: 'POST' }),
+  syncWorld: () =>
+    request<any>('/worlds/sync', { method: 'POST' }),
+  getCurrentWorldInfo: () =>
+    request<any>('/worlds/current/info'),
+  getWorldStats: () =>
+    request<any>('/worlds/stats/summary'),
 
   // Plugins
   getPlugins: () => request<any[]>('/plugins'),
@@ -272,19 +348,70 @@ export const api = {
   togglePlugin: (name: string) =>
     request<any>(`/plugins/${name}/toggle`, { method: 'POST' }),
 
+  // Mods
+  getMods: () => request<any[]>('/mods'),
+  installMod: (name: string, downloadUrl?: string) =>
+    request<any>('/mods/install', {
+      method: 'POST',
+      body: JSON.stringify({ name, downloadUrl }),
+    }),
+  removeMod: (name: string) =>
+    request<{ success: boolean }>(`/mods/${name}`, { method: 'DELETE' }),
+  toggleMod: (name: string) =>
+    request<any>(`/mods/${name}/toggle`, { method: 'POST' }),
+
+  // Shaders
+  getShaders: () => request<any[]>('/shaders'),
+  installShader: (name: string, downloadUrl?: string) =>
+    request<any>('/shaders/install', {
+      method: 'POST',
+      body: JSON.stringify({ name, downloadUrl }),
+    }),
+  removeShader: (name: string) =>
+    request<{ success: boolean }>(`/shaders/${name}`, { method: 'DELETE' }),
+  toggleShader: (name: string) =>
+    request<any>(`/shaders/${name}/toggle`, { method: 'POST' }),
+
+  // Resource Packs
+  getResourcePacks: () => request<any[]>('/resourcepacks'),
+  installResourcePack: (name: string, downloadUrl?: string) =>
+    request<any>('/resourcepacks/install', {
+      method: 'POST',
+      body: JSON.stringify({ name, downloadUrl }),
+    }),
+  uploadResourcePack: (formData: FormData) =>
+    request<any>('/resourcepacks/upload', {
+      method: 'POST',
+      body: formData,
+    }),
+  removeResourcePack: (name: string) =>
+    request<{ success: boolean }>(`/resourcepacks/${name}`, { method: 'DELETE' }),
+  toggleResourcePack: (name: string) =>
+    request<any>(`/resourcepacks/${name}/toggle`, { method: 'POST' }),
+
   // Backups
-  getBackups: () => request<any[]>('/backups'),
-  createBackup: (name?: string, encrypted = false) =>
-    request<any>('/backups/create', {
-      method: 'POST',
-      body: JSON.stringify({ name, encrypted }),
-    }),
+  getBackups: (params?: { search?: string; type?: string; sort?: string; order?: string }) =>
+    request<any[]>(`/backups${params ? '?' + new URLSearchParams(params as any).toString() : ''}`),
+  getBackup: (id: string) => request<any>(`/backups/${id}`),
+  createBackup: (data?: { name?: string; reason?: string; type?: string; encrypted?: boolean; includes?: any; createdBy?: string }) =>
+    request<any>('/backups/create', { method: 'POST', body: JSON.stringify(data || {}) }),
   restoreBackup: (id: string) =>
-    request<{ success: boolean }>(`/backups/restore/${id}`, {
-      method: 'POST',
-    }),
+    request<{ success: boolean; safetyBackupId: string }>(`/backups/restore/${id}`, { method: 'POST' }),
+  exportBackup: (id: string) =>
+    request<{ success: boolean; path: string; fileName: string }>(`/backups/export/${id}`, { method: 'POST' }),
+  downloadBackupUrl: (id: string) => `${API_BASE}/backups/export/${id}/download`,
+  importBackup: (formData: FormData) =>
+    request<any>('/backups/import', { method: 'POST', body: formData }),
+  verifyBackup: (id: string) =>
+    request<{ integrity: string; id: string }>(`/backups/verify/${id}`, { method: 'POST' }),
   deleteBackup: (id: string) =>
     request<{ success: boolean }>(`/backups/${id}`, { method: 'DELETE' }),
+  runCleanup: (rules?: { maxBackups?: number; maxStorageMb?: number; maxAgeDays?: number }) =>
+    request<any>('/backups/cleanup', { method: 'POST', body: JSON.stringify(rules || {}) }),
+  getBackupStats: () => request<any>('/backups/stats'),
+  getBackupSchedule: () => request<any>('/backups/schedule'),
+  updateBackupSchedule: (data: any) =>
+    request<any>('/backups/schedule', { method: 'POST', body: JSON.stringify(data) }),
 
   // Claims
   getClaims: () => request<any[]>('/claims'),
@@ -332,26 +459,161 @@ export const api = {
     }),
   getSupportedFormats: () => request<any>('/import/supported-formats'),
 
-  // Feedback Center
-  getFeedbackTickets: (params?: { type?: string; status?: string }) =>
-    request<any[]>('/feedback' + (params ? '?' + new URLSearchParams(params as any).toString() : '')),
+  // Feedback & Issue Management
+  getFeedbackTickets: (params?: {
+    type?: string; status?: string; search?: string; sort?: string; order?: string;
+    sync_status?: string; priority?: string; from_date?: string; to_date?: string; limit?: number; offset?: number
+  }) =>
+    request<any[]>('/feedback' + (params ? '?' + new URLSearchParams(
+      Object.fromEntries(Object.entries(params).filter(([_, v]) => v !== undefined && v !== null)) as any
+    ).toString() : '')),
   createFeedbackTicket: (data: any) =>
     request<any>('/feedback', { method: 'POST', body: JSON.stringify(data) }),
   getFeedbackTicket: (id: string) =>
     request<any>(`/feedback/${id}`),
-  updateFeedbackTicketStatus: (id: string, status: string) =>
-    request<any>(`/feedback/${id}/status`, { method: 'PUT', body: JSON.stringify({ status }) }),
+  getFeedbackTicketHistory: (id: string) =>
+    request<any[]>(`/feedback/${id}/history`),
+  getFeedbackTicketAttachments: (id: string) =>
+    request<any[]>(`/feedback/${id}/attachments`),
+  updateFeedbackTicketStatus: (id: string, status: string, note?: string) =>
+    request<any>(`/feedback/${id}/status`, { method: 'PUT', body: JSON.stringify({ status, note }) }),
+  updateFeedbackTicketPriority: (id: string, priority: string) =>
+    request<any>(`/feedback/${id}/priority`, { method: 'PUT', body: JSON.stringify({ priority }) }),
+  updateFeedbackTicketNotes: (id: string, notes: string) =>
+    request<any>(`/feedback/${id}/notes`, { method: 'PUT', body: JSON.stringify({ notes }) }),
   voteFeedbackTicket: (id: string) =>
     request<any>(`/feedback/${id}/vote`, { method: 'POST' }),
+  getFeedbackCounts: () =>
+    request<any>('/feedback/counts'),
+  getFeedbackStats: () =>
+    request<any>('/feedback/stats'),
+  getFeedbackPending: () =>
+    request<any[]>('/feedback/pending'),
+  getSyncQueue: () =>
+    request<any[]>('/feedback/sync-queue'),
+  triggerSync: () =>
+    request<any>('/feedback/sync', { method: 'POST' }),
+  markFeedbackSynced: (id: string, issueTrackerUrl: string, issueTrackerId?: string) =>
+    request<any>(`/feedback/${id}/sync`, { method: 'POST', body: JSON.stringify({ issue_tracker_url: issueTrackerUrl, issue_tracker_id: issueTrackerId }) }),
+  deleteFeedbackAttachment: (ticketId: string, attachmentId: string) =>
+    request<any>(`/feedback/${ticketId}/attachments/${attachmentId}`, { method: 'DELETE' }),
+  getIssueTrackerConfig: (serverId: string) =>
+    request<any>(`/feedback/tracker-config?server_id=${serverId}`),
+  saveIssueTrackerConfig: (data: any) =>
+    request<any>('/feedback/tracker-config', { method: 'POST', body: JSON.stringify(data) }),
 
-  // Privacy
+  // Privacy & Security
   getPrivacyData: () => request<any>('/privacy/data'),
   clearPrivacyLogs: () => request<any>('/privacy/logs', { method: 'DELETE' }),
   clearPrivacyBackups: () => request<any>('/privacy/backups', { method: 'DELETE' }),
-  exportPrivacyData: () => request<any>('/privacy/export'),
+  exportPrivacyData: (includeSecrets = false) => request<any>(`/privacy/export${includeSecrets ? '?secrets=true' : ''}`),
+  getPrivacyLocations: () => request<any>('/privacy/locations'),
+  openPrivacyFolder: (folderPath: string) => request<any>('/privacy/open-folder', { method: 'POST', body: JSON.stringify({ folderPath }) }),
+  getPrivacyIntegrations: () => request<any>('/privacy/integrations'),
+  getPrivacyPermissions: () => request<any>('/privacy/permissions'),
+  setPrivacyPermission: (featureKey: string, enabled: boolean) =>
+    request<any>(`/privacy/permissions/${featureKey}`, { method: 'PUT', body: JSON.stringify({ enabled }) }),
+  getPrivacyCredentials: () => request<any>('/privacy/credentials'),
+  savePrivacyCredential: (key: string, value: string) =>
+    request<any>('/privacy/credentials', { method: 'POST', body: JSON.stringify({ key, value }) }),
+  deletePrivacyCredential: (key: string) =>
+    request<any>(`/privacy/credentials/${key}`, { method: 'DELETE' }),
+  runSecurityCheck: () => request<any>('/privacy/security-check', { method: 'POST' }),
+  getSecurityStatus: () => request<any>('/privacy/security-status'),
+  getPrivacyPreferences: () => request<any>('/privacy/preferences'),
+  setPrivacyPreference: (key: string, value: string) =>
+    request<any>('/privacy/preferences', { method: 'POST', body: JSON.stringify({ key, value }) }),
+  getPrivacyAuditLog: (limit = 50) => request<any>(`/privacy/audit-log?limit=${limit}`),
+  getPrivacyDashboardWidget: () => request<any>('/privacy/dashboard-widget'),
+  clearPrivacyCache: () => request<any>('/privacy/clear-cache', { method: 'POST' }),
+  clearPrivacyFeedback: () => request<any>('/privacy/clear-feedback', { method: 'POST' }),
+  clearPrivacyDiagnostics: () => request<any>('/privacy/clear-diagnostics', { method: 'POST' }),
+  deleteAllUserData: () => request<any>('/privacy/delete-all', { method: 'POST' }),
 
   // UI State Persistence
   getUiState: () => request<Record<string, string>>('/ui/state'),
   saveUiState: (state: Record<string, string>) => request<any>('/ui/state', { method: 'POST', body: JSON.stringify(state) }),
   getUiStateKey: (key: string) => request<any>(`/ui/state/${key}`),
+
+  // Connection Management
+  getConnectionStatus: () => request<any>('/server/connection/status'),
+  testConnectionJoin: (address?: string) =>
+    request<any>('/server/connection/test-join', { method: 'POST', body: JSON.stringify({ address }) }),
+  getConnectionDiagnostics: (limit?: number) =>
+    request<any[]>(`/server/connection/diagnostics${limit ? `?limit=${limit}` : ''}`),
+  getPreferredMode: () => request<any>('/server/connection/preferred-mode'),
+  setPreferredMode: (mode: string) =>
+    request<any>('/server/connection/preferred-mode', { method: 'POST', body: JSON.stringify({ mode }) }),
+  refreshConnection: () =>
+    request<any>('/server/connection/refresh', { method: 'POST' }),
+
+  // Firewall Management
+  getFirewallStatus: () => request<any>('/server/firewall'),
+  addFirewallRule: () =>
+    request<any>('/server/firewall/add', { method: 'POST' }),
+  removeFirewallRule: () =>
+    request<any>('/server/firewall/remove', { method: 'POST' }),
+  repairFirewallRule: () =>
+    request<any>('/server/firewall/repair', { method: 'POST' }),
+  openFirewall: () =>
+    request<any>('/server/firewall/open', { method: 'POST' }),
+  openAdvancedFirewall: () =>
+    request<any>('/server/firewall/open-advanced', { method: 'POST' }),
+  verifyFirewallPort: (port: number) =>
+    request<any>('/server/firewall/verify', { method: 'POST', body: JSON.stringify({ port }) }),
+  checkFirewallAdmin: () => request<any>('/server/firewall/admin-check'),
+
+  // Uninstall & Restore
+  getStorageAnalysis: () => request<any>('/uninstall/storage-analysis'),
+  detectExistingInstallation: () => request<any>('/uninstall/detect-existing'),
+  getRestoreStatus: () => request<any>('/uninstall/restore-status'),
+  uninstallKeepData: () => request<any>('/uninstall/uninstall/keep-data', { method: 'POST' }),
+  uninstallDeleteEverything: () => request<any>('/uninstall/uninstall/delete-everything', { method: 'POST' }),
+  restoreInstallation: () => request<any>('/uninstall/restore', { method: 'POST' }),
+  startFreshInstallation: () => request<any>('/uninstall/start-fresh', { method: 'POST' }),
+  deleteExistingData: () => request<any>('/uninstall/delete-existing-data', { method: 'DELETE' }),
+  getUninstallHistory: () => request<any>('/uninstall/history'),
+  getUninstallDashboardWidget: () => request<any>('/uninstall/dashboard-widget'),
+  getDeleteServerInfo: (serverId: string) => request<any>(`/uninstall/delete-server-info/${serverId}`),
+
+  // Update & Version Management
+  getUpdateStatus: () => request<any>('/updates/status'),
+  checkForUpdates: () => request<any>('/updates/check', { method: 'POST' }),
+  downloadUpdate: () => request<any>('/updates/download', { method: 'POST' }),
+  installUpdate: () => request<any>('/updates/install', { method: 'POST' }),
+  getReleaseNotes: (version?: string) =>
+    request<any>(`/updates/release-notes${version ? `/${version}` : ''}`),
+  getUpdateHistory: () => request<any>('/updates/history'),
+  getMigrationHistory: () => request<any>('/updates/migration-history'),
+  getUpdatePreferences: () => request<any>('/updates/preferences'),
+  setUpdatePreference: (key: string, value: string) =>
+    request<any>('/updates/preferences', { method: 'PUT', body: JSON.stringify({ key, value }) }),
+  createPreUpdateBackup: () =>
+    request<any>('/updates/pre-update-backup', { method: 'POST' }),
+  rollbackUpdate: () =>
+    request<any>('/updates/rollback', { method: 'POST' }),
+  runMigrations: () =>
+    request<any>('/updates/migrate', { method: 'POST' }),
+  verifyDataPreservation: () => request<any>('/updates/verify-preservation'),
+  getUpdateDashboardWidget: () => request<any>('/updates/dashboard-widget'),
+  getUpdateChecklist: () => request<any>('/updates/checklist'),
+
+  // Discord Integration
+  getDiscordConfig: () => request<any>('/discord'),
+  saveDiscordConfig: (data: any) =>
+    request<any>('/discord', { method: 'POST', body: JSON.stringify(data) }),
+  connectDiscord: () =>
+    request<any>('/discord/connect', { method: 'POST' }),
+  disconnectDiscord: () =>
+    request<any>('/discord/disconnect', { method: 'POST' }),
+  reconnectDiscord: () =>
+    request<any>('/discord/reconnect', { method: 'POST' }),
+  testDiscordConnection: (botToken: string, textChannelId: string) =>
+    request<any>('/discord/test', { method: 'POST', body: JSON.stringify({ botToken, textChannelId }) }),
+  getDiscordStatus: () => request<any>('/discord/status'),
+  getDiscordPermissions: () => request<any>('/discord/permissions'),
+  getDiscordHistory: (limit?: number) =>
+    request<any[]>(`/discord/history${limit ? `?limit=${limit}` : ''}`),
+  sendDiscordTestMessage: () =>
+    request<any>('/discord/test-message', { method: 'POST' }),
 };

@@ -1,7 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { Cpu, Download, CheckCircle2, ChevronRight, Server, Globe, ShieldCheck } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Cpu, Download, CheckCircle2, ChevronRight, Server, Globe, ShieldCheck, Wifi } from 'lucide-react';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
+import { useActiveServer } from '../hooks/useActiveServer';
 
 interface VersionEntry {
   version: string;
@@ -104,9 +105,55 @@ const SOFTWARE_TYPES = [
     hover: 'hover:border-red-500/60',
     popular: false
   },
+  {
+    id: 'Spigot',
+    name: 'Spigot',
+    description: 'The most widely used server software with Bukkit plugin support.',
+    icon: <Cpu className="w-8 h-8 text-yellow-400" />,
+    color: 'bg-yellow-500/10 border-yellow-500/30',
+    hover: 'hover:border-yellow-500/60',
+    popular: false
+  },
+  {
+    id: 'Folia',
+    name: 'Folia',
+    description: 'Paper fork with multi-threaded region-based ticking for large servers.',
+    icon: <Cpu className="w-8 h-8 text-cyan-400" />,
+    color: 'bg-cyan-500/10 border-cyan-500/30',
+    hover: 'hover:border-cyan-500/60',
+    popular: false
+  },
+  {
+    id: 'Velocity',
+    name: 'Velocity',
+    description: 'High-performance Minecraft proxy for server networks.',
+    icon: <Wifi className="w-8 h-8 text-sky-400" />,
+    color: 'bg-sky-500/10 border-sky-500/30',
+    hover: 'hover:border-sky-500/60',
+    popular: false
+  },
+  {
+    id: 'Waterfall',
+    name: 'Waterfall',
+    description: 'Fork of BungeeCord with improved performance and features.',
+    icon: <Wifi className="w-8 h-8 text-blue-400" />,
+    color: 'bg-blue-500/10 border-blue-500/30',
+    hover: 'hover:border-blue-500/60',
+    popular: false
+  },
+  {
+    id: 'BungeeCord',
+    name: 'BungeeCord',
+    description: 'The original proxy software for linking multiple Minecraft servers.',
+    icon: <Wifi className="w-8 h-8 text-indigo-400" />,
+    color: 'bg-indigo-500/10 border-indigo-500/30',
+    hover: 'hover:border-indigo-500/60',
+    popular: false
+  },
 ];
 
 export default function Software() {
+  const { server: activeServer } = useActiveServer();
   const [data, setData] = useState<VersionsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [installing, setInstalling] = useState(false);
@@ -265,6 +312,20 @@ export default function Software() {
     'Alpha': 'text-red-400',
     'Old': 'text-gray-400',
   };
+
+  if (!activeServer) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <div className="w-12 h-12 mx-auto rounded-full bg-gray-800 flex items-center justify-center">
+            <Server className="w-6 h-6 text-gray-500" />
+          </div>
+          <p className="text-gray-400 text-sm font-medium">No server selected</p>
+          <p className="text-gray-600 text-xs">Select a server from the Server Library to manage this page.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in max-w-3xl mx-auto">

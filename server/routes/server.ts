@@ -9,8 +9,11 @@ import { minecraftServer } from '../services/minecraftServer';
 import { authMiddleware, requirePermission, AuthRequest } from '../middleware/auth';
 import { getDatabase } from '../database';
 import { resolveMinecraftDir } from '../paths';
+import { autoBackupIfEnabled } from '../services/backup';
 import { validateServer, getConnectionWizardData } from '../services/connectionValidator';
 import { mcPing, formatDescription } from '../services/mcPing';
+import { connectionManager } from '../services/connectionManager';
+import { firewallManager } from '../services/firewallManager';
 import { JavaDetector } from '../services/JavaDetector';
 import {
   cacheGet, cacheSet, httpsGet, downloadFile, isPaperAvailable,
@@ -18,6 +21,7 @@ import {
   downloadForgeVersion, downloadNeoForgeVersion, downloadVanillaVersion, downloadVersion,
   MojangVersion, PAPER_API, MOJANG_MANIFEST, FABRIC_API, FORGE_API, PURPUR_API
 } from '../services/download';
+import { emitToAll } from '../socketManager';
 
 const router = Router();
 
@@ -265,12 +269,15 @@ router.get('/config', authMiddleware, (_req: AuthRequest, res) => {
   res.json(minecraftServer.getConfig());
 });
 
-router.put('/config', authMiddleware, requirePermission('server.start'), (req: AuthRequest, res) => {
+router.put('/config', authMiddleware, requirePermission('server.start'), async (req: AuthRequest, res) => {
+  await autoBackupIfEnabled('Server config change', 'autoOnConfigChange');
   const updates = req.body;
   for (const [key, value] of Object.entries(updates)) {
     minecraftServer.updateConfig(key, String(value));
   }
-  res.json({ success: true, config: minecraftServer.getConfig() });
+  const config = minecraftServer.getConfig();
+  emitToAll('server:config-updated', config);
+  res.json({ success: true, config });
 });
 
 router.get('/stats/history', authMiddleware, (req: AuthRequest, res) => {
@@ -308,7 +315,8 @@ router.get('/properties', authMiddleware, (_req: AuthRequest, res) => {
   res.json(props);
 });
 
-router.put('/properties', authMiddleware, requirePermission('server.start'), (req: AuthRequest, res) => {
+router.put('/properties', authMiddleware, requirePermission('server.start'), async (req: AuthRequest, res) => {
+  await autoBackupIfEnabled('Server properties change', 'autoOnConfigChange');
   const updates: Record<string, string> = req.body;
   const mcDir = resolveMinecraftDir();
   const propsPath = path.join(mcDir, 'server.properties');
@@ -325,6 +333,7 @@ router.put('/properties', authMiddleware, requirePermission('server.start'), (re
     }
   }
   fs.writeFileSync(propsPath, content, 'utf-8');
+  emitToAll('server:properties-updated', updates);
   res.json({ success: true, message: 'Server properties updated. Restart server to apply changes.' });
 });
 
@@ -1151,6 +1160,8 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
     return res.status(400).json({ error: 'Version is required' });
   }
 
+  await autoBackupIfEnabled('Minecraft version change to ' + version, 'autoOnVersionChange');
+
   try {
     if (minecraftServer.isRunning) {
       await minecraftServer.stop();
@@ -1220,6 +1231,7 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
     else if (usePurpur) displaySource = 'Purpur';
     else if (useForge) displaySource = 'Forge';
     else if (useNeoForge) displaySource = 'NeoForge';
+    emitToAll('server:version-changed', { version, source: displaySource });
     res.json({ success: true, message: `Switched to ${displaySource} ${version}. Start the server to apply.` });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
@@ -1317,6 +1329,155 @@ router.get('/connection-wizard', authMiddleware, async (_req: AuthRequest, res) 
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ===== Connection Management (Phase 6) =====
+
+// Full connection status
+router.get('/connection/status', authMiddleware, async (_req: AuthRequest, res) => {
+  try {
+    const status = await connectionManager.getFullStatus();
+    res.json(status);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Advanced server test join (detailed ping)
+router.post('/connection/test-join', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { address } = req.body;
+    const result = await connectionManager.testJoin(address);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Connection diagnostics history
+router.get('/connection/diagnostics', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const limit = parseInt(req.query.limit as string) || 20;
+    const history = await connectionManager.getDiagnosticsHistory(limit);
+    res.json(history);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Preferred connection mode
+router.get('/connection/preferred-mode', authMiddleware, async (_req: AuthRequest, res) => {
+  res.json({ mode: connectionManager.getPreferredMode() });
+});
+
+router.post('/connection/preferred-mode', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { mode } = req.body;
+    connectionManager.setPreferredMode(mode);
+    res.json({ success: true, mode });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Refresh connection status and emit via Socket.IO
+router.post('/connection/refresh', authMiddleware, async (_req: AuthRequest, res) => {
+  try {
+    await connectionManager.emitConnectionUpdate();
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ===== Firewall Management =====
+
+// Check firewall rule status
+router.get('/firewall', authMiddleware, async (_req: AuthRequest, res) => {
+  try {
+    const rule = firewallManager.checkRule();
+    const admin = firewallManager.isAdmin();
+    const config = minecraftServer.getConfig();
+    const port = config.port || 25565;
+    let verify = { allowed: false, message: '' };
+    if (rule.exists) {
+      verify = firewallManager.verifyPort(port);
+    }
+    res.json({
+      ...rule,
+      isAdmin: admin,
+      isWindows: firewallManager.isWindows(),
+      verification: verify,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Add firewall rule
+router.post('/firewall/add', authMiddleware, requirePermission('admin'), async (_req: AuthRequest, res) => {
+  try {
+    const config = minecraftServer.getConfig();
+    const port = config.port || 25565;
+    const result = firewallManager.addRule(port);
+    // Refresh connection status after firewall change
+    await connectionManager.emitConnectionUpdate();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Remove firewall rule
+router.post('/firewall/remove', authMiddleware, requirePermission('admin'), async (_req: AuthRequest, res) => {
+  try {
+    const result = firewallManager.removeRule();
+    await connectionManager.emitConnectionUpdate();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Repair firewall rule
+router.post('/firewall/repair', authMiddleware, requirePermission('admin'), async (_req: AuthRequest, res) => {
+  try {
+    const config = minecraftServer.getConfig();
+    const port = config.port || 25565;
+    const result = firewallManager.repairRule(port);
+    await connectionManager.emitConnectionUpdate();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Open Windows Firewall settings
+router.post('/firewall/open', authMiddleware, async (_req: AuthRequest, res) => {
+  const result = firewallManager.openFirewallSettings();
+  res.json(result);
+});
+
+// Open Advanced Firewall
+router.post('/firewall/open-advanced', authMiddleware, async (_req: AuthRequest, res) => {
+  const result = firewallManager.openAdvancedFirewall();
+  res.json(result);
+});
+
+// Verify specific port
+router.post('/firewall/verify', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { port } = req.body;
+    const result = firewallManager.verifyPort(parseInt(port) || 25565);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Check admin status
+router.get('/firewall/admin-check', authMiddleware, async (_req: AuthRequest, res) => {
+  res.json({ isAdmin: firewallManager.isAdmin(), isWindows: firewallManager.isWindows() });
 });
 
 export default router;

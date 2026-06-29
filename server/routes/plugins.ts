@@ -4,6 +4,7 @@ import path from 'path';
 import { getDatabase } from '../database';
 import { authMiddleware, requirePermission, AuthRequest } from '../middleware/auth';
 import { resolveMinecraftDir } from '../paths';
+import { emitToAll } from '../socketManager';
 
 const router = Router();
 
@@ -139,6 +140,7 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
           if (fs.existsSync(jarPath)) fs.unlinkSync(jarPath);
           fs.renameSync(tempPath, jarPath);
           registerPluginInDb(name);
+          emitToAll('plugin:installed', { name, version: '1.0' });
           res.json({ success: true, name });
         });
       });
@@ -162,6 +164,7 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
   } else {
     // Placeholder - user should manually place the .jar in plugins directory
     registerPluginInDb(name);
+    emitToAll('plugin:installed', { name, version: '1.0' });
     res.json({ success: true, name, message: 'Plugin registered. Place the .jar file in the plugins directory.' });
   }
 });
@@ -176,6 +179,7 @@ router.delete('/:name', authMiddleware, requirePermission('plugin.manage'), (req
   const db = getDatabase();
   db.prepare('DELETE FROM plugins WHERE name = ?').run(req.params.name);
 
+  emitToAll('plugin:removed', { name: req.params.name });
   res.json({ success: true });
 });
 
@@ -201,6 +205,7 @@ router.post('/:name/toggle', authMiddleware, requirePermission('plugin.manage'),
     fs.renameSync(jarPath, disabledPath);
   }
 
+  emitToAll('plugin:toggled', { name: req.params.name, enabled: !!newState });
   res.json({ success: true, enabled: !!newState });
 });
 

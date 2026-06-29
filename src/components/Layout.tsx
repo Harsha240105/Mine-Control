@@ -7,6 +7,8 @@ import {
   Terminal,
   Globe,
   Puzzle,
+  Palette,
+  Package,
   HardDrive,
   Settings,
   Server,
@@ -36,9 +38,12 @@ import {
   MessageCircle,
   Shield,
   Radio,
+  HelpCircle,
+  Trash2,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
+import { useActiveServer } from '../hooks/useActiveServer';
 import NotificationPanel from './NotificationPanel';
 import UpdateBanner from './UpdateBanner';
 import toast from 'react-hot-toast';
@@ -50,6 +55,9 @@ const navItems = [
   { path: '/console', label: 'Console', icon: Terminal },
   { path: '/players', label: 'Players', icon: Users },
   { path: '/plugins', label: 'Plugins', icon: Puzzle },
+  { path: '/mods', label: 'Mods', icon: Puzzle },
+  { path: '/shaders', label: 'Shaders', icon: Palette },
+  { path: '/resourcepacks', label: 'Packs', icon: Package },
   { path: '/worlds', label: 'Worlds', icon: Globe },
   { path: '/backups', label: 'Backups', icon: HardDrive },
   { path: '/scheduler', label: 'Scheduler', icon: Clock },
@@ -63,21 +71,22 @@ const bottomNavItems = [
   { path: '/diagnostics', label: 'Diagnostics', icon: Stethoscope },
   { path: '/guide', label: 'Guide', icon: BookOpen },
   { path: '/privacy', label: 'Privacy', icon: Shield },
+  { path: '/updates', label: 'Updates', icon: RefreshCw },
+  { path: '/uninstall', label: 'Uninstall', icon: Trash2 },
 ];
 
 export default function Layout() {
   const { user, logout, isOwner } = useAuth();
+  const { server: activeServer, servers: serverList, refresh: refreshServers } = useActiveServer();
   const navigate = useNavigate();
   const [collapsed, setCollapsed] = useState(() => {
     return localStorage.getItem('mc_sidebar_collapsed') === 'true';
   });
   const [serverRunning, setServerRunning] = useState(false);
   const [serverStarting, setServerStarting] = useState(false);
-  const [serverList, setServerList] = useState<any[]>([]);
-  const [activeServerName, setActiveServerName] = useState('');
   const [showServerDropdown, setShowServerDropdown] = useState(false);
   const [appVersion, setAppVersion] = useState<string>('Unknown');
-  const { socket, connected: socketConnected, error: socketError } = useSocket();
+  const { socket, connected: socketConnected } = useSocket();
   const lastSocketUpdate = useRef(0);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [initialStatusLoaded, setInitialStatusLoaded] = useState(false);
@@ -90,18 +99,9 @@ export default function Layout() {
   }, []);
 
   useEffect(() => {
-    const fetchServers = async () => {
-      try {
-        const data = await api.getServers();
-        setServerList(data.servers);
-        const active = data.servers.find((s: any) => s.id === data.activeServerId);
-        setActiveServerName(active?.name || '');
-      } catch {}
-    };
-    fetchServers();
-    const interval = setInterval(fetchServers, 30000);
+    const interval = setInterval(refreshServers, 30000);
     return () => clearInterval(interval);
-  }, [navigate]);
+  }, [refreshServers]);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -118,9 +118,7 @@ export default function Layout() {
       await api.selectServer(id);
       setShowServerDropdown(false);
       window.location.reload();
-    } catch (err: any) {
-      toast.error(err.message);
-    }
+    } catch {}
   };
 
   useEffect(() => {
@@ -243,7 +241,7 @@ export default function Layout() {
               >
                 <Layers size={14} className="text-minecraft-400 shrink-0" />
                 <span className="text-xs text-gray-200 truncate flex-1">
-                  {activeServerName || 'No Server'}
+                  {activeServer?.name || 'No Server'}
                 </span>
                 <ChevronDown size={12} className={`text-gray-500 transition-transform ${showServerDropdown ? 'rotate-180' : ''}`} />
               </button>
@@ -254,14 +252,14 @@ export default function Layout() {
                       key={s.id}
                       onClick={() => handleSwitchServer(s.id)}
                       className={`flex items-center gap-2 w-full px-3 py-2 text-xs text-left transition-colors ${
-                        s.name === activeServerName
+                        s.id === activeServer?.id
                           ? 'text-minecraft-400 bg-minecraft-500/10'
                           : 'text-gray-400 hover:text-gray-200 hover:bg-surface-700/50'
                       }`}
                     >
                       <Server size={12} className="shrink-0" />
                       <span className="truncate flex-1">{s.name}</span>
-                      {s.name === activeServerName && <CheckCircle size={12} className="text-minecraft-400 shrink-0" />}
+                      {s.id === activeServer?.id && <CheckCircle size={12} className="text-minecraft-400 shrink-0" />}
                     </button>
                   ))}
                 </div>
@@ -435,6 +433,13 @@ export default function Layout() {
           <div className="flex items-center gap-3">
             <UpdateBanner />
             <NotificationPanel />
+            <button
+              onClick={() => navigate('/guide')}
+              className="p-1.5 text-gray-500 hover:text-minecraft-400 transition-colors rounded-lg hover:bg-surface-800"
+              title="Guide & Knowledge Center"
+            >
+              <HelpCircle size={16} />
+            </button>
             <span className="text-xs text-gray-500">
               v{appVersion}
             </span>

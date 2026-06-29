@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
-import { Clock, Plus, Play, Square, Trash2, Power } from 'lucide-react';
+import { Clock, Plus, Play, Square, Trash2, Power, Server } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useActiveServer } from '../hooks/useActiveServer';
 
 interface Schedule {
   id: string;
@@ -15,6 +16,7 @@ interface Schedule {
 }
 
 export function Scheduler() {
+  const { server: activeServer } = useActiveServer();
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -73,6 +75,20 @@ export function Scheduler() {
       toast.error('Failed to create schedule');
     }
   };
+
+  if (!activeServer) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <div className="w-12 h-12 mx-auto rounded-full bg-gray-800 flex items-center justify-center">
+            <Server className="w-6 h-6 text-gray-500" />
+          </div>
+          <p className="text-gray-400 text-sm font-medium">No server selected</p>
+          <p className="text-gray-600 text-xs">Select a server from the Server Library to manage this page.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

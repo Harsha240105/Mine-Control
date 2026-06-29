@@ -10,9 +10,11 @@ import path from 'path';
 import fs from 'fs';
 import cron from 'node-cron';
 import { rateLimiter, verifyToken } from './middleware/auth';
-import { getDatabase } from './database';
+import { getDatabase, closeDatabase } from './database';
+import { activeServer } from './activeServer';
+import { setIO } from './socketManager';
 import { minecraftServer } from './services/minecraftServer';
-import { backupService } from './services/backup';
+import { backupService, autoBackupIfEnabled } from './services/backup';
 import { BASE_PATH, resolvePath, setMinecraftDir, getMinecraftDir } from './paths';
 
 import authRoutes from './routes/auth';
@@ -21,6 +23,9 @@ import serverManagerRoutes from './routes/servers';
 import playerRoutes from './routes/players';
 import worldRoutes from './routes/worlds';
 import pluginRoutes from './routes/plugins';
+import modRoutes from './routes/mods';
+import shaderRoutes from './routes/shaders';
+import resourcePackRoutes from './routes/resourcepacks';
 import backupRoutes from './routes/backup';
 import claimRoutes from './routes/claims';
 import buildRoutes from './routes/builds';
@@ -34,8 +39,15 @@ import feedbackRoutes from './routes/feedback';
 import privacyRoutes from './routes/privacy';
 import uiRoutes from './routes/ui';
 import importRoutes from './routes/import';
+import guideRoutes from './routes/guide';
+import updateRoutes from './routes/updates';
+import uninstallRoutes from './routes/uninstall';
 import { SchedulerService } from './services/scheduler';
 import { discordService } from './services/discord';
+import { feedbackService } from './services/feedback';
+import { autoDetectPlayers } from './services/playerDetection';
+import { detectWorlds, syncWorldFromServerDir } from './services/worldManager';
+import { connectionManager as connManager } from './services/connectionManager';
 
 const app = express();
 const server = http.createServer(app);
@@ -48,6 +60,8 @@ const io = new SocketIOServer(server, {
     maxDisconnectionDuration: 120000,
   },
 });
+
+setIO(io);
 
 // Log Socket.IO errors
 io.engine.on('connection_error', (err) => {
@@ -81,6 +95,9 @@ app.use('/api/servers', serverManagerRoutes);
 app.use('/api/players', playerRoutes);
 app.use('/api/worlds', worldRoutes);
 app.use('/api/plugins', pluginRoutes);
+app.use('/api/mods', modRoutes);
+app.use('/api/shaders', shaderRoutes);
+app.use('/api/resourcepacks', resourcePackRoutes);
 app.use('/api/backups', backupRoutes);
 app.use('/api/claims', claimRoutes);
 app.use('/api/builds', buildRoutes);
@@ -94,6 +111,9 @@ app.use('/api/feedback', feedbackRoutes);
 app.use('/api/privacy', privacyRoutes);
 app.use('/api/import', importRoutes);
 app.use('/api/ui', uiRoutes);
+app.use('/api/guide', guideRoutes);
+app.use('/api/updates', updateRoutes);
+app.use('/api/uninstall', uninstallRoutes);
 
 // API 404 handler (unknown API routes return JSON, not HTML)
 app.use('/api/*', (req, res) => {
@@ -147,19 +167,30 @@ function emitPlayersUpdate() {
   }
 }
 
+// Helper: emit full worlds list
+function emitWorldsUpdate() {
+  try {
+    const db = getDatabase();
+    const worlds = db.prepare('SELECT * FROM worlds ORDER BY created_at DESC').all();
+    io.emit('worlds:update', worlds);
+  } catch (e) {
+    // ignore
+  }
+}
+
 // Helper: emit full server status
 function emitServerUpdate() {
   try {
     const db = getDatabase();
-    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
     const config = minecraftServer.getConfig();
     const onlinePlayers = db.prepare('SELECT COUNT(*) as count FROM players WHERE status = ?').get('online') as any;
     io.emit('server:update', {
+      serverId: activeServer.current?.id || null,
       running: minecraftServer.isRunning,
       starting: minecraftServer.isStarting,
       state: minecraftServer.state,
       onlinePlayers: minecraftServer.isRunning ? (onlinePlayers?.count || 0) : null,
-      maxPlayers: config.maxPlayers,
+      maxPlayers: config?.maxPlayers || 4,
       tps: 20.0,
     });
   } catch (e) {
@@ -175,6 +206,8 @@ io.on('connection', (socket) => {
   socket.emit('server:status', { running: minecraftServer.isRunning, starting: minecraftServer.isStarting, state: minecraftServer.state });
   emitPlayersUpdate();
   emitServerUpdate();
+  emitWorldsUpdate();
+  connManager.emitConnectionUpdate().catch(() => {});
 
   socket.on('authenticate', (token: string) => {
     try {
@@ -221,12 +254,27 @@ minecraftServer.on('server:started', () => {
   io.emit('server:started');
   io.emit('server:state', 'running');
   io.emit('server:status', { running: true, starting: false });
+
+  // Refresh connection status
+  connManager.emitConnectionUpdate().catch(() => {});
+
+  // Re-scan players when server starts
+  try {
+    const result = autoDetectPlayers();
+    if (result.created > 0 || result.updated > 0) {
+      emitPlayersUpdate();
+    }
+  } catch (e) {
+    console.error('[Detection] Server-start scan failed:', e);
+  }
 });
 
 minecraftServer.on('server:stopped', (code: number | null) => {
   io.emit('server:stopped', code);
   io.emit('server:state', 'stopped');
   io.emit('server:status', { running: false, starting: false, code });
+  // Refresh connection status
+  connManager.emitConnectionUpdate().catch(() => {});
 });
 
 minecraftServer.on('server:error', (error: string) => {
@@ -244,23 +292,12 @@ minecraftServer.on('stats:update', (stats) => {
 
 // Scheduled tasks
 
-// Auto backup every hour (only if active server has autoBackup enabled)
-cron.schedule('0 * * * *', async () => {
+// Scheduled backups (check every 15 minutes for pending schedules)
+cron.schedule('*/15 * * * *', async () => {
   try {
-    const db = getDatabase();
-    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
-    if (!activeId) return;
-    const server = db.prepare('SELECT autoBackup FROM servers WHERE id = ?').get(activeId) as any;
-    if (!server || !server.autoBackup) return;
-    console.log('[Cron] Running auto-backup...');
-    await backupService.createBackup(
-      `Auto-Backup-${new Date().toISOString().slice(0, 10)}`,
-      'auto',
-      false
-    );
-    console.log('[Cron] Auto-backup completed');
+    await backupService.runScheduledBackups();
   } catch (error) {
-    console.error('[Cron] Auto-backup failed:', error);
+    console.error('[Cron] Scheduled backup check failed:', error);
   }
 });
 
@@ -269,6 +306,49 @@ cron.schedule('*/30 * * * *', () => {
   if (minecraftServer.isRunning) {
     minecraftServer.sendCommand('save-all').catch(() => {});
     console.log('[Cron] World save triggered');
+  }
+});
+
+// Periodic world detection (every 15 minutes)
+cron.schedule('*/15 * * * *', () => {
+  try {
+    const detected = detectWorlds();
+    if (detected.length > 0) {
+      io.emit('worlds:update');
+      console.log(`[Worlds] Periodic scan: ${detected.length} new worlds`);
+    }
+  } catch (e) {
+    console.error('[Worlds] Periodic scan failed:', e);
+  }
+});
+
+// Periodic player detection (every 5 minutes)
+cron.schedule('*/5 * * * *', () => {
+  try {
+    const result = autoDetectPlayers();
+    if (result.created > 0 || result.updated > 0) {
+      emitPlayersUpdate();
+      console.log(`[Detection] Periodic scan: ${result.created} created, ${result.updated} updated`);
+    }
+  } catch (e) {
+    console.error('[Detection] Periodic scan failed:', e);
+  }
+});
+
+// Periodic connection status refresh (every 5 minutes)
+cron.schedule('*/5 * * * *', () => {
+  connManager.emitConnectionUpdate().catch(() => {});
+});
+
+// Auto-sync feedback queue (every 2 minutes)
+cron.schedule('*/2 * * * *', async () => {
+  try {
+    const result = await feedbackService.processSyncQueue();
+    if (result.synced > 0 || result.failed > 0) {
+      console.log(`[Feedback] Sync: ${result.synced} synced, ${result.failed} failed`);
+    }
+  } catch (error) {
+    console.error('[Feedback] Sync cron failed:', error);
   }
 });
 
@@ -290,17 +370,12 @@ process.on('unhandledRejection', (reason) => {
 
 // Initialize active server
 const db = getDatabase();
-const activeRow = db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any;
-const activeId = activeRow?.value;
-if (activeId) {
-  const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(activeId) as any;
-  if (server) {
-    setMinecraftDir(server.directory);
-    minecraftServer.loadServer(server.directory);
-    console.log(`[Server] Active: ${server.name} (${server.slug})`);
-  }
+const active = activeServer.load();
+if (active) {
+  setMinecraftDir(active.directory);
+  minecraftServer.loadServer(active.directory);
+  console.log(`[Server] Active: ${active.name} (${active.slug})`);
 } else {
-  // Create default server from existing config or use default minecraft dir
   const count = db.prepare('SELECT COUNT(*) as c FROM servers').get() as any;
   if (count.c === 0) {
     const { v4 } = require('uuid');
@@ -313,10 +388,38 @@ if (activeId) {
       VALUES (?, 'My Server', 'my-server', ?, ?, 'stopped')
     `).run(id, Number.isNaN(port) ? 25565 : port, dir);
     db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('active_server_id', ?)").run(id);
+    activeServer.load();
     setMinecraftDir(dir);
     minecraftServer.loadServer(dir);
     console.log(`[Server] Created default server at ${dir}`);
+  } else {
+    activeServer.load();
   }
+}
+
+// Auto-detect players from filesystem after server init
+try {
+  const result = autoDetectPlayers();
+  if (result.created > 0 || result.updated > 0) {
+    console.log(`[Detection] ${result.created} players created, ${result.updated} updated`);
+  }
+} catch (e) {
+  console.error('[Detection] Initial scan failed:', e);
+}
+
+// Auto-detect worlds from filesystem after server init
+try {
+  const detected = detectWorlds();
+  if (detected.length > 0) {
+    console.log(`[Worlds] ${detected.length} worlds auto-detected`);
+  }
+  // Also sync from server directory
+  const synced = syncWorldFromServerDir();
+  if (synced) {
+    console.log(`[Worlds] Synced server world: ${synced.name}`);
+  }
+} catch (e) {
+  console.error('[Worlds] Initial scan failed:', e);
 }
 
 // Start server
@@ -348,17 +451,17 @@ server.listen(portToUse, () => {
 });
 
 // Graceful shutdown
-process.on('SIGINT', async () => {
+async function gracefulShutdown() {
   console.log('\nShutting down...');
+  discordService.destroy();
+  SchedulerService.stopAll();
   if (minecraftServer.isRunning) {
     await minecraftServer.stop();
   }
+  io.close();
+  try { closeDatabase(); } catch {}
   process.exit(0);
-});
+}
 
-process.on('SIGTERM', async () => {
-  if (minecraftServer.isRunning) {
-    await minecraftServer.stop();
-  }
-  process.exit(0);
-});
+process.on('SIGINT', gracefulShutdown);
+process.on('SIGTERM', gracefulShutdown);

@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './hooks/useAuth';
+import { ActiveServerProvider } from './hooks/useActiveServer';
 import Layout from './components/Layout';
 import { api } from './lib/api';
 import Login from './pages/Login';
@@ -12,6 +13,9 @@ import Players from './pages/Players';
 import Console from './pages/Console';
 import Worlds from './pages/Worlds';
 import Plugins from './pages/Plugins';
+import Mods from './pages/Mods';
+import Shaders from './pages/Shaders';
+import ResourcePacks from './pages/ResourcePacks';
 import Settings from './pages/Settings';
 import Backups from './pages/Backups';
 import { Scheduler } from './pages/Scheduler';
@@ -27,6 +31,8 @@ import Import from './pages/Import';
 import Discord from './pages/Discord';
 import Feedback from './pages/Feedback';
 import Privacy from './pages/Privacy';
+import Updates from './pages/Updates';
+import Uninstall from './pages/Uninstall';
 import AutoUpdater from './components/AutoUpdater';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -63,6 +69,7 @@ export default function App() {
           }}
         />
         <AutoUpdater />
+        <ActiveServerProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route
@@ -97,6 +104,9 @@ export default function App() {
             <Route path="console" element={<Console />} />
             <Route path="worlds" element={<Worlds />} />
             <Route path="plugins" element={<Plugins />} />
+            <Route path="mods" element={<Mods />} />
+            <Route path="shaders" element={<Shaders />} />
+            <Route path="resourcepacks" element={<ResourcePacks />} />
             <Route path="backups" element={<Backups />} />
             <Route path="scheduler" element={<Scheduler />} />
             <Route path="connection" element={<Connection />} />
@@ -109,9 +119,12 @@ export default function App() {
             <Route path="guide" element={<Guide />} />
             <Route path="github" element={<GitHub />} />
             <Route path="privacy" element={<Privacy />} />
+            <Route path="updates" element={<Updates />} />
+            <Route path="uninstall" element={<Uninstall />} />
             <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>
+        </ActiveServerProvider>
       </AuthProvider>
     </BrowserRouter>
   );

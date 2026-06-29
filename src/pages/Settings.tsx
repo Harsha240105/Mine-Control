@@ -1,17 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Settings as SettingsIcon, Save, Key, Shield, Server, RefreshCw,
   Eye, EyeOff, Globe, Users, Wifi, Download, CheckCircle, AlertCircle,
-  ChevronDown, ChevronRight, Search, Cpu, Trash2
+  ChevronDown, ChevronRight, Search, Cpu, Trash2, Loader2
 } from 'lucide-react';
 import pkg from '../../package.json';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
+import { useActiveServer } from '../hooks/useActiveServer';
 import toast from 'react-hot-toast';
 
 export default function Settings() {
   const { user, isOwner } = useAuth();
+  const { server: activeServer } = useActiveServer();
   const navigate = useNavigate();
   const [config, setConfig] = useState<any>({});
   const [props, setProps] = useState<any>({});
@@ -34,21 +36,15 @@ export default function Settings() {
     'Alpha': false,
   });
 
-  const [activeServerId, setActiveServerId] = useState<string | null>(null);
   const [serverName, setServerName] = useState('');
   const [onlineMode, setOnlineMode] = useState(true);
 
-  const fetchActiveServer = async () => {
-    try {
-      const data = await api.getServers();
-      setActiveServerId(data.activeServerId);
-      const active = data.servers.find((s: any) => s.id === data.activeServerId);
-      if (active) {
-        setServerName(active.name);
-        setOnlineMode(active.onlineMode);
-      }
-    } catch {}
-  };
+  useEffect(() => {
+    if (activeServer) {
+      setServerName(activeServer.name);
+      setOnlineMode(activeServer.onlineMode ?? true);
+    }
+  }, [activeServer]);
 
   useEffect(() => {
     if (!loading) fetchVersions();
@@ -63,7 +59,7 @@ export default function Settings() {
   };
 
   useEffect(() => {
-    Promise.all([fetchConfig(), fetchProps(), fetchActiveServer()]).finally(() => setLoading(false));
+    Promise.all([fetchConfig(), fetchProps()]).finally(() => setLoading(false));
   }, []);
 
   const fetchVersions = async () => {
@@ -80,8 +76,8 @@ export default function Settings() {
   const handleSave = async () => {
     let saved = false;
     try {
-      if (activeServerId) {
-        await api.put(`/servers/${activeServerId}`, {
+      if (activeServer?.id) {
+        await api.put(`/servers/${activeServer?.id}`, {
           name: serverName,
           onlineMode,
         });
@@ -174,14 +170,14 @@ export default function Settings() {
   };
 
   const handleDeleteServer = async () => {
-    if (!activeServerId) return;
+    if (!activeServer?.id) return;
     if (deleteConfirmName !== serverName) {
       toast.error('Server name did not match. Deletion cancelled.');
       return;
     }
     
     try {
-      await api.deleteServer(activeServerId);
+      await api.deleteServer(activeServer?.id);
       toast.success('Server deleted successfully.');
       window.location.href = '/';
     } catch (err: any) {
@@ -476,6 +472,60 @@ export default function Settings() {
         </form>
       </div>
 
+      {/* Issue Tracker Config */}
+      {activeServer?.id && (
+        <div className="card">
+          <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
+            <Globe size={16} className="text-minecraft-500" />
+            Issue Tracker Integration
+          </h3>
+          <IssueTrackerConfigForm serverId={activeServer.id} />
+        </div>
+      )}
+
+      {/* Update Preferences */}
+      <div className="card">
+        <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
+          <RefreshCw size={16} className="text-minecraft-500" />
+          Update Preferences
+        </h3>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-200">Check on Startup</p>
+              <p className="text-[10px] text-gray-500">Check for updates when the app starts</p>
+            </div>
+            <UpdateToggle prefKey="check_on_startup" />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-200">Auto Download</p>
+              <p className="text-[10px] text-gray-500">Download updates automatically when available</p>
+            </div>
+            <UpdateToggle prefKey="auto_download" />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-200">Auto Install</p>
+              <p className="text-[10px] text-gray-500">Install updates automatically after download</p>
+            </div>
+            <UpdateToggle prefKey="auto_install" />
+          </div>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-200">Notify Before Install</p>
+              <p className="text-[10px] text-gray-500">Show confirmation before installing updates</p>
+            </div>
+            <UpdateToggle prefKey="notify_before_install" />
+          </div>
+          <div className="pt-2 border-t border-surface-700">
+            <a href="/updates" className="text-xs text-minecraft-500 hover:text-minecraft-400 transition-colors">
+              Open Update Manager →
+            </a>
+          </div>
+        </div>
+      </div>
+
       {/* Info */}
       <div className="card">
         <h3 className="text-sm font-medium text-gray-200 mb-4">System Information</h3>
@@ -497,6 +547,15 @@ export default function Settings() {
             <span className="ml-2 text-gray-300 font-mono text-xs">{config.javaPath || 'java'}</span>
           </div>
         </div>
+      </div>
+
+      {/* Security Health */}
+      <div className="card">
+        <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
+          <Shield size={16} className="text-minecraft-500" />
+          Security Health
+        </h3>
+        <SecurityHealthCard serverId={activeServer?.id} />
       </div>
 
       <div className="card border border-red-500/20 bg-red-500/5">
@@ -551,6 +610,19 @@ export default function Settings() {
             </div>
           </>
         )}
+        <div className="border-t border-red-500/10 my-3" />
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-medium text-gray-200">Manage Uninstall & Restore</h4>
+            <p className="text-xs text-gray-500 mt-1">View storage analysis, restore options, and uninstall history.</p>
+          </div>
+          <a
+            href="/uninstall"
+            className="px-4 py-2 bg-surface-800 hover:bg-surface-700 text-gray-300 rounded-lg text-sm transition-colors border border-surface-600 flex items-center gap-2"
+          >
+            Open Uninstall Manager
+          </a>
+        </div>
       </div>
 
       {/* Delete Confirmation Modal */}
@@ -596,6 +668,232 @@ export default function Settings() {
         </div>
       )}
     </div>
+  );
+}
+
+function IssueTrackerConfigForm({ serverId }: { serverId: string }) {
+  const [config, setConfig] = useState<any>({ provider: 'github', url: '', api_token: '', repository: '', project_key: '', enabled: false, auto_sync: false });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const c = await api.getIssueTrackerConfig(serverId);
+        if (c && c.id) setConfig(c);
+      } catch {}
+      setLoading(false);
+    })();
+  }, [serverId]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await api.saveIssueTrackerConfig({ server_id: serverId, ...config });
+      toast.success('Issue tracker config saved');
+    } catch (err: any) { toast.error(err.message); }
+    setSaving(false);
+  };
+
+  if (loading) return <div className="text-xs text-gray-500">Loading...</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Provider</label>
+          <select value={config.provider} onChange={(e) => setConfig((prev: any) => ({ ...prev, provider: e.target.value }))} className="input w-full text-xs">
+            <option value="github">GitHub</option>
+            <option value="gitlab">GitLab</option>
+            <option value="jira">Jira</option>
+            <option value="custom">Custom</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Repository / Tracker URL</label>
+          <input type="text" value={config.url} onChange={(e) => setConfig((prev: any) => ({ ...prev, url: e.target.value }))} className="input w-full text-xs" placeholder="https://github.com/user/repo" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">API Token</label>
+          <input type="password" value={config.api_token} onChange={(e) => setConfig((prev: any) => ({ ...prev, api_token: e.target.value }))} className="input w-full text-xs" placeholder="Optional: for auto-submit" />
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-400 mb-1">Project Key</label>
+          <input type="text" value={config.project_key} onChange={(e) => setConfig((prev: any) => ({ ...prev, project_key: e.target.value }))} className="input w-full text-xs" placeholder="Optional: for Jira" />
+        </div>
+      </div>
+      <div className="flex items-center gap-4">
+        <label className="flex items-center gap-2 text-xs text-gray-400">
+          <input type="checkbox" checked={config.enabled} onChange={(e) => setConfig((prev: any) => ({ ...prev, enabled: e.target.checked }))} className="rounded" />
+          Enable Integration
+        </label>
+        <label className="flex items-center gap-2 text-xs text-gray-400">
+          <input type="checkbox" checked={config.auto_sync} onChange={(e) => setConfig((prev: any) => ({ ...prev, auto_sync: e.target.checked }))} className="rounded" />
+          Auto-sync tickets
+        </label>
+      </div>
+      <button onClick={handleSave} disabled={saving} className="btn-primary text-xs flex items-center gap-1">
+        {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+        {saving ? 'Saving...' : 'Save Tracker Config'}
+      </button>
+    </div>
+  );
+}
+
+function SecurityHealthCard({ serverId: _serverId }: { serverId?: string }) {
+  const [health, setHealth] = useState<any>(null);
+  const [prefs, setPrefs] = useState<any>(null);
+  const [running, setRunning] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const fetchAll = async () => {
+    try {
+      const [h, p] = await Promise.all([
+        api.getSecurityStatus(),
+        api.getPrivacyPreferences(),
+      ]);
+      setHealth(h);
+      setPrefs(p);
+    } catch {}
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchAll(); }, []);
+
+  const runCheck = async () => {
+    setRunning(true);
+    try {
+      await api.runSecurityCheck();
+      await fetchAll();
+      toast.success('Security check complete');
+    } catch (e: any) {
+      toast.error(e.message || 'Check failed');
+    }
+    setRunning(false);
+  };
+
+  if (loading) return <div className="text-xs text-gray-500">Loading security status...</div>;
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className={`text-2xl font-bold ${
+            !health ? 'text-gray-500' :
+            health.score >= 80 ? 'text-green-400' :
+            health.score >= 50 ? 'text-yellow-400' : 'text-red-400'
+          }`}>
+            {health?.score ?? '?'}<span className="text-sm text-gray-500 font-normal">/100</span>
+          </div>
+          {health && (
+            <div className="flex gap-2 text-xs">
+              <span className="text-green-400">{health.passCount ?? 0} pass</span>
+              <span className="text-yellow-400">{health.warnCount ?? 0} warn</span>
+              <span className="text-red-400">{health.failCount ?? 0} fail</span>
+            </div>
+          )}
+        </div>
+        <button
+          onClick={runCheck}
+          disabled={running}
+          className="px-3 py-1.5 bg-minecraft-500/20 hover:bg-minecraft-500/30 text-minecraft-400 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 disabled:opacity-50"
+        >
+          {running ? (
+            <>
+              <RefreshCw size={12} className="animate-spin" />
+              Running...
+            </>
+          ) : (
+            <>
+              <RefreshCw size={12} />
+              Run Check
+            </>
+          )}
+        </button>
+      </div>
+
+      {health?.warnings?.length > 0 && (
+        <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3 space-y-1">
+          {health.warnings.map((w: string, i: number) => (
+            <div key={i} className="flex items-center gap-1.5 text-[11px] text-yellow-400">
+              <AlertCircle size={10} />
+              {w}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {health?.lastChecked && (
+        <p className="text-[10px] text-gray-600">Last full check: {new Date(health.lastChecked).toLocaleString()}</p>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="bg-surface-800/50 rounded-lg p-3">
+          <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Privacy Settings</p>
+          <div className="space-y-1 text-[11px]">
+            <div className="flex justify-between"><span className="text-gray-400">Analytics</span><span className={prefs?.collect_analytics ? 'text-green-400' : 'text-gray-600'}>{prefs?.collect_analytics ? 'Enabled' : 'Disabled'}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Log Masking</span><span className={prefs?.mask_secrets_in_logs ? 'text-green-400' : 'text-gray-600'}>{prefs?.mask_secrets_in_logs ? 'Active' : 'Inactive'}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">UI Masking</span><span className={prefs?.mask_secrets_in_ui ? 'text-green-400' : 'text-gray-600'}>{prefs?.mask_secrets_in_ui ? 'Active' : 'Inactive'}</span></div>
+            <div className="flex justify-between"><span className="text-gray-400">Log Retention</span><span className="text-gray-300">{prefs?.log_retention_days ?? 7}d</span></div>
+          </div>
+        </div>
+        <div className="bg-surface-800/50 rounded-lg p-3">
+          <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Quick Actions</p>
+          <div className="space-y-1.5">
+            <button onClick={() => api.clearPrivacyLogs().then(() => toast.success('Logs cleared')).catch(() => toast.error('Failed'))} className="w-full text-left text-[11px] text-gray-400 hover:text-gray-200 transition-colors">
+              Clear All Logs
+            </button>
+            <button onClick={() => api.clearPrivacyCache().then(() => toast.success('Cache cleared')).catch(() => toast.error('Failed'))} className="w-full text-left text-[11px] text-gray-400 hover:text-gray-200 transition-colors">
+              Clear Cache
+            </button>
+            <button onClick={() => api.clearPrivacyFeedback().then(() => toast.success('Feedback queue cleared')).catch(() => toast.error('Failed'))} className="w-full text-left text-[11px] text-gray-400 hover:text-gray-200 transition-colors">
+              Clear Feedback Queue
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <p className="text-[10px] text-gray-600">
+        <a href="/privacy" className="text-minecraft-500 hover:text-minecraft-400 transition-colors">Open Privacy & Security Center →</a>
+      </p>
+    </div>
+  );
+}
+
+function UpdateToggle({ prefKey }: { prefKey: string }) {
+  const [value, setValue] = useState<string>('true');
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const prefs = await api.getUpdatePreferences();
+        setValue(prefs[prefKey] ?? 'true');
+      } catch {}
+      setLoading(false);
+    })();
+  }, [prefKey]);
+
+  const toggle = async () => {
+    const newVal = value === 'true' ? 'false' : 'true';
+    setValue(newVal);
+    try {
+      await api.setUpdatePreference(prefKey, newVal);
+      toast.success('Preference updated');
+    } catch {
+      setValue(value);
+      toast.error('Failed to update preference');
+    }
+  };
+
+  if (loading) return <div className="w-8 h-5 bg-surface-700 rounded-full animate-pulse" />;
+  return (
+    <input
+      type="checkbox"
+      className="toggle"
+      checked={value === 'true'}
+      onChange={toggle}
+    />
   );
 }
 

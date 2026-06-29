@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Puzzle, Plus, Trash2, Power, PowerOff, Download, ExternalLink, Search, Star, Shield, Wifi, Globe, BookOpen, Loader2 } from 'lucide-react';
+import { Puzzle, Plus, Trash2, Power, PowerOff, Download, ExternalLink, Search, Star, Shield, Wifi, Globe, BookOpen, Loader2, Server } from 'lucide-react';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
+import { useActiveServer } from '../hooks/useActiveServer';
 
 interface Plugin {
   name: string;
@@ -30,6 +31,14 @@ const SAFE_PLUGIN_SOURCES = [
     name: 'BuiltByBit', url: 'https://builtbybit.com/resources/', desc: 'Premium plugin marketplace',
     badge: 'Premium', type: 'marketplace',
   },
+  {
+    name: 'CurseForge', url: 'https://www.curseforge.com/minecraft/bukkit-plugins', desc: 'Large plugin repository',
+    badge: 'Popular', type: 'repository',
+  },
+  {
+    name: 'BukkitDev', url: 'https://dev.bukkit.org/bukkit-plugins', desc: 'Official Bukkit plugin site',
+    badge: 'Classic', type: 'repository',
+  },
 ];
 
 const POPULAR_PLUGINS = [
@@ -53,6 +62,7 @@ const POPULAR_PLUGINS = [
 const categories = [...new Set(POPULAR_PLUGINS.map(p => p.category))];
 
 export default function Plugins() {
+  const { server: activeServer } = useActiveServer();
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [showInstall, setShowInstall] = useState(false);
   const [pluginName, setPluginName] = useState('');
@@ -156,6 +166,20 @@ export default function Plugins() {
     if (selectedCategory && p.category !== selectedCategory) return false;
     return true;
   });
+
+  if (!activeServer) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <div className="w-12 h-12 mx-auto rounded-full bg-gray-800 flex items-center justify-center">
+            <Server className="w-6 h-6 text-gray-500" />
+          </div>
+          <p className="text-gray-400 text-sm font-medium">No server selected</p>
+          <p className="text-gray-600 text-xs">Select a server from the Server Library to manage this page.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">

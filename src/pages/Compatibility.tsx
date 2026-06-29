@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Cable,
@@ -26,6 +26,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useActiveServer } from '../hooks/useActiveServer';
 import toast from 'react-hot-toast';
 
 type JoinMode = 'java_only' | 'java_bedrock' | 'premium_only' | 'offline';
@@ -172,6 +173,7 @@ const joinModes: Array<{
 ];
 
 export default function Compatibility() {
+  const { server: activeServer } = useActiveServer();
   const [status, setStatus] = useState<CompatibilityStatus | null>(null);
   const [check, setCheck] = useState<CheckResult | null>(null);
   const [selectedMode, setSelectedMode] = useState<JoinMode>('java_bedrock');
@@ -268,6 +270,20 @@ export default function Compatibility() {
       toast.error('Failed to copy');
     }
   };
+
+  if (!activeServer) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <div className="w-12 h-12 mx-auto rounded-full bg-gray-800 flex items-center justify-center">
+            <Server className="w-6 h-6 text-gray-500" />
+          </div>
+          <p className="text-gray-400 text-sm font-medium">No server selected</p>
+          <p className="text-gray-600 text-xs">Select a server from the Server Library to manage compatibility.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

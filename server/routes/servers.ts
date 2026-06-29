@@ -4,16 +4,19 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { authMiddleware, requirePermission, AuthRequest } from '../middleware/auth';
 import { getDatabase, generateSlug } from '../database';
+import { activeServer } from '../activeServer';
 import { minecraftServer } from '../services/minecraftServer';
 import { setMinecraftDir, resolvePath, getMinecraftDir } from '../paths';
 import { downloadVersion } from '../services/download';
+import { emitToAll } from '../socketManager';
+import { autoBackupIfEnabled, backupService } from '../services/backup';
 
 const router = Router();
 
 // List all servers
 router.get('/', authMiddleware, (_req: AuthRequest, res) => {
   const db = getDatabase();
-  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value || '';
+  const activeId = activeServer.current?.id || '';
   const servers = db.prepare('SELECT * FROM servers ORDER BY created_at ASC').all() as any[];
   res.json({
     servers: servers.map((s: any) => {
@@ -175,6 +178,15 @@ router.post('/', authMiddleware, requirePermission('server.start'), async (req: 
     network || 'local'
   );
 
+  // Auto-backup after server creation
+  try {
+    const db = getDatabase();
+    const row = db.prepare("SELECT value FROM server_config WHERE key = 'backup_autoOnCreate'").get() as any;
+    if (row?.value === 'true') {
+      backupService.createBackup({ name: `Post-creation-${name}`, reason: 'After server creation', type: 'auto' }).catch(() => {});
+    }
+  } catch {}
+
   // Write level-seed to server.properties if provided
   if (seed) {
     const propsPath = path.join(dir, 'server.properties');
@@ -192,24 +204,24 @@ router.post('/', authMiddleware, requirePermission('server.start'), async (req: 
   }
 
   const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(id) as any;
+  emitToAll('server:created', server);
   res.json({ success: true, server });
 });
 
 // Select active server
 router.post('/:id/select', authMiddleware, async (req: AuthRequest, res) => {
-  const db = getDatabase();
-  const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(req.params.id) as any;
-  if (!server) return res.status(404).json({ error: 'Server not found' });
-
   if (minecraftServer.isRunning || minecraftServer.isStarting) {
     return res.status(400).json({ error: 'Stop the running server before switching' });
   }
 
-  db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('active_server_id', ?)").run(server.id);
-  setMinecraftDir(server.directory);
-  minecraftServer.loadServer(server.directory);
+  const result = activeServer.setActive(req.params.id);
+  if (!result) return res.status(404).json({ error: 'Server not found' });
 
-  res.json({ success: true, server });
+  setMinecraftDir(result.directory);
+  minecraftServer.loadServer(result.directory);
+
+  emitToAll('server:selected', { serverId: req.params.id });
+  res.json({ success: true, server: result });
 });
 
 // Update server config
@@ -247,6 +259,8 @@ router.put('/:id', authMiddleware, requirePermission('server.start'), (req: Auth
   }
 
   const updated = db.prepare('SELECT * FROM servers WHERE id = ?').get(req.params.id) as any;
+
+  emitToAll('server:updated', updated);
 
   // Sync onlineMode + enforce-secure-profile to server.properties
   if (onlineMode !== undefined && updated && updated.directory) {
@@ -301,18 +315,17 @@ router.delete('/:id', authMiddleware, requirePermission('server.start'), (req: A
     }
 
     // If it was the active server, unset it and reset to first available
-    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
-    if (activeId === req.params.id) {
-      db.prepare("DELETE FROM server_config WHERE key = 'active_server_id'").run();
-      // Set active to first remaining server if any exist
-      const firstServer = db.prepare('SELECT id FROM servers ORDER BY created_at ASC LIMIT 1').get() as any;
+    if (activeServer.current?.id === req.params.id) {
+      activeServer.clear();
+      const firstServer = db.prepare('SELECT id, directory FROM servers ORDER BY created_at ASC LIMIT 1').get() as any;
       if (firstServer) {
-        db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('active_server_id', ?)").run(firstServer.id);
+        activeServer.setActive(firstServer.id);
         setMinecraftDir(firstServer.directory);
         minecraftServer.loadServer(firstServer.directory);
       }
     }
 
+    emitToAll('server:deleted', { serverId: req.params.id });
     res.json({ success: true });
   } catch (err: any) {
     console.error('Failed to delete server:', err);

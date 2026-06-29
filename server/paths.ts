@@ -27,6 +27,8 @@ export function ensureDataDirectories() {
   const dirs = [
     'data',
     'data/cache',
+    'data/feedback',
+    'data/attachments',
     'servers',
     'downloads',
     'java',

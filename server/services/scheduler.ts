@@ -58,7 +58,7 @@ export class SchedulerService {
             await minecraftServer.start();
             break;
           case 'backup':
-            await backupService.createBackup(`Scheduled Backup - ${schedule.name}`, 'auto');
+            await backupService.createBackup({ name: `Scheduled Backup - ${schedule.name}`, type: 'scheduled', reason: `Scheduled: ${schedule.name}` });
             break;
           case 'command':
             if (schedule.command) {
@@ -92,5 +92,13 @@ export class SchedulerService {
     } else {
       this.removeTask(id);
     }
+  }
+
+  static stopAll() {
+    for (const [id, task] of this.tasks) {
+      task.stop();
+    }
+    this.tasks.clear();
+    console.log('[Scheduler] All tasks stopped.');
   }
 }

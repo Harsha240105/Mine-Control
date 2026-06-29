@@ -1,5 +1,10 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
+function onDeduplicated(channel: string, callback: (...args: any[]) => void) {
+  ipcRenderer.removeAllListeners(channel);
+  ipcRenderer.on(channel, (_event: any, ...args: any[]) => callback(...args));
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   getVersion: () => ipcRenderer.invoke('get-version'),
   getAppPath: () => ipcRenderer.invoke('get-app-path'),
@@ -10,14 +15,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectFile: (filters?: { name: string; extensions: string[] }[]) =>
     ipcRenderer.invoke('select-file', filters),
 
-  // Listen for navigation from menu
+  // Listen for navigation from menu (deduplicated)
   onNavigate: (callback: (path: string) => void) => {
-    ipcRenderer.on('navigate', (_event, path: string) => callback(path));
+    onDeduplicated('navigate', callback);
   },
 
-  // Listen for server actions from menu
+  // Listen for server actions from menu (deduplicated)
   onServerAction: (callback: (action: string) => void) => {
-    ipcRenderer.on('server:action', (_event, action: string) => callback(action));
+    onDeduplicated('server:action', callback);
   },
 
   // Auto-update
@@ -26,22 +31,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   installUpdate: () => ipcRenderer.invoke('install-update'),
 
   onUpdateChecking: (callback: () => void) => {
-    ipcRenderer.on('update:checking', () => callback());
+    onDeduplicated('update:checking', callback);
   },
   onUpdateAvailable: (callback: (version: string) => void) => {
-    ipcRenderer.on('update:available', (_event, version: string) => callback(version));
+    onDeduplicated('update:available', callback);
   },
   onUpdateNotAvailable: (callback: () => void) => {
-    ipcRenderer.on('update:not-available', () => callback());
+    onDeduplicated('update:not-available', callback);
   },
   onUpdateProgress: (callback: (percent: number) => void) => {
-    ipcRenderer.on('update:progress', (_event, percent: number) => callback(percent));
+    onDeduplicated('update:progress', callback);
   },
   onUpdateDownloaded: (callback: () => void) => {
-    ipcRenderer.on('update:downloaded', () => callback());
+    onDeduplicated('update:downloaded', callback);
   },
   onUpdateError: (callback: (message: string) => void) => {
-    ipcRenderer.on('update:error', (_event, message: string) => callback(message));
+    onDeduplicated('update:error', callback);
   },
 
   // Uninstall

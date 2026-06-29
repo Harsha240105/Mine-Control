@@ -4,87 +4,108 @@ All notable changes to MineControl OS are documented here.
 
 ---
 
-## v1.0.47 — Repository Organization & Universal Java Launcher Compatibility
+## v1.0.52 — Foundation Architecture, Guide, Privacy, Updates & Uninstall
 
-- Repository restructured with standard open-source files: LICENSE, CHANGELOG.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md
-- Added GitHub issue templates (bug report, feature request) and pull request template
-- Cleaned up unused files: removed old specs, temp task files, unused test scripts, IDE settings
-- Removed 110 unused npm packages including `@react-three/drei`, `chokidar`, `express-rate-limit`, `systeminformation`, and others
-- README completely rewritten with comprehensive sections: features, installation, connection modes, authentication modes, FAQ, troubleshooting, architecture, and roadmap
-- Launcher Compatibility section added to Compatibility Manager showing which launchers work in each join mode
-- Updated auto-updater error handling with contextual messages for network errors, rate limiting, and missing assets
-- Added `GH_TOKEN` support from env var or config file for authenticated GitHub API access
+### Phase 1 — Foundation Architecture
+- **Active Server singleton** (`server/activeServer.ts`): centralized state that eliminates 27+ scattered `server_config` queries
+- **Event-driven** architecture: emits `changed` events when active server switches
+- **Frontend context** (`useActiveServer.tsx`): React provider wrapping the authenticated route tree
+- **Electron fixes**: preload IPC listener deduplication, graceful shutdown chain (Discord → Scheduler → Socket.IO → Database)
+- **Discord service fix**: CRITICAL event listener leak resolved with `removeHooks()` / `hook()` tracking
+- **Database indexes**: 12 new performance indexes on frequently queried columns
+- **Socket.IO**: server status emissions now include `serverId` for client-side verification
+- **Graceful shutdown**: `discordService.destroy()`, `SchedulerService.stopAll()`, `io.close()`, `closeDatabase()`
 
-## v1.0.46 — Persistent Data Architecture & Safe Update System
+### Phase 2 — Server Library & Multi-Server Management
+- Server CRUD: create, open, import, delete, archive
+- Auto-create default server on first launch
+- Active server persistence across restarts
+- Server status state machine (STOPPED → STARTING → RUNNING → STOPPING → FAILED)
+- Per-server directory isolation (`servers/<slug>/`)
+- Server import from external directories with format detection
+- Delete server with full cascade (backups, worlds, chat logs, schedules, notifications) + auto-select next server
 
-- Data directory separation: app binaries and user data now stored separately (userData = AppData/Roaming/MineControl OS)
-- Automatic migration from old install-dir data to persistent userData directory
-- Safe schema migrations via schema_version table, never recreates DB
-- Auto-updater backs up minecontrol.db + settings.json before each update
-- Two-mode uninstall: app-only preserves all data, complete removal wipes everything
-- electron-builder configured with `deleteAppDataOnUninstall: false`
-- Settings page: Uninstall App and Complete Removal buttons in Danger Zone
+### Phase 3 — Software Management & Version Control
+- Multi-software support: Paper, Purpur, Fabric, Quilt, Forge, NeoForge, Spigot, Folia, Vanilla, Velocity, Waterfall, BungeeCord
+- Version downloader with 300s timeout, auto-retry (3x backoff), and ZIP magic byte verification
+- Version switching with download-and-replace workflow
+- Java auto-detection across all platforms
 
-## v1.0.45 — Local Data Persistence & Storage
+### Phase 4 — Plugins, Mods, Worlds & Resource Management
+- Plugin marketplace: Modrinth, Hangar, SpigotMC, CurseForge, BukkitDev
+- Mod manager: Modrinth + CurseForge install, toggle, remove
+- Shader manager: install from URL, upload `.zip`, toggle
+- Resource pack manager: install from URL, upload `.zip`, toggle
+- World management: create, clone, rename, delete, repair, optimize (Purpur region compression), export/import ZIP
+- World NBT reading via `prismarine-nbt`
+- Real-time cross-module sync via Socket.IO
 
-- UI State Persistence Engine with `ui_state` database table and `/api/ui/state` endpoints
-- Last active page restoration on login (saves to localStorage + server)
-- Sidebar collapsed/expanded state persists in localStorage
-- Console filter level and auto-scroll preference persist in localStorage
-- Server state persisted to database on every transition; auto-reset to stopped on restart
+### Phase 5 — Player Management System
+- Player auto-detection from `playerdata/`, `stats/`, `advancements/`, `usercache.json`
+- Player approval workflow with pending queue
+- Whitelist, ban, kick, OP, mute management
+- Player history and sessions tracking
+- Role-based permissions system
+- Export/import players as JSON
 
-## v1.0.44 — Universal Multiplayer Connection System
+### Phase 6 — Backup & Connection Systems
+- **Backup service**: ZIP with archiver (level 9 compression), restore with pre-restore safety backup, export/import portable ZIP, integrity verification, cleanup by age/size/count, scheduled backups (every 15 min by default)
+- **Connection diagnostics**: localhost, LAN, Playit.gg tunnel, firewall status, Minecraft protocol ping
+- **Windows Firewall**: one-click rule addition/removal via netsh
+- **Connection Wizard**: auto-detection of all connection methods with scenario-based recommendations
 
-- Connection Wizard Page with auto-detection of all connection methods
-- Connection Manager redesigned with three scenario tabs
-- Auto-Detection Engine for local/LAN/public IP/Playit tunnel/firewall status
-- Minecraft Server Status Ping via real protocol handshake
-- Comprehensive Server Validation endpoint
-- Dashboard connection mode indicator with quality dot
+### Phase 7 — Discord Integration
+- Discord bot via `discord.js` 14
+- Event mapping: server start/stop/crash, backup events, player join/leave
+- Configurable notification channels
+- Test connection and disconnect/reconnect flows
 
-## v1.0.43 — Server Connectivity Fix & Windows Firewall Auto-Configuration
+### Phase 8 — Feedback & Issue Management System
+- Local-first issue reporting without GitHub accounts
+- 5 issue types: Bug, Feature, Performance, Crash, General
+- Per-type templates with guided fields, screenshots, and diagnostics collection
+- Automatic credential masking (passwords, tokens, keys)
+- Full lifecycle: Open → Pending → In Review → Resolved → Closed → Rejected
+- SQLite persistence with unique MCOS-YYYY-NNNNNN ticket IDs
+- Offline queue with automatic retry
+- Issue tracker sync (GitHub, GitLab, Jira, Custom)
+- Dashboard widget, Socket.IO real-time updates
 
-- Dynamic `enforce-secure-profile` synced with `online-mode`
-- Offline mode toggle sync via Compatibility Manager
-- Server settings API now writes `enforce-secure-profile`
-- Windows Firewall auto-configuration with one-click rule addition
-- Misconfiguration warning for mismatched security settings
+### Phase 9 — Guide & Knowledge Center
+- 19 guides across 5 categories: Getting Started, Features, Troubleshooting, FAQ, Shortcuts
+- Server-side search with relevance ranking
+- 12 article types: text, steps, warning, tip, info, link, file, code, feature, version, fix, shortcut
+- Related article suggestions for cross-referencing
+- Dashboard tip-of-the-day widget
+- Help button in sidebar footer
 
-## v1.0.42 — Feedback Center, Privacy & Security, Universal Compatibility Manager
+### Phase 10 — Privacy, Security & Data Protection
+- 8-tab Privacy & Security Center: Overview, Data Locations, Integrations, Permissions, Credentials, Security Health, Export & Delete, Audit Log
+- AES-256-GCM credential encryption with machine-derived key
+- 6 credential slots (Discord, Playit, GitHub, GitLab, Jira, Issue Tracker)
+- 10 feature permissions with per-feature toggles
+- 7 security checks with scoring
+- Full data export with optional credential inclusion
+- Security audit log tracking all permission changes, credential saves, and destructive actions
 
-- Feedback Center for bug reports and feature requests with GitHub integration
-- Privacy Settings page with data collection controls and log management
-- Compatibility Manager for server software version switching
-- Server Logs viewer and download from Privacy page
+### Phase 11 — Update & Version Management System
+- Full Update Manager at `/updates` with 5 tabs: Overview, Release Notes, History, Preferences, Checklist
+- Check/download/install/rollback flow with pre-update backups
+- Release notes viewer with rich formatting (features, fixes, improvements, breaking changes, known issues, upgrade notes)
+- Migration history tracking
+- Data preservation verification across 11 user data categories
+- Server-aware operations (warns if server is running)
+- Dashboard Updates widget + Settings Update Preferences (4 toggles)
 
-## v1.0.41 — Complete Local-First Stability, Persistence & Multiplayer Repair
-
-- Server Library landing page with create/search/import
-- Deep Player Analytics from .dat and .json files
-- TPS parsing from console output
-- Server status persistence in database
-- Backend auto-recovery via Electron health monitoring
-- API health endpoint for frontend polling
-- Connection verification with TCP port tests
-- Playit tunnel status monitoring
-- Server config file management (ops/whitelist/bans/usercache)
-- Data directory standardization under MineControl OS folder
-
-## v1.0.40 — Backend Communication Repair
-
-- Fixed player routes ordering bug (404 on /banned)
-- Socket.IO reconnection with exponential backoff
-- Fixed Playit.gg tunnel click-jacking
-- Fixed Plugins Marketplace search bug
-- API request timeouts (15s)
-- Backend stability improvements
-
-## v1.0.38 — Complete State Machine Rewrite
-
-- Proper 5-state lifecycle (STOPPED → STARTING → RUNNING → STOPPING → FAILED)
-- Automatic Java Runtime Resolution from .class files
-- Pre-flight validation before starting (jar, EULA, port)
-- Dashboard handles all server states
+### Phase 12 — Professional Uninstall & Restore System
+- Full Uninstall page at `/uninstall` with 5 tabs: Overview, Storage Analysis, Uninstall, Restore, History
+- Two uninstall modes: Keep Data (app binaries only) and Delete Everything (all data)
+- Existing installation detection on startup with auto-restore flow
+- Storage analysis with per-server breakdown
+- Dashboard Storage Installation widget
+- Enhanced Settings Danger Zone
+- Restore detection banner on Servers page
+- Electron IPC for NSIS uninstaller launch
 
 ## v1.0.51 — Architecture Audit & Critical Fixes Release
 
@@ -197,6 +218,88 @@ All notable changes to MineControl OS are documented here.
 - Version bumped to 1.0.48
 - All TypeScript compilations (server, electron, client) pass with zero errors
 - Vite production build succeeds (848 KB JS, 60 KB CSS)
+
+## v1.0.47 — Repository Organization & Universal Java Launcher Compatibility
+
+- Repository restructured with standard open-source files: LICENSE, CHANGELOG.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md
+- Added GitHub issue templates (bug report, feature request) and pull request template
+- Cleaned up unused files: removed old specs, temp task files, unused test scripts, IDE settings
+- Removed 110 unused npm packages including `@react-three/drei`, `chokidar`, `express-rate-limit`, `systeminformation`, and others
+- README completely rewritten with comprehensive sections: features, installation, connection modes, authentication modes, FAQ, troubleshooting, architecture, and roadmap
+- Launcher Compatibility section added to Compatibility Manager showing which launchers work in each join mode
+- Updated auto-updater error handling with contextual messages for network errors, rate limiting, and missing assets
+- Added `GH_TOKEN` support from env var or config file for authenticated GitHub API access
+
+## v1.0.46 — Persistent Data Architecture & Safe Update System
+
+- Data directory separation: app binaries and user data now stored separately (userData = AppData/Roaming/MineControl OS)
+- Automatic migration from old install-dir data to persistent userData directory
+- Safe schema migrations via schema_version table, never recreates DB
+- Auto-updater backs up minecontrol.db + settings.json before each update
+- Two-mode uninstall: app-only preserves all data, complete removal wipes everything
+- electron-builder configured with `deleteAppDataOnUninstall: false`
+- Settings page: Uninstall App and Complete Removal buttons in Danger Zone
+
+## v1.0.45 — Local Data Persistence & Storage
+
+- UI State Persistence Engine with `ui_state` database table and `/api/ui/state` endpoints
+- Last active page restoration on login (saves to localStorage + server)
+- Sidebar collapsed/expanded state persists in localStorage
+- Console filter level and auto-scroll preference persist in localStorage
+- Server state persisted to database on every transition; auto-reset to stopped on restart
+
+## v1.0.44 — Universal Multiplayer Connection System
+
+- Connection Wizard Page with auto-detection of all connection methods
+- Connection Manager redesigned with three scenario tabs
+- Auto-Detection Engine for local/LAN/public IP/Playit tunnel/firewall status
+- Minecraft Server Status Ping via real protocol handshake
+- Comprehensive Server Validation endpoint
+- Dashboard connection mode indicator with quality dot
+
+## v1.0.43 — Server Connectivity Fix & Windows Firewall Auto-Configuration
+
+- Dynamic `enforce-secure-profile` synced with `online-mode`
+- Offline mode toggle sync via Compatibility Manager
+- Server settings API now writes `enforce-secure-profile`
+- Windows Firewall auto-configuration with one-click rule addition
+- Misconfiguration warning for mismatched security settings
+
+## v1.0.42 — Feedback Center, Privacy & Security, Universal Compatibility Manager
+
+- Feedback Center for bug reports and feature requests with GitHub integration
+- Privacy Settings page with data collection controls and log management
+- Compatibility Manager for server software version switching
+- Server Logs viewer and download from Privacy page
+
+## v1.0.41 — Complete Local-First Stability, Persistence & Multiplayer Repair
+
+- Server Library landing page with create/search/import
+- Deep Player Analytics from .dat and .json files
+- TPS parsing from console output
+- Server status persistence in database
+- Backend auto-recovery via Electron health monitoring
+- API health endpoint for frontend polling
+- Connection verification with TCP port tests
+- Playit tunnel status monitoring
+- Server config file management (ops/whitelist/bans/usercache)
+- Data directory standardization under MineControl OS folder
+
+## v1.0.40 — Backend Communication Repair
+
+- Fixed player routes ordering bug (404 on /banned)
+- Socket.IO reconnection with exponential backoff
+- Fixed Playit.gg tunnel click-jacking
+- Fixed Plugins Marketplace search bug
+- API request timeouts (15s)
+- Backend stability improvements
+
+## v1.0.38 — Complete State Machine Rewrite
+
+- Proper 5-state lifecycle (STOPPED → STARTING → RUNNING → STOPPING → FAILED)
+- Automatic Java Runtime Resolution from .class files
+- Pre-flight validation before starting (jar, EULA, port)
+- Dashboard handles all server states
 
 ## Earlier Versions
 

@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { Map, ExternalLink, RefreshCw, Info, Wifi, WifiOff, Globe } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Map, ExternalLink, RefreshCw, Info, Wifi, WifiOff, Globe, Server } from 'lucide-react';
 import { api } from '../lib/api';
+import { useActiveServer } from '../hooks/useActiveServer';
 
 const MAP_PLUGINS = [
   { id: 'bluemap', name: 'BlueMap', defaultPort: 8100, path: '/', check: '/states' },
@@ -10,6 +11,7 @@ const MAP_PLUGINS = [
 ];
 
 export default function MapView() {
+  const { server: activeServer } = useActiveServer();
   const [selectedPlugin, setSelectedPlugin] = useState('bluemap');
   const [customPort, setCustomPort] = useState('8100');
   const [mapUrl, setMapUrl] = useState('');
@@ -58,6 +60,20 @@ export default function MapView() {
   const handleOpenExternal = () => {
     window.open(url, '_blank');
   };
+
+  if (!activeServer) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <div className="w-12 h-12 mx-auto rounded-full bg-gray-800 flex items-center justify-center">
+            <Server className="w-6 h-6 text-gray-500" />
+          </div>
+          <p className="text-gray-400 text-sm font-medium">No server selected</p>
+          <p className="text-gray-600 text-xs">Select a server from the Server Library to manage this page.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-[calc(100vh-7rem)] animate-fade-in">

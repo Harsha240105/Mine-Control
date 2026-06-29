@@ -365,11 +365,837 @@ function initializeSchema() {
       db.prepare('INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)').run(uuidv4(), 'owner', hash, 'Owner');
     }
 
+    // Create indexes for performance
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_players_status ON players(status);
+      CREATE INDEX IF NOT EXISTS idx_players_username ON players(username);
+      CREATE INDEX IF NOT EXISTS idx_chat_log_server_id ON chat_log(server_id);
+      CREATE INDEX IF NOT EXISTS idx_chat_log_timestamp ON chat_log(timestamp);
+      CREATE INDEX IF NOT EXISTS idx_backups_server_id ON backups(server_id);
+      CREATE INDEX IF NOT EXISTS idx_backups_created_at ON backups(created_at);
+      CREATE INDEX IF NOT EXISTS idx_worlds_server_id ON worlds(server_id);
+      CREATE INDEX IF NOT EXISTS idx_schedules_server_id ON schedules(server_id);
+      CREATE INDEX IF NOT EXISTS idx_system_stats_timestamp ON system_stats(timestamp);
+      CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp);
+      CREATE INDEX IF NOT EXISTS idx_servers_status ON servers(status);
+      CREATE INDEX IF NOT EXISTS idx_notifications_server_id ON notifications(server_id);
+    `);
+
     db.prepare('INSERT INTO schema_version (version) VALUES (1)').run();
   }
 
   if (currentVersion < 2) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS mods (
+        name TEXT PRIMARY KEY,
+        version TEXT NOT NULL DEFAULT '1.0',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        description TEXT,
+        author TEXT,
+        source TEXT DEFAULT '',
+        modrinth_id TEXT,
+        curseforge_id INTEGER,
+        side TEXT DEFAULT 'both'
+      );
+
+      CREATE TABLE IF NOT EXISTS shaders (
+        name TEXT PRIMARY KEY,
+        version TEXT NOT NULL DEFAULT '1.0',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        description TEXT,
+        author TEXT,
+        source TEXT DEFAULT ''
+      );
+
+      CREATE TABLE IF NOT EXISTS resource_packs (
+        name TEXT PRIMARY KEY,
+        version TEXT NOT NULL DEFAULT '1.0',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        description TEXT,
+        author TEXT,
+        source TEXT DEFAULT ''
+      );
+    `);
     db.prepare('INSERT INTO schema_version (version) VALUES (2)').run();
+  }
+
+  if (currentVersion < 3) {
+    // Add approval_status and trusted columns to players table
+    const playerCols = db.prepare("PRAGMA table_info('players')").all().map((r: any) => r.name);
+    if (!playerCols.includes('approval_status')) {
+      db.exec("ALTER TABLE players ADD COLUMN approval_status TEXT NOT NULL DEFAULT 'approved'");
+    }
+    if (!playerCols.includes('trusted')) {
+      db.exec("ALTER TABLE players ADD COLUMN trusted INTEGER NOT NULL DEFAULT 1");
+    }
+    if (!playerCols.includes('last_ip')) {
+      db.exec("ALTER TABLE players ADD COLUMN last_ip TEXT DEFAULT ''");
+    }
+    if (!playerCols.includes('ops')) {
+      db.exec("ALTER TABLE players ADD COLUMN ops INTEGER NOT NULL DEFAULT 0");
+    }
+
+    // Player history table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS player_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        player_id TEXT NOT NULL,
+        event_type TEXT NOT NULL,
+        event_data TEXT DEFAULT '',
+        timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (player_id) REFERENCES players(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_player_history_player_id ON player_history(player_id);
+      CREATE INDEX IF NOT EXISTS idx_player_history_timestamp ON player_history(timestamp);
+      CREATE INDEX IF NOT EXISTS idx_player_history_type ON player_history(event_type);
+    `);
+
+    // Update existing players to have default approval/trusted
+    db.prepare("UPDATE players SET approval_status = 'approved', trusted = 1 WHERE approval_status IS NULL").run();
+    db.prepare("UPDATE players SET trusted = 1 WHERE trusted IS NULL").run();
+    db.prepare("UPDATE players SET ops = 0 WHERE ops IS NULL").run();
+
+    db.prepare('INSERT INTO schema_version (version) VALUES (3)').run();
+  }
+
+  if (currentVersion < 4) {
+    // Expand worlds table with new columns
+    const worldCols = db.prepare("PRAGMA table_info('worlds')").all().map((r: any) => r.name);
+    if (!worldCols.includes('version')) db.exec("ALTER TABLE worlds ADD COLUMN version TEXT DEFAULT ''");
+    if (!worldCols.includes('software')) db.exec("ALTER TABLE worlds ADD COLUMN software TEXT DEFAULT ''");
+    if (!worldCols.includes('folder_path')) db.exec("ALTER TABLE worlds ADD COLUMN folder_path TEXT DEFAULT ''");
+    if (!worldCols.includes('chunk_count')) db.exec("ALTER TABLE worlds ADD COLUMN chunk_count INTEGER DEFAULT 0");
+    if (!worldCols.includes('optimization_status')) db.exec("ALTER TABLE worlds ADD COLUMN optimization_status TEXT DEFAULT 'none'");
+    if (!worldCols.includes('repair_status')) db.exec("ALTER TABLE worlds ADD COLUMN repair_status TEXT DEFAULT 'none'");
+    if (!worldCols.includes('last_played')) db.exec("ALTER TABLE worlds ADD COLUMN last_played TEXT");
+    if (!worldCols.includes('dimension_count')) db.exec("ALTER TABLE worlds ADD COLUMN dimension_count INTEGER DEFAULT 1");
+    if (!worldCols.includes('last_optimized')) db.exec("ALTER TABLE worlds ADD COLUMN last_optimized TEXT");
+    if (!worldCols.includes('last_repaired')) db.exec("ALTER TABLE worlds ADD COLUMN last_repaired TEXT");
+    if (!worldCols.includes('generate_structures')) db.exec("ALTER TABLE worlds ADD COLUMN generate_structures INTEGER DEFAULT 1");
+    if (!worldCols.includes('bonus_chest')) db.exec("ALTER TABLE worlds ADD COLUMN bonus_chest INTEGER DEFAULT 0");
+    if (!worldCols.includes('world_type')) db.exec("ALTER TABLE worlds ADD COLUMN world_type TEXT DEFAULT 'default'");
+    if (!worldCols.includes('hardcore')) db.exec("ALTER TABLE worlds ADD COLUMN hardcore INTEGER DEFAULT 0");
+    if (!worldCols.includes('simulation_distance')) db.exec("ALTER TABLE worlds ADD COLUMN simulation_distance INTEGER DEFAULT 10");
+    if (!worldCols.includes('view_distance')) db.exec("ALTER TABLE worlds ADD COLUMN view_distance INTEGER DEFAULT 10");
+    if (!worldCols.includes('player_count')) db.exec("ALTER TABLE worlds ADD COLUMN player_count INTEGER DEFAULT 0");
+    if (!worldCols.includes('backup_size')) db.exec("ALTER TABLE worlds ADD COLUMN backup_size TEXT DEFAULT '0 B'");
+    if (!worldCols.includes('region_size')) db.exec("ALTER TABLE worlds ADD COLUMN region_size TEXT DEFAULT '0 B'");
+    if (!worldCols.includes('playerdata_size')) db.exec("ALTER TABLE worlds ADD COLUMN playerdata_size TEXT DEFAULT '0 B'");
+    if (!worldCols.includes('stats_size')) db.exec("ALTER TABLE worlds ADD COLUMN stats_size TEXT DEFAULT '0 B'");
+    if (!worldCols.includes('loaded_chunks')) db.exec("ALTER TABLE worlds ADD COLUMN loaded_chunks INTEGER DEFAULT 0");
+    if (!worldCols.includes('server_id')) db.exec("ALTER TABLE worlds ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE");
+
+    // World dimensions table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS world_dimensions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        world_name TEXT NOT NULL,
+        dimension_name TEXT NOT NULL DEFAULT 'minecraft:overworld',
+        display_name TEXT NOT NULL DEFAULT 'Overworld',
+        size TEXT DEFAULT '0 B',
+        chunk_count INTEGER DEFAULT 0,
+        player_count INTEGER DEFAULT 0,
+        last_activity TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (world_name) REFERENCES worlds(name) ON DELETE CASCADE,
+        UNIQUE(world_name, dimension_name)
+      );
+      CREATE INDEX IF NOT EXISTS idx_world_dimensions_world ON world_dimensions(world_name);
+
+      INSERT OR IGNORE INTO world_dimensions (world_name, dimension_name, display_name) 
+      SELECT name, 'minecraft:overworld', 'Overworld' FROM worlds;
+      INSERT OR IGNORE INTO world_dimensions (world_name, dimension_name, display_name) 
+      SELECT name, 'minecraft:nether', 'Nether' FROM worlds;
+      INSERT OR IGNORE INTO world_dimensions (world_name, dimension_name, display_name) 
+      SELECT name, 'minecraft:end', 'End' FROM worlds;
+    `);
+
+    // Add server_id to players if not exists
+    const playerCols4 = db.prepare("PRAGMA table_info('players')").all().map((r: any) => r.name);
+    if (!playerCols4.includes('server_id')) {
+      db.exec("ALTER TABLE players ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE SET NULL");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_players_server_id ON players(server_id)");
+    }
+
+    // Update dimension counts for existing worlds
+    db.exec(`
+      UPDATE worlds SET dimension_count = (
+        SELECT COUNT(*) FROM world_dimensions WHERE world_name = worlds.name
+      ) WHERE name IN (SELECT world_name FROM world_dimensions);
+    `);
+
+    db.prepare('INSERT INTO schema_version (version) VALUES (4)').run();
+  }
+
+  if (currentVersion < 5) {
+    const backupCols = db.prepare("PRAGMA table_info('backups')").all().map((r: any) => r.name);
+    if (!backupCols.includes('reason')) db.exec("ALTER TABLE backups ADD COLUMN reason TEXT DEFAULT ''");
+    if (!backupCols.includes('minecraft_version')) db.exec("ALTER TABLE backups ADD COLUMN minecraft_version TEXT DEFAULT ''");
+    if (!backupCols.includes('server_software')) db.exec("ALTER TABLE backups ADD COLUMN server_software TEXT DEFAULT ''");
+    if (!backupCols.includes('original_size')) db.exec("ALTER TABLE backups ADD COLUMN original_size TEXT DEFAULT ''");
+    if (!backupCols.includes('compressed_size')) db.exec("ALTER TABLE backups ADD COLUMN compressed_size TEXT DEFAULT ''");
+    if (!backupCols.includes('compression_ratio')) db.exec("ALTER TABLE backups ADD COLUMN compression_ratio REAL DEFAULT 0");
+    if (!backupCols.includes('restore_count')) db.exec("ALTER TABLE backups ADD COLUMN restore_count INTEGER DEFAULT 0");
+    if (!backupCols.includes('export_status')) db.exec("ALTER TABLE backups ADD COLUMN export_status TEXT DEFAULT 'none'");
+    if (!backupCols.includes('integrity_status')) db.exec("ALTER TABLE backups ADD COLUMN integrity_status TEXT DEFAULT 'pending'");
+    if (!backupCols.includes('integrity_checked_at')) db.exec("ALTER TABLE backups ADD COLUMN integrity_checked_at TEXT");
+    if (!backupCols.includes('includes_worlds')) db.exec("ALTER TABLE backups ADD COLUMN includes_worlds INTEGER DEFAULT 1");
+    if (!backupCols.includes('includes_players')) db.exec("ALTER TABLE backups ADD COLUMN includes_players INTEGER DEFAULT 1");
+    if (!backupCols.includes('includes_plugins')) db.exec("ALTER TABLE backups ADD COLUMN includes_plugins INTEGER DEFAULT 1");
+    if (!backupCols.includes('includes_mods')) db.exec("ALTER TABLE backups ADD COLUMN includes_mods INTEGER DEFAULT 1");
+    if (!backupCols.includes('includes_config')) db.exec("ALTER TABLE backups ADD COLUMN includes_config INTEGER DEFAULT 1");
+    if (!backupCols.includes('includes_resourcepacks')) db.exec("ALTER TABLE backups ADD COLUMN includes_resourcepacks INTEGER DEFAULT 1");
+    if (!backupCols.includes('content_manifest')) db.exec("ALTER TABLE backups ADD COLUMN content_manifest TEXT DEFAULT '{}'");
+    if (!backupCols.includes('created_by')) db.exec("ALTER TABLE backups ADD COLUMN created_by TEXT DEFAULT 'system'");
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS backup_schedule (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        frequency TEXT NOT NULL DEFAULT 'daily',
+        enabled INTEGER NOT NULL DEFAULT 0,
+        next_run TEXT,
+        last_run TEXT,
+        time_of_day TEXT DEFAULT '03:00',
+        day_of_week INTEGER DEFAULT 0,
+        day_of_month INTEGER DEFAULT 1,
+        max_backups INTEGER DEFAULT 0,
+        max_storage_mb INTEGER DEFAULT 0,
+        max_age_days INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(server_id)
+      );
+    `);
+
+    db.prepare('INSERT INTO schema_version (version) VALUES (5)').run();
+  }
+
+  if (currentVersion < 6) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS connection_diagnostics (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+        local_address TEXT DEFAULT '',
+        lan_address TEXT DEFAULT '',
+        public_ip TEXT DEFAULT '',
+        playit_address TEXT DEFAULT '',
+        port INTEGER DEFAULT 25565,
+        server_running INTEGER DEFAULT 0,
+        firewall_active INTEGER DEFAULT 0,
+        firewall_rule_exists INTEGER DEFAULT 0,
+        lan_reachable INTEGER DEFAULT 0,
+        playit_active INTEGER DEFAULT 0,
+        playit_latency INTEGER,
+        local_ping_ok INTEGER DEFAULT 0,
+        local_ping_latency INTEGER,
+        tcp_port_open INTEGER DEFAULT 0,
+        java_process_running INTEGER DEFAULT 0,
+        recommended_method TEXT DEFAULT 'localhost',
+        diagnostics_json TEXT DEFAULT '{}'
+      );
+      CREATE INDEX IF NOT EXISTS idx_conn_diag_server ON connection_diagnostics(server_id);
+      CREATE INDEX IF NOT EXISTS idx_conn_diag_time ON connection_diagnostics(timestamp);
+
+      CREATE TABLE IF NOT EXISTS connection_config (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        preferred_mode TEXT DEFAULT 'auto',
+        last_successful_method TEXT DEFAULT '',
+        last_diagnostics_at TEXT,
+        UNIQUE(server_id)
+      );
+    `);
+
+    db.prepare('INSERT INTO schema_version (version) VALUES (6)').run();
+  }
+
+  if (currentVersion < 7) {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS discord_config (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        bot_token TEXT DEFAULT '',
+        guild_id TEXT DEFAULT '',
+        text_channel_id TEXT DEFAULT '',
+        voice_channel_id TEXT DEFAULT '',
+        auto_reconnect INTEGER DEFAULT 1,
+        notify_server_start INTEGER DEFAULT 1,
+        notify_server_stop INTEGER DEFAULT 1,
+        notify_server_crash INTEGER DEFAULT 1,
+        notify_server_restart INTEGER DEFAULT 1,
+        notify_backup_created INTEGER DEFAULT 1,
+        notify_backup_restored INTEGER DEFAULT 1,
+        notify_backup_failed INTEGER DEFAULT 1,
+        notify_player_join INTEGER DEFAULT 0,
+        notify_player_left INTEGER DEFAULT 0,
+        notify_player_kicked INTEGER DEFAULT 0,
+        notify_player_banned INTEGER DEFAULT 0,
+        notify_player_unbanned INTEGER DEFAULT 1,
+        notify_player_approved INTEGER DEFAULT 1,
+        notify_whitelist_updated INTEGER DEFAULT 1,
+        notify_software_changed INTEGER DEFAULT 1,
+        notify_version_changed INTEGER DEFAULT 1,
+        notify_update_available INTEGER DEFAULT 1,
+        bot_status TEXT DEFAULT 'disconnected',
+        last_connected_at TEXT,
+        last_error TEXT DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(server_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS discord_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        event_type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        content TEXT DEFAULT '',
+        sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+        success INTEGER DEFAULT 1,
+        error TEXT DEFAULT ''
+      );
+      CREATE INDEX IF NOT EXISTS idx_discord_notif_server ON discord_notifications(server_id);
+      CREATE INDEX IF NOT EXISTS idx_discord_notif_type ON discord_notifications(event_type);
+      CREATE INDEX IF NOT EXISTS idx_discord_notif_time ON discord_notifications(sent_at);
+    `);
+
+    // Migrate existing config from server_config to discord_config
+    const hasDiscordConfig = db.prepare("SELECT COUNT(*) as c FROM discord_config WHERE server_id IN (SELECT value FROM server_config WHERE key = 'active_server_id')").get() as any;
+    if (hasDiscordConfig.c === 0) {
+      const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+      if (activeId) {
+        const token = (db.prepare("SELECT value FROM server_config WHERE key = 'discordToken'").get() as any)?.value || '';
+        const channel = (db.prepare("SELECT value FROM server_config WHERE key = 'discordChannel'").get() as any)?.value || '';
+        const voice = (db.prepare("SELECT value FROM server_config WHERE key = 'discordVoiceChannelId'").get() as any)?.value || '';
+        db.prepare(`
+          INSERT OR IGNORE INTO discord_config (server_id, bot_token, text_channel_id, voice_channel_id, bot_status)
+          VALUES (?, ?, ?, ?, 'disconnected')
+        `).run(activeId, token, channel, voice);
+      }
+    }
+
+    db.prepare('INSERT INTO schema_version (version) VALUES (7)').run();
+  }
+
+  if (currentVersion < 8) {
+    const hasOldTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='feedback_tickets'").get();
+    let needsRecreate = false;
+    if (hasOldTable) {
+      const oldCols = db.prepare("PRAGMA table_info('feedback_tickets')").all().map((r: any) => r.name);
+      needsRecreate = !oldCols.includes('sync_status');
+    }
+
+    if (needsRecreate) {
+      // Rename old table, create new, migrate data
+      db.exec(`ALTER TABLE feedback_tickets RENAME TO feedback_tickets_old`);
+
+      db.exec(`
+        CREATE TABLE feedback_tickets (
+          id TEXT PRIMARY KEY,
+          ticket_id TEXT UNIQUE NOT NULL,
+          issue_type TEXT NOT NULL DEFAULT 'general' CHECK(issue_type IN ('bug','feature','performance','crash','general')),
+          summary TEXT NOT NULL DEFAULT '',
+          description TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','pending','in_review','resolved','closed','rejected')),
+          username TEXT NOT NULL,
+          server_id TEXT,
+          server_name TEXT DEFAULT '',
+          world_name TEXT DEFAULT '',
+          player_count INTEGER DEFAULT 0,
+          minecraft_version TEXT DEFAULT '',
+          server_software TEXT DEFAULT '',
+          connected_plugins TEXT DEFAULT '[]',
+          connected_mods TEXT DEFAULT '[]',
+          connection_mode TEXT DEFAULT '',
+          diagnostic_data TEXT,
+          diagnostic_sanitized INTEGER NOT NULL DEFAULT 1,
+          screenshot_paths TEXT DEFAULT '[]',
+          attachment_paths TEXT DEFAULT '[]',
+          log_snapshots TEXT DEFAULT '{}',
+          error_stack_trace TEXT DEFAULT '',
+          github_url TEXT,
+          issue_tracker_url TEXT DEFAULT '',
+          issue_tracker_id TEXT DEFAULT '',
+          sync_status TEXT NOT NULL DEFAULT 'local' CHECK(sync_status IN ('local','pending','synced','failed')),
+          sync_retries INTEGER NOT NULL DEFAULT 0,
+          sync_last_attempt TEXT,
+          sync_error TEXT DEFAULT '',
+          votes INTEGER NOT NULL DEFAULT 0,
+          priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('low','normal','high','critical')),
+          last_status_change_by TEXT DEFAULT '',
+          last_status_change_at TEXT,
+          developer_notes TEXT DEFAULT '',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+
+      // Migrate data from old table
+      try {
+        const oldHasNotes = db.prepare("PRAGMA table_info('feedback_tickets_old')").all().map((r: any) => r.name);
+        const hasDevNotes = oldHasNotes.includes('developer_notes');
+        db.exec(`
+          INSERT OR IGNORE INTO feedback_tickets (id, ticket_id, issue_type, summary, description, status, username, diagnostic_data, screenshot_paths, github_url, votes, developer_notes, created_at, updated_at)
+          SELECT id, ticket_id, 
+            CASE WHEN type='bug' THEN 'bug' WHEN type='feature' THEN 'feature' WHEN type='performance' THEN 'performance' WHEN type='crash' THEN 'crash' ELSE 'general' END,
+            title, description, 
+            CASE WHEN status='in_progress' THEN 'in_review' ELSE status END,
+            username, diagnostic_data, screenshot_paths, github_url, votes,
+            ${hasDevNotes ? 'developer_notes' : "''"},
+            created_at, updated_at
+          FROM feedback_tickets_old
+        `);
+      } catch {}
+    } else if (!hasOldTable) {
+      // Create from scratch
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS feedback_tickets (
+          id TEXT PRIMARY KEY,
+          ticket_id TEXT UNIQUE NOT NULL,
+          issue_type TEXT NOT NULL DEFAULT 'general' CHECK(issue_type IN ('bug','feature','performance','crash','general')),
+          summary TEXT NOT NULL DEFAULT '',
+          description TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','pending','in_review','resolved','closed','rejected')),
+          username TEXT NOT NULL,
+          server_id TEXT,
+          server_name TEXT DEFAULT '',
+          world_name TEXT DEFAULT '',
+          player_count INTEGER DEFAULT 0,
+          minecraft_version TEXT DEFAULT '',
+          server_software TEXT DEFAULT '',
+          connected_plugins TEXT DEFAULT '[]',
+          connected_mods TEXT DEFAULT '[]',
+          connection_mode TEXT DEFAULT '',
+          diagnostic_data TEXT,
+          diagnostic_sanitized INTEGER NOT NULL DEFAULT 1,
+          screenshot_paths TEXT DEFAULT '[]',
+          attachment_paths TEXT DEFAULT '[]',
+          log_snapshots TEXT DEFAULT '{}',
+          error_stack_trace TEXT DEFAULT '',
+          github_url TEXT,
+          issue_tracker_url TEXT DEFAULT '',
+          issue_tracker_id TEXT DEFAULT '',
+          sync_status TEXT NOT NULL DEFAULT 'local' CHECK(sync_status IN ('local','pending','synced','failed')),
+          sync_retries INTEGER NOT NULL DEFAULT 0,
+          sync_last_attempt TEXT,
+          sync_error TEXT DEFAULT '',
+          votes INTEGER NOT NULL DEFAULT 0,
+          priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('low','normal','high','critical')),
+          last_status_change_by TEXT DEFAULT '',
+          last_status_change_at TEXT,
+          developer_notes TEXT DEFAULT '',
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+    }
+
+    // Ticket history table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS ticket_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ticket_id TEXT NOT NULL,
+        field TEXT NOT NULL,
+        old_value TEXT DEFAULT '',
+        new_value TEXT DEFAULT '',
+        changed_by TEXT NOT NULL DEFAULT 'system',
+        note TEXT DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (ticket_id) REFERENCES feedback_tickets(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_ticket_history_ticket ON ticket_history(ticket_id);
+      CREATE INDEX IF NOT EXISTS idx_ticket_history_time ON ticket_history(created_at);
+    `);
+
+    // Ticket attachments table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS ticket_attachments (
+        id TEXT PRIMARY KEY,
+        ticket_id TEXT NOT NULL,
+        file_name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        file_size INTEGER NOT NULL DEFAULT 0,
+        mime_type TEXT DEFAULT '',
+        type TEXT NOT NULL DEFAULT 'other' CHECK(type IN ('screenshot','log','crash_report','diagnostic','other')),
+        uploaded_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (ticket_id) REFERENCES feedback_tickets(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_ticket_attachments_ticket ON ticket_attachments(ticket_id);
+    `);
+
+    // Sync queue for offline synchronization
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS sync_queue (
+        id TEXT PRIMARY KEY,
+        ticket_id TEXT NOT NULL,
+        action TEXT NOT NULL DEFAULT 'create' CHECK(action IN ('create','update','sync')),
+        payload TEXT NOT NULL DEFAULT '{}',
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','processing','completed','failed')),
+        retries INTEGER NOT NULL DEFAULT 0,
+        max_retries INTEGER NOT NULL DEFAULT 10,
+        error TEXT DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        last_attempt TEXT,
+        completed_at TEXT,
+        FOREIGN KEY (ticket_id) REFERENCES feedback_tickets(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_sync_queue_status ON sync_queue(status);
+      CREATE INDEX IF NOT EXISTS idx_sync_queue_ticket ON sync_queue(ticket_id);
+    `);
+
+    // Issue tracker configuration
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS issue_tracker_config (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        provider TEXT NOT NULL DEFAULT 'github' CHECK(provider IN ('github','gitlab','jira','custom')),
+        url TEXT NOT NULL DEFAULT '',
+        api_token TEXT DEFAULT '',
+        repository TEXT DEFAULT '',
+        project_key TEXT DEFAULT '',
+        enabled INTEGER NOT NULL DEFAULT 0,
+        auto_sync INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(server_id)
+      );
+    `);
+
+    // Drop old table if migration was done
+    try { db.exec(`DROP TABLE IF EXISTS feedback_tickets_old`); } catch {}
+
+    db.prepare('INSERT INTO schema_version (version) VALUES (8)').run();
+  }
+
+  if (currentVersion < 9) {
+    // Guide preferences (persists user settings across restarts)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS guide_preferences (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL DEFAULT 'default',
+        key TEXT NOT NULL,
+        value TEXT NOT NULL DEFAULT '',
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(user_id, key)
+      );
+
+      CREATE TABLE IF NOT EXISTS guide_bookmarks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL DEFAULT 'default',
+        section_id TEXT NOT NULL,
+        article_id TEXT NOT NULL DEFAULT '',
+        title TEXT NOT NULL,
+        url TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(user_id, section_id, article_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS guide_recently_viewed (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL DEFAULT 'default',
+        section_id TEXT NOT NULL,
+        article_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        viewed_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS guide_tutorial_progress (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL DEFAULT 'default',
+        tutorial_id TEXT NOT NULL,
+        step_index INTEGER NOT NULL DEFAULT 0,
+        completed INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT NOT NULL DEFAULT (datetime('now')),
+        completed_at TEXT,
+        UNIQUE(user_id, tutorial_id)
+      );
+
+      CREATE TABLE IF NOT EXISTS guide_search_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT NOT NULL DEFAULT 'default',
+        query TEXT NOT NULL,
+        result_count INTEGER NOT NULL DEFAULT 0,
+        searched_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_guide_recently_viewed_user ON guide_recently_viewed(user_id, viewed_at);
+      CREATE INDEX IF NOT EXISTS idx_guide_search_history_user ON guide_search_history(user_id, searched_at);
+      CREATE INDEX IF NOT EXISTS idx_guide_bookmarks_user ON guide_bookmarks(user_id);
+      CREATE INDEX IF NOT EXISTS idx_guide_tutorial_progress_user ON guide_tutorial_progress(user_id);
+    `);
+
+    db.prepare('INSERT INTO schema_version (version) VALUES (9)').run();
+  }
+
+  if (currentVersion < 10) {
+    // Privacy preferences (persists user privacy settings across restarts)
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS privacy_preferences (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        key TEXT NOT NULL UNIQUE,
+        value TEXT NOT NULL DEFAULT '',
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS feature_permissions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        feature_key TEXT NOT NULL UNIQUE,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        label TEXT NOT NULL DEFAULT '',
+        description TEXT DEFAULT '',
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS security_checks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        check_type TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pass','fail','warn','pending')),
+        detail TEXT DEFAULT '',
+        score_impact INTEGER NOT NULL DEFAULT 0,
+        checked_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS encrypted_credentials (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        credential_key TEXT NOT NULL UNIQUE,
+        encrypted_data TEXT NOT NULL,
+        iv TEXT NOT NULL,
+        auth_tag TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS credential_metadata (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        credential_key TEXT NOT NULL UNIQUE,
+        display_name TEXT NOT NULL,
+        has_value INTEGER NOT NULL DEFAULT 0,
+        source TEXT DEFAULT 'manual',
+        last_updated TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS security_audit_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action TEXT NOT NULL,
+        detail TEXT DEFAULT '',
+        ip TEXT DEFAULT '',
+        timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE INDEX IF NOT EXISTS idx_security_audit_time ON security_audit_log(timestamp);
+    `);
+
+    // Seed default feature permissions
+    const defaultPermissions = [
+      { feature_key: 'filesystem_access', label: 'Filesystem Access', description: 'Access to read/write server files', enabled: 1 },
+      { feature_key: 'network_access', label: 'Network Access', description: 'Outbound network connections for updates and APIs', enabled: 1 },
+      { feature_key: 'firewall_changes', label: 'Firewall Changes', description: 'Ability to modify Windows Firewall rules', enabled: 1 },
+      { feature_key: 'discord_integration', label: 'Discord Integration', description: 'Connect to Discord bot API', enabled: 0 },
+      { feature_key: 'playit_integration', label: 'Playit.gg Integration', description: 'Connect to Playit.gg tunnel service', enabled: 0 },
+      { feature_key: 'auto_updates', label: 'Automatic Updates', description: 'Check for and download application updates', enabled: 1 },
+      { feature_key: 'feedback_upload', label: 'Feedback Uploads', description: 'Upload bug reports and feature requests', enabled: 0 },
+      { feature_key: 'diagnostic_upload', label: 'Diagnostic Uploads', description: 'Upload diagnostic data for troubleshooting', enabled: 0 },
+      { feature_key: 'external_api_calls', label: 'External API Calls', description: 'Allow calls to Mojang, PaperMC, and other APIs', enabled: 1 },
+      { feature_key: 'telemetry', label: 'Usage Telemetry', description: 'Anonymous usage statistics', enabled: 0 },
+    ];
+    const insertPerm = db.prepare('INSERT OR IGNORE INTO feature_permissions (feature_key, label, description, enabled) VALUES (?, ?, ?, ?)');
+    for (const p of defaultPermissions) {
+      insertPerm.run(p.feature_key, p.label, p.description, p.enabled);
+    }
+
+    // Seed default privacy preferences
+    const defaultPrefs = [
+      { key: 'collect_analytics', value: 'false' },
+      { key: 'mask_secrets_in_logs', value: 'true' },
+      { key: 'mask_secrets_in_ui', value: 'true' },
+      { key: 'auto_clear_logs', value: 'false' },
+      { key: 'log_retention_days', value: '30' },
+      { key: 'last_security_check', value: '' },
+      { key: 'export_include_secrets', value: 'false' },
+    ];
+    const insertPref = db.prepare('INSERT OR IGNORE INTO privacy_preferences (key, value) VALUES (?, ?)');
+    for (const p of defaultPrefs) {
+      insertPref.run(p.key, p.value);
+    }
+
+    // Seed credential metadata for known credential types
+    const defaultCredentials = [
+      { credential_key: 'discord_bot_token', display_name: 'Discord Bot Token' },
+      { credential_key: 'playit_token', display_name: 'Playit.gg Token' },
+      { credential_key: 'github_token', display_name: 'GitHub API Token' },
+      { credential_key: 'gitlab_token', display_name: 'GitLab API Token' },
+      { credential_key: 'jira_token', display_name: 'Jira API Token' },
+      { credential_key: 'issue_tracker_token', display_name: 'Issue Tracker Token' },
+    ];
+    const insertCred = db.prepare('INSERT OR IGNORE INTO credential_metadata (credential_key, display_name) VALUES (?, ?)');
+    for (const c of defaultCredentials) {
+      insertCred.run(c.credential_key, c.display_name);
+    }
+
+    // Initial security check records (will be updated on first check)
+    const initialChecks = [
+      { check_type: 'database_status', status: 'pending', detail: 'Not yet checked', score_impact: 0 },
+      { check_type: 'encryption_status', status: 'pending', detail: 'Not yet checked', score_impact: 0 },
+      { check_type: 'firewall_status', status: 'pending', detail: 'Not yet checked', score_impact: 0 },
+      { check_type: 'backup_status', status: 'pending', detail: 'Not yet checked', score_impact: 0 },
+      { check_type: 'credential_status', status: 'pending', detail: 'Not yet checked', score_impact: 0 },
+      { check_type: 'connection_status', status: 'pending', detail: 'Not yet checked', score_impact: 0 },
+      { check_type: 'permission_status', status: 'pending', detail: 'Not yet checked', score_impact: 0 },
+    ];
+    const insertCheck = db.prepare('INSERT OR IGNORE INTO security_checks (check_type, status, detail, score_impact) VALUES (?, ?, ?, ?)');
+    for (const c of initialChecks) {
+      insertCheck.run(c.check_type, c.status, c.detail, c.score_impact);
+    }
+
+    db.prepare('INSERT INTO schema_version (version) VALUES (10)').run();
+  }
+
+  if (currentVersion < 11) {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS update_preferences (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    `).run();
+
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS update_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        version TEXT NOT NULL,
+        action TEXT NOT NULL,
+        previous_version TEXT,
+        status TEXT NOT NULL,
+        details TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS release_notes_cache (
+        version TEXT PRIMARY KEY,
+        release_date TEXT,
+        new_features TEXT,
+        bug_fixes TEXT,
+        improvements TEXT,
+        breaking_changes TEXT,
+        known_issues TEXT,
+        upgrade_notes TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS update_migrations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_version TEXT,
+        to_version TEXT,
+        status TEXT,
+        result TEXT,
+        details TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+
+    const pkgVersion = (() => { try { return require('../../package.json').version; } catch { return '1.0.52'; } })();
+
+    const defaultPrefs: Record<string, string> = {
+      auto_download: 'false',
+      auto_install: 'false',
+      notify_before_install: 'true',
+      check_on_startup: 'true',
+      last_update_check: '',
+      last_check_result: 'never',
+      current_version: pkgVersion,
+      update_available: 'false',
+      latest_version: '',
+      download_progress: '0',
+      download_status: 'idle',
+      install_status: 'idle',
+      migration_status: 'none',
+      rollback_available: 'false',
+    };
+    const insertPref = db.prepare('INSERT OR IGNORE INTO update_preferences (key, value) VALUES (?, ?)');
+    for (const [k, v] of Object.entries(defaultPrefs)) {
+      insertPref.run(k, v);
+    }
+
+    // Seed release notes cache for known versions
+    const releaseNotes: Array<{ version: string; release_date: string; new_features: string; bug_fixes: string; improvements: string; breaking_changes: string; known_issues: string; upgrade_notes: string }> = [
+      {
+        version: '1.0.52',
+        release_date: '2025-06-15',
+        new_features: 'Centralized Active Server singleton. SQLite performance indexes. Graceful shutdown chain. Frontend ActiveServerContext. Database indexes. Folder structure cleanup.',
+        bug_fixes: 'Discord listener leak fix. Preload IPC deduplication. Fixed concurrent socket registration.',
+        improvements: 'Reduced memory footprint by 40%. Faster database queries with indexes. Cleaner architecture separation.',
+        breaking_changes: 'Active Server state moved to singleton service. Database path normalized. Electron IPC channels renamed.',
+        known_issues: 'Socket.IO reconnection may double-register handlers after extended idle. Minor UI flicker on theme toggle.',
+        upgrade_notes: 'Settings and server data preserved automatically. SQLite schema migrated to v9.'
+      },
+      {
+        version: '1.0.51',
+        release_date: '2025-06-10',
+        new_features: 'Architecture audit hardening. Critical production fixes.',
+        bug_fixes: 'Fixed race condition in backup service. Resolved memory leak in console streaming. Fixed Windows path normalization on startup.',
+        improvements: 'Improved error categorization in update system. Enhanced logging for debugging.',
+        breaking_changes: 'None.',
+        known_issues: 'Backup integrity check may report false positives on network drives.',
+        upgrade_notes: 'No manual migration needed. All settings preserved.'
+      },
+      {
+        version: '1.0.50',
+        release_date: '2025-06-05',
+        new_features: 'Bug fixes and polish release. Feedback system refinements.',
+        bug_fixes: 'Fixed player list not refreshing. Resolved backup restore path errors. Corrected RAM allocation display.',
+        improvements: 'Polish pass on all UI components. Better error messages throughout.',
+        breaking_changes: 'None.',
+        known_issues: 'Mod/plugin marketplace may timeout on slow connections.',
+        upgrade_notes: 'All data preserved. No migration steps required.'
+      }
+    ];
+    const insertNotes = db.prepare('INSERT OR IGNORE INTO release_notes_cache (version, release_date, new_features, bug_fixes, improvements, breaking_changes, known_issues, upgrade_notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    for (const n of releaseNotes) {
+      insertNotes.run(n.version, n.release_date, n.new_features, n.bug_fixes, n.improvements, n.breaking_changes, n.known_issues, n.upgrade_notes);
+    }
+
+    // Record the initial installation as update history
+    db.prepare("INSERT INTO update_history (version, action, status, details) VALUES (?, 'installed', 'success', 'Initial installation or upgrade from previous version')").run(pkgVersion);
+
+    db.prepare('INSERT INTO schema_version (version) VALUES (11)').run();
+  }
+
+  if (currentVersion < 12) {
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS uninstall_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action TEXT NOT NULL,
+        status TEXT NOT NULL,
+        details TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `).run();
+
+    db.prepare(`
+      CREATE TABLE IF NOT EXISTS restore_state (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    `).run();
+
+    const defaultRestoreState: Record<string, string> = {
+      last_restore: '',
+      installation_detected: 'false',
+      restore_completed: 'false',
+      last_detection: '',
+      data_exists: 'false',
+      server_count: '0',
+    };
+    const insertState = db.prepare('INSERT OR IGNORE INTO restore_state (key, value) VALUES (?, ?)');
+    for (const [k, v] of Object.entries(defaultRestoreState)) {
+      insertState.run(k, v);
+    }
+
+    db.prepare('INSERT INTO schema_version (version) VALUES (12)').run();
   }
 }
 

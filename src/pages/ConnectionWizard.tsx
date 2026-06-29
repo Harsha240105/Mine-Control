@@ -1,10 +1,13 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { api } from '../lib/api';
 import {
   Monitor, Network, Globe, Wifi, Copy, Check, Shield, ShieldOff,
   ExternalLink, Play, RefreshCw, Loader, Server, ArrowRight,
   CheckCircle, XCircle, HelpCircle, Radio, Zap, Users, Clock,
+  Activity, History, Settings, ChevronDown, ChevronUp,
 } from 'lucide-react';
+import { useActiveServer } from '../hooks/useActiveServer';
+import { useSocket } from '../hooks/useSocket';
 import toast from 'react-hot-toast';
 
 interface ConnectionWizardData {
@@ -43,6 +46,8 @@ const statusConfig: Record<string, { icon: any; color: string; label: string }> 
 };
 
 export default function ConnectionWizard() {
+  const { server: activeServer } = useActiveServer();
+  const { socket } = useSocket();
   const [data, setData] = useState<ConnectionWizardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -51,11 +56,24 @@ export default function ConnectionWizard() {
   const [pingResult, setPingResult] = useState<any>(null);
   const [validating, setValidating] = useState(false);
   const [validationResult, setValidationResult] = useState<any>(null);
+  const [diagHistory, setDiagHistory] = useState<any[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [firewallStatus, setFirewallStatus] = useState<any>(null);
+  const [firewallBusy, setFirewallBusy] = useState<string | null>(null);
+  const [preferredMode, setPreferredModeState] = useState('auto');
 
   const fetchData = useCallback(async () => {
     try {
-      const wizardData = await api.getConnectionWizard();
+      const [wizardData, diagData, fw, pref] = await Promise.all([
+        api.getConnectionWizard(),
+        api.getConnectionDiagnostics(10).catch(() => []),
+        api.getFirewallStatus().catch(() => null),
+        api.getPreferredMode().catch(() => ({ mode: 'auto' })),
+      ]);
       setData(wizardData);
+      setDiagHistory(Array.isArray(diagData) ? diagData : []);
+      setFirewallStatus(fw);
+      setPreferredModeState(pref.mode || 'auto');
     } catch (err: any) {
       toast.error('Failed to fetch connection data');
     } finally {
@@ -65,6 +83,12 @@ export default function ConnectionWizard() {
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  useEffect(() => {
+    if (!socket) return;
+    socket.on('connection:update', () => fetchData());
+    return () => { socket.off('connection:update', () => fetchData()); };
+  }, [socket]);
 
   const handleRefresh = () => { setRefreshing(true); fetchData(); };
 
@@ -79,7 +103,7 @@ export default function ConnectionWizard() {
     setTestingConnection(true);
     setPingResult(null);
     try {
-      const result = await api.mcPing();
+      const result = await api.testConnectionJoin();
       setPingResult(result);
     } catch (err: any) {
       setPingResult({ online: false, error: err.message });
@@ -99,14 +123,29 @@ export default function ConnectionWizard() {
     setValidating(false);
   };
 
-  const handleAddFirewall = async () => {
+  const handleFirewallAction = async (action: string, actionFn: () => Promise<any>, label: string) => {
+    setFirewallBusy(action);
     try {
-      await api.post('/server/firewall-add', {});
-      toast.success('Firewall rule added!');
-      handleRefresh();
+      const result = await actionFn();
+      if (result.success) {
+        toast.success(result.message || label);
+        const fw = await api.getFirewallStatus().catch(() => null);
+        setFirewallStatus(fw);
+      } else {
+        toast.error(result.message || `${label} failed`);
+      }
     } catch (err: any) {
-      toast.error(err.message);
+      toast.error(`${label}: ${err.message}`);
     }
+    setFirewallBusy(null);
+  };
+
+  const handleSetPreferredMode = async (mode: string) => {
+    try {
+      await api.setPreferredMode(mode);
+      setPreferredModeState(mode);
+      toast.success(`Preferred mode set to ${mode}`);
+    } catch { toast.error('Failed to set preferred mode'); }
   };
 
   const getStatusBadge = (method: string, status: string) => {
@@ -119,6 +158,20 @@ export default function ConnectionWizard() {
       </span>
     );
   };
+
+  if (!activeServer) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <div className="w-12 h-12 mx-auto rounded-full bg-gray-800 flex items-center justify-center">
+            <Server className="w-6 h-6 text-gray-500" />
+          </div>
+          <p className="text-gray-400 text-sm font-medium">No server selected</p>
+          <p className="text-gray-600 text-xs">Select a server from the Server Library to set up its connection.</p>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (
@@ -255,10 +308,10 @@ export default function ConnectionWizard() {
             )}
             {!data?.firewallActive && data?.serverRunning && (
               <button
-                onClick={handleAddFirewall}
+                onClick={() => handleFirewallAction('add', () => api.addFirewallRule(), 'Add Firewall Rule')}
                 className="text-xs bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 px-3 py-1.5 rounded-lg transition-colors"
               >
-                Open Firewall
+                {firewallBusy === 'add' ? 'Adding...' : 'Open Firewall'}
               </button>
             )}
           </div>
@@ -340,27 +393,89 @@ export default function ConnectionWizard() {
           )}
         </div>
 
-        {/* Firewall Status */}
+        {/* Firewall Management */}
         <div className="card">
           <h3 className="text-sm font-medium text-gray-200 mb-3 flex items-center gap-2">
-            {data?.firewallActive ? <Shield size={16} className="text-green-400" /> : <ShieldOff size={16} className="text-red-400" />}
+            {(firewallStatus?.exists || data?.firewallActive) ? <Shield size={16} className="text-green-400" /> : <ShieldOff size={16} className="text-red-400" />}
             Windows Firewall
           </h3>
-          <div className="flex items-center gap-2 mb-3">
-            {data?.firewallActive ? (
-              <span className="text-xs text-green-400 flex items-center gap-1"><CheckCircle size={12} /> Active for port {data.port}</span>
-            ) : (
-              <span className="text-xs text-red-400 flex items-center gap-1"><XCircle size={12} /> No rule found</span>
+          <div className="space-y-2 mb-3">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500">Rule Status</span>
+              <span className={firewallStatus?.exists ? 'text-green-400' : 'text-red-400'}>
+                {firewallStatus?.exists ? 'Active' : 'Not Found'}
+              </span>
+            </div>
+            {firewallStatus?.exists && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500">Port</span>
+                <span className="text-gray-200 font-mono">{firewallStatus.port || data?.port || 25565}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-gray-500">Admin Rights</span>
+              <span className={firewallStatus?.isAdmin ? 'text-green-400' : 'text-yellow-400'}>
+                {firewallStatus?.isAdmin ? 'Available' : 'Limited'}
+              </span>
+            </div>
+            {firewallStatus?.verification && (
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-gray-500">Port Verification</span>
+                <span className={firewallStatus.verification.allowed ? 'text-green-400' : 'text-red-400'}>
+                  {firewallStatus.verification.allowed ? 'Allowed' : 'Blocked'}
+                </span>
+              </div>
             )}
           </div>
-          {!data?.firewallActive && (
-            <button onClick={handleAddFirewall} className="btn-primary flex items-center gap-2 text-sm bg-green-600/20 hover:bg-green-600/30 text-green-400">
-              <Shield size={14} />
-              Add Firewall Rule
+          <div className="flex flex-wrap gap-2">
+            {!firewallStatus?.exists && (
+              <button
+                onClick={() => handleFirewallAction('add', () => api.addFirewallRule(), 'Add Firewall Rule')}
+                disabled={firewallBusy !== null}
+                className="btn-primary flex items-center gap-1 text-xs"
+              >
+                {firewallBusy === 'add' ? <Loader size={12} className="animate-spin" /> : <Shield size={12} />}
+                {firewallBusy === 'add' ? 'Adding...' : 'Add Rule'}
+              </button>
+            )}
+            {firewallStatus?.exists && (
+              <>
+                <button
+                  onClick={() => handleFirewallAction('remove', () => api.removeFirewallRule(), 'Remove Firewall Rule')}
+                  disabled={firewallBusy !== null}
+                  className="text-xs bg-red-600/20 hover:bg-red-600/30 text-red-400 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                >
+                  {firewallBusy === 'remove' ? <Loader size={12} className="animate-spin" /> : <ShieldOff size={12} />}
+                  {firewallBusy === 'remove' ? 'Removing...' : 'Remove'}
+                </button>
+                <button
+                  onClick={() => handleFirewallAction('repair', () => api.repairFirewallRule(), 'Repair Firewall Rule')}
+                  disabled={firewallBusy !== null}
+                  className="text-xs bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                >
+                  {firewallBusy === 'repair' ? <Loader size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                  {firewallBusy === 'repair' ? 'Repairing...' : 'Repair'}
+                </button>
+                <button
+                  onClick={() => handleFirewallAction('verify', () => api.verifyFirewallPort(data?.port || 25565), 'Verify Firewall')}
+                  disabled={firewallBusy !== null}
+                  className="text-xs bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                >
+                  {firewallBusy === 'verify' ? <Loader size={12} className="animate-spin" /> : <Check size={12} />}
+                  Verify
+                </button>
+              </>
+            )}
+            <button
+              onClick={() => api.openFirewall().then(r => toast.success(r.message)).catch(() => toast.error('Failed to open firewall'))}
+              className="text-xs bg-surface-800 hover:bg-surface-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+            >
+              <ExternalLink size={12} />
+              Open Settings
             </button>
-          )}
-          {data?.firewallActive && (
-            <p className="text-xs text-gray-500">Port {data.port} is open in Windows Firewall</p>
+          </div>
+          {!firewallStatus?.isAdmin && (
+            <p className="text-[11px] text-yellow-500 mt-2">Run as Administrator to modify firewall rules</p>
           )}
         </div>
       </div>
@@ -405,29 +520,104 @@ export default function ConnectionWizard() {
         )}
       </div>
 
-      {/* Network Info */}
-      <div className="card">
-        <h3 className="text-sm font-medium text-gray-200 mb-3 flex items-center gap-2">
-          <Wifi size={16} className="text-minecraft-500" />
-          Network Information
-        </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
-          <div className="bg-surface-800 rounded-lg p-2.5">
-            <span className="text-gray-500 block mb-0.5">Local Address</span>
-            <span className="text-gray-100 font-mono">{data?.localAddress || 'N/A'}</span>
+      {/* Network Info + Preferred Mode + Diagnostics */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Network Information */}
+        <div className="card">
+          <h3 className="text-sm font-medium text-gray-200 mb-3 flex items-center gap-2">
+            <Wifi size={16} className="text-minecraft-500" />
+            Network Information
+          </h3>
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="bg-surface-800 rounded-lg p-2.5">
+              <span className="text-gray-500 block mb-0.5">Local Address</span>
+              <span className="text-gray-100 font-mono">{data?.localAddress || 'N/A'}</span>
+            </div>
+            <div className="bg-surface-800 rounded-lg p-2.5">
+              <span className="text-gray-500 block mb-0.5">LAN Address</span>
+              <span className="text-gray-100 font-mono">{data?.lanAddress || 'Not detected'}</span>
+            </div>
+            <div className="bg-surface-800 rounded-lg p-2.5">
+              <span className="text-gray-500 block mb-0.5">Public IP</span>
+              <span className="text-gray-100 font-mono">{data?.publicIp || 'Fetching...'}</span>
+            </div>
+            <div className="bg-surface-800 rounded-lg p-2.5">
+              <span className="text-gray-500 block mb-0.5">Online Mode</span>
+              <span className={data?.onlineMode ? 'text-green-400' : 'text-yellow-400'}>{data?.onlineMode ? 'Premium' : 'Offline (Cracked)'}</span>
+            </div>
+            <div className="bg-surface-800 rounded-lg p-2.5">
+              <span className="text-gray-500 block mb-0.5">Playit Tunnel</span>
+              <span className={data?.playitActive ? 'text-green-400' : 'text-gray-500'}>
+                {data?.playitActive ? 'Connected' : 'Inactive'}
+                {data?.playitLatency ? ` (${data.playitLatency}ms)` : ''}
+              </span>
+            </div>
+            <div className="bg-surface-800 rounded-lg p-2.5">
+              <span className="text-gray-500 block mb-0.5">LAN Reachable</span>
+              <span className={data?.lanReachable ? 'text-green-400' : 'text-gray-500'}>{data?.lanReachable ? 'Yes' : 'No'}</span>
+            </div>
           </div>
-          <div className="bg-surface-800 rounded-lg p-2.5">
-            <span className="text-gray-500 block mb-0.5">LAN Address</span>
-            <span className="text-gray-100 font-mono">{data?.lanAddress || 'Not detected'}</span>
+        </div>
+
+        {/* Preferred Mode & Diagnostics History */}
+        <div className="card">
+          <h3 className="text-sm font-medium text-gray-200 mb-3 flex items-center gap-2">
+            <Settings size={16} className="text-minecraft-500" />
+            Connection Preferences
+          </h3>
+          <div className="text-xs text-gray-500 mb-2">Preferred Connection Mode</div>
+          <div className="grid grid-cols-2 gap-2 mb-4">
+            {['auto', 'localhost', 'lan', 'playit', 'public'].map((mode) => (
+              <button
+                key={mode}
+                onClick={() => handleSetPreferredMode(mode)}
+                className={`text-xs px-3 py-2 rounded-lg transition-colors capitalize ${
+                  preferredMode === mode
+                    ? 'bg-minecraft-500/20 text-minecraft-400 border border-minecraft-500/30'
+                    : 'bg-surface-800 text-gray-400 hover:text-gray-200 border border-transparent'
+                }`}
+              >
+                {mode === 'auto' ? 'Auto Detect' : mode}
+              </button>
+            ))}
           </div>
-          <div className="bg-surface-800 rounded-lg p-2.5">
-            <span className="text-gray-500 block mb-0.5">Public IP</span>
-            <span className="text-gray-100 font-mono">{data?.publicIp || 'Fetching...'}</span>
-          </div>
-          <div className="bg-surface-800 rounded-lg p-2.5">
-            <span className="text-gray-500 block mb-0.5">Online Mode</span>
-            <span className={data?.onlineMode ? 'text-green-400' : 'text-yellow-400'}>{data?.onlineMode ? 'Premium' : 'Offline (Cracked)'}</span>
-          </div>
+
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200 transition-colors"
+          >
+            <History size={12} />
+            Diagnostics History ({diagHistory.length})
+            {showHistory ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+          </button>
+
+          {showHistory && (
+            <div className="mt-2 space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
+              {diagHistory.length === 0 ? (
+                <p className="text-xs text-gray-500 py-2">No diagnostics history yet</p>
+              ) : (
+                diagHistory.map((d: any, i: number) => (
+                  <div key={d.id || i} className="bg-surface-800 rounded p-2 text-[10px] space-y-0.5">
+                    <div className="flex justify-between text-gray-400">
+                      <span>{new Date(d.timestamp).toLocaleString()}</span>
+                      <span className={d.server_running ? 'text-green-400' : 'text-gray-500'}>
+                        {d.server_running ? 'Online' : 'Offline'}
+                      </span>
+                    </div>
+                    <div className="text-gray-500">
+                      {d.local_ping_ok ? `Ping: ${d.local_ping_latency}ms` : 'No ping'} 
+                      {d.lan_reachable ? ' · LAN: Yes' : ''}
+                      {d.playit_active ? ` · Playit: ${d.playit_latency || '?'}ms` : ''}
+                      {d.tcp_port_open ? ' · Port Open' : ' · Port Closed'}
+                    </div>
+                    <div className="text-gray-600">
+                      Recommended: <span className="text-minecraft-400">{d.recommended_method}</span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

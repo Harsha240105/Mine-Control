@@ -5,35 +5,174 @@ import { discordService } from '../services/discord';
 
 const router = express.Router();
 
-router.get('/', authMiddleware, requirePermission('settings.view'), (req: AuthRequest, res) => {
+// Get full Discord configuration + bot status
+router.get('/', authMiddleware, (req: AuthRequest, res) => {
   const db = getDatabase();
-  const token = (db.prepare("SELECT value FROM server_config WHERE key = 'discordToken'").get() as any)?.value || '';
-  const channel = (db.prepare("SELECT value FROM server_config WHERE key = 'discordChannel'").get() as any)?.value || '';
-  const voiceChannel = (db.prepare("SELECT value FROM server_config WHERE key = 'discordVoiceChannelId'").get() as any)?.value || '';
-  
-  res.json({ token, channelId: channel, voiceChannelId: voiceChannel });
+  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+  if (!activeId) return res.json({ configured: false, error: 'No active server' });
+
+  const row = db.prepare('SELECT * FROM discord_config WHERE server_id = ?').get(activeId) as any;
+  const config = row ? {
+    botToken: row.bot_token || '',
+    guildId: row.guild_id || '',
+    textChannelId: row.text_channel_id || '',
+    voiceChannelId: row.voice_channel_id || '',
+    autoReconnect: !!row.auto_reconnect,
+    notify_server_start: !!row.notify_server_start,
+    notify_server_stop: !!row.notify_server_stop,
+    notify_server_crash: !!row.notify_server_crash,
+    notify_server_restart: !!row.notify_server_restart,
+    notify_backup_created: !!row.notify_backup_created,
+    notify_backup_restored: !!row.notify_backup_restored,
+    notify_backup_failed: !!row.notify_backup_failed,
+    notify_player_join: !!row.notify_player_join,
+    notify_player_left: !!row.notify_player_left,
+    notify_player_kicked: !!row.notify_player_kicked,
+    notify_player_banned: !!row.notify_player_banned,
+    notify_player_unbanned: !!row.notify_player_unbanned,
+    notify_player_approved: !!row.notify_player_approved,
+    notify_whitelist_updated: !!row.notify_whitelist_updated,
+    notify_software_changed: !!row.notify_software_changed,
+    notify_version_changed: !!row.notify_version_changed,
+    notify_update_available: !!row.notify_update_available,
+    botStatus: row.bot_status || 'disconnected',
+    lastConnectedAt: row.last_connected_at,
+    lastError: row.last_error || '',
+  } : { configured: false };
+
+  res.json({ ...config, ...discordService.getStatus() });
 });
 
+// Save Discord configuration
 router.post('/', authMiddleware, requirePermission('settings.edit'), async (req: AuthRequest, res) => {
-  const { token, channelId, voiceChannelId } = req.body;
   const db = getDatabase();
+  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+  if (!activeId) return res.status(400).json({ error: 'No active server' });
 
-  if (token !== undefined) {
-    db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('discordToken', ?)").run(token);
-  }
-  
-  if (channelId !== undefined) {
-    db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('discordChannel', ?)").run(channelId);
+  const existing = db.prepare('SELECT id FROM discord_config WHERE server_id = ?').get(activeId);
+
+  const fields = [
+    'bot_token', 'guild_id', 'text_channel_id', 'voice_channel_id', 'auto_reconnect',
+    'notify_server_start', 'notify_server_stop', 'notify_server_crash', 'notify_server_restart',
+    'notify_backup_created', 'notify_backup_restored', 'notify_backup_failed',
+    'notify_player_join', 'notify_player_left', 'notify_player_kicked',
+    'notify_player_banned', 'notify_player_unbanned', 'notify_player_approved',
+    'notify_whitelist_updated', 'notify_software_changed', 'notify_version_changed', 'notify_update_available',
+  ];
+
+  const updateFields: string[] = [];
+  const values: any[] = [];
+
+  for (const f of fields) {
+    const val = req.body[f];
+    if (val !== undefined) {
+      updateFields.push(`${f} = ?`);
+      values.push(typeof val === 'boolean' ? (val ? 1 : 0) : val);
+    }
   }
 
-  if (voiceChannelId !== undefined) {
-    db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('discordVoiceChannelId', ?)").run(voiceChannelId);
+  if (updateFields.length === 0) return res.json({ success: true });
+
+  updateFields.push("updated_at = datetime('now')");
+
+  if (existing) {
+    db.prepare(`UPDATE discord_config SET ${updateFields.join(', ')} WHERE server_id = ?`).run(...values, activeId);
+  } else {
+    const colKeys = fields.filter(f => req.body[f] !== undefined);
+    const colVals = colKeys.map(f => typeof req.body[f] === 'boolean' ? (req.body[f] ? 1 : 0) : req.body[f]);
+    db.prepare(`INSERT INTO discord_config (server_id, ${colKeys.join(', ')}) VALUES (?, ${colKeys.map(() => '?').join(', ')})`).run(activeId, ...colVals);
   }
 
-  // Restart Discord service
-  await discordService.restart();
+  // Reconnect if token/channel changed
+  const token = req.body.bot_token !== undefined ? req.body.bot_token :
+    (db.prepare('SELECT bot_token FROM discord_config WHERE server_id = ?').get(activeId) as any)?.bot_token || '';
+  const textChan = req.body.text_channel_id !== undefined ? req.body.text_channel_id :
+    (db.prepare('SELECT text_channel_id FROM discord_config WHERE server_id = ?').get(activeId) as any)?.text_channel_id || '';
+  const voiceChan = req.body.voice_channel_id !== undefined ? req.body.voice_channel_id :
+    (db.prepare('SELECT voice_channel_id FROM discord_config WHERE server_id = ?').get(activeId) as any)?.voice_channel_id || '';
+
+  if (req.body.bot_token !== undefined || req.body.text_channel_id !== undefined || req.body.voice_channel_id !== undefined) {
+    if (token && textChan) {
+      await discordService.connect(token, textChan, voiceChan);
+    } else {
+      await discordService.disconnect();
+    }
+  }
 
   res.json({ success: true });
+});
+
+// Connect Discord bot
+router.post('/connect', authMiddleware, requirePermission('settings.edit'), async (req: AuthRequest, res) => {
+  const db = getDatabase();
+  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+  if (!activeId) return res.status(400).json({ error: 'No active server' });
+
+  const row = db.prepare('SELECT * FROM discord_config WHERE server_id = ?').get(activeId) as any;
+  if (!row || !row.bot_token || !row.text_channel_id) {
+    return res.status(400).json({ success: false, error: 'Discord not configured. Save bot token and channel ID first.' });
+  }
+
+  const ok = await discordService.connect(row.bot_token, row.text_channel_id, row.voice_channel_id || '');
+  res.json({ success: ok, status: discordService.getStatus() });
+});
+
+// Disconnect Discord bot
+router.post('/disconnect', authMiddleware, requirePermission('settings.edit'), async (_req: AuthRequest, res) => {
+  await discordService.disconnect();
+  res.json({ success: true, status: discordService.getStatus() });
+});
+
+// Reconnect Discord bot
+router.post('/reconnect', authMiddleware, requirePermission('settings.edit'), async (_req: AuthRequest, res) => {
+  const ok = await discordService.reconnect();
+  res.json({ success: ok, status: discordService.getStatus() });
+});
+
+// Test connection (without saving)
+router.post('/test', authMiddleware, async (req: AuthRequest, res) => {
+  const { botToken, textChannelId } = req.body;
+  if (!botToken || !textChannelId) {
+    return res.status(400).json({ success: false, message: 'Bot token and channel ID required' });
+  }
+  const result = await discordService.testConnection(botToken, textChannelId);
+  res.json(result);
+});
+
+// Get bot status
+router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
+  res.json(discordService.getStatus());
+});
+
+// Check permissions
+router.get('/permissions', authMiddleware, async (_req: AuthRequest, res) => {
+  const perms = await discordService.checkPermissions();
+  res.json(perms);
+});
+
+// Get notification history
+router.get('/history', authMiddleware, (req: AuthRequest, res) => {
+  const db = getDatabase();
+  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+  if (!activeId) return res.json([]);
+
+  const limit = parseInt(req.query.limit as string) || 20;
+  const history = db.prepare('SELECT * FROM discord_notifications WHERE server_id = ? ORDER BY sent_at DESC LIMIT ?').all(activeId, limit);
+  res.json(history);
+});
+
+// Send a test message
+router.post('/test-message', authMiddleware, async (_req: AuthRequest, res) => {
+  const ok = await discordService.sendEmbed({
+    title: '🧪 Test Notification',
+    color: 0x5865f2,
+    fields: [
+      { name: 'Status', value: 'This is a test message from MineControl OS', inline: false },
+      { name: 'Time', value: new Date().toLocaleString(), inline: true },
+    ],
+    footer: 'MineControl OS · Test',
+  });
+  res.json({ success: ok });
 });
 
 export default router;

@@ -506,11 +506,11 @@ export class ImportService {
 
   private async createBackup(): Promise<void> {
     const { backupService } = require('./backup');
-    await backupService.createBackup(
-      `Pre-Import-Backup-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`,
-      'auto',
-      false
-    );
+    await backupService.createBackup({
+      name: `Pre-Import-Backup-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')}`,
+      reason: 'Before server import',
+      type: 'auto',
+    });
   }
 }
 
