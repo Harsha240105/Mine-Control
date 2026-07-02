@@ -3,7 +3,7 @@ import path from 'path';
 import https from 'https';
 import http from 'http';
 
-export const PAPER_API = 'https://api.papermc.io/v2/projects/paper';
+export const PAPER_API = 'https://fill.papermc.io/v3/projects/paper';
 export const MOJANG_MANIFEST = 'https://launchermeta.mojang.com/mc/game/version_manifest.json';
 export const FABRIC_API = 'https://meta.fabricmc.net/v2';
 export const FORGE_API = 'https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json';
@@ -37,9 +37,10 @@ export function clearCache() {
   }
 }
 
-export async function httpsGet(url: string, timeoutMs = 15000): Promise<string> {
+export async function httpsGet(url: string, timeoutMs = 15000, headers?: Record<string, string>): Promise<string> {
   return new Promise((resolve, reject) => {
-    const req = https.get(url, (resp) => {
+    const options = { headers: { 'User-Agent': 'MineControl-OS/1.0.56 (contact@minecontrol.dev)', ...headers } };
+    const req = https.get(url, options, (resp) => {
       if (resp.statusCode && resp.statusCode >= 400) {
         req.destroy();
         return reject(new Error(`HTTP Error ${resp.statusCode}`));
@@ -154,7 +155,7 @@ export async function isPaperAvailable(version: string): Promise<boolean> {
     paperVersions = cached;
   } else {
     try {
-      const data = await httpsGet(PAPER_API);
+      const data = await httpsGet(`${PAPER_API}/versions`);
       const parsed = JSON.parse(data);
       paperVersions = parsed.versions || [];
       cacheSet('paperVersions', paperVersions);
@@ -169,11 +170,15 @@ export async function downloadPaperVersion(version: string, jarPath: string): Pr
   try {
     const buildsData = await httpsGet(`${PAPER_API}/versions/${version}/builds`);
     const builds = JSON.parse(buildsData);
-    const latestBuild = builds.builds && builds.builds[builds.builds.length - 1];
+    const stableBuild = builds.find((b: any) => b.channel === 'STABLE');
+    const latestBuild = stableBuild || builds[builds.length - 1];
     if (!latestBuild) {
       throw new Error(`No builds found for Paper ${version}`);
     }
-    const downloadUrl = `${PAPER_API}/versions/${version}/builds/${latestBuild.build}/downloads/${latestBuild.downloads.application.name}`;
+    const downloadUrl = latestBuild.downloads['server:default']?.url;
+    if (!downloadUrl) {
+      throw new Error(`No download URL found for Paper ${version} build ${latestBuild.build}`);
+    }
     await downloadFile(downloadUrl, jarPath);
   } catch (err: any) {
     throw new Error(`Failed to download Paper ${version}: ${err.message}`);
@@ -268,13 +273,17 @@ export async function downloadSpigotVersion(version: string, jarPath: string): P
 
 export async function downloadFoliaVersion(version: string, jarPath: string): Promise<void> {
   try {
-    const buildsData = await httpsGet(`https://api.papermc.io/v2/projects/folia/versions/${version}/builds`);
+    const buildsData = await httpsGet(`https://fill.papermc.io/v3/projects/folia/versions/${version}/builds`);
     const builds = JSON.parse(buildsData);
-    const latestBuild = builds.builds && builds.builds[builds.builds.length - 1];
+    const stableBuild = builds.find((b: any) => b.channel === 'STABLE');
+    const latestBuild = stableBuild || builds[builds.length - 1];
     if (!latestBuild) {
       throw new Error(`No builds found for Folia ${version}`);
     }
-    const downloadUrl = `https://api.papermc.io/v2/projects/folia/versions/${version}/builds/${latestBuild.build}/downloads/${latestBuild.downloads.application.name}`;
+    const downloadUrl = latestBuild.downloads['server:default']?.url;
+    if (!downloadUrl) {
+      throw new Error(`No download URL found for Folia ${version} build ${latestBuild.build}`);
+    }
     await downloadFile(downloadUrl, jarPath);
   } catch (err: any) {
     throw new Error(`Failed to download Folia ${version}: ${err.message}`);

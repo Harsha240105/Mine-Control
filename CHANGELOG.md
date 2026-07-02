@@ -4,6 +4,27 @@ All notable changes to MineControl OS are documented here.
 
 ---
 
+## v1.0.57 — Proxy-Protocol Mismatch Detection & Warning
+
+### Bug Fixes
+- **Playit.gg proxy-protocol-v1 detection**: The Playit.gg tunnel was silently failing because `proxy-protocol-v1` is enabled on the tunnel, but the server software (Fabric, Vanilla, Forge, etc.) does not support it. MineControl OS now:
+  - **Detects** proxy-protocol on the tunnel by testing the local server with a PROXY header (`mcPingWithProxy()`)
+  - **Checks** the server software's proxy-protocol compatibility empirically (not just by name)
+  - **Alerts** the user with a specific, actionable message about the mismatch
+  - Provides per-software instructions: supported software (Paper, Spigot, Purpur, etc.) can be configured; unsupported software (Fabric, Vanilla, Forge) requires disabling proxy-protocol in the Playit.gg dashboard
+- **Connection Validator**: Now shows "Playit tunnel has proxy-protocol-v1 enabled, which Fabric does not support" instead of the generic "Check that the tunnel points to localhost:PORT" message
+- **Connection Manager**: Same proxy-protocol detection in the real-time connection status endpoint
+
+### Improvements
+- **`mcPingWithProxy()`**: New function that connects with a PROXY v1 header prepended before the Minecraft handshake, empirically verifying if the server supports proxy-protocol
+- **`getProxyProtocolHint()`**: Returns per-software fix instructions (currently supports Paper, Spigot, Purpur, Pufferfish, BungeeCord, Waterfall, Velocity)
+- **PaperMC download API fix**: Updated from sunset v2 API (`api.papermc.io/v2`) to v3 Fill API (`fill.papermc.io/v3`), fixing Paper version downloads that broke on July 1, 2026
+
+### Changes
+- Version bumped to 1.0.57
+
+---
+
 ## v1.0.56 — Playit.gg Connectivity Fix
 
 ### Bug Fixes

@@ -8,7 +8,7 @@ import { execSync } from 'child_process';
 import { getDatabase } from '../database';
 import { minecraftServer } from './minecraftServer';
 import { resolveMinecraftDir } from '../paths';
-import { mcPing } from './mcPing';
+import { mcPing, mcPingWithProxy, getProxyProtocolHint } from './mcPing';
 import { firewallManager } from './firewallManager';
 import { emitToAll } from '../socketManager';
 
@@ -151,7 +151,20 @@ export class ConnectionManager {
           if (ping.online) {
             playitLatency = ping.latency || null;
           } else {
-            playitError = `Playit tunnel resolves but Minecraft not responding through it. Check tunnel points to localhost:${port}.`;
+            try {
+              const proxyPing = await mcPingWithProxy('127.0.0.1', port, 3000);
+              if (proxyPing.online) {
+                const versionSource = ((db.prepare("SELECT version_source FROM servers WHERE id = (SELECT value FROM server_config WHERE key = 'active_server_id')").get() as any)?.version_source) || 'Unknown';
+                const hint = getProxyProtocolHint(versionSource);
+                playitError = `Playit tunnel resolves but Minecraft not responding through it. Proxy-protocol detected on tunnel. ${hint}`;
+              } else {
+                const versionSource = ((db.prepare("SELECT version_source FROM servers WHERE id = (SELECT value FROM server_config WHERE key = 'active_server_id')").get() as any)?.version_source) || 'Unknown';
+                const hint = getProxyProtocolHint(versionSource);
+                playitError = `Playit tunnel resolves but Minecraft not responding through it. The tunnel likely has proxy-protocol enabled, which ${versionSource} does not support. ${hint}`;
+              }
+            } catch {
+              playitError = `Playit tunnel resolves but Minecraft not responding through it. Check tunnel points to localhost:${port}.`;
+            }
           }
         }
       } else if (playitAddress) {
@@ -251,7 +264,7 @@ export class ConnectionManager {
   async testJoin(address?: string): Promise<any> {
     const config = minecraftServer.getConfig();
     const port = config?.port || 25565;
-    const target = address || `localhost:${port}`;
+    const target = address || `127.0.0.1:${port}`;
     const [host, p] = target.split(':');
     const targetPort = parseInt(p || String(port));
 

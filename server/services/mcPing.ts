@@ -119,6 +119,102 @@ export function mcPing(host: string, port: number, timeout = 5000): Promise<McPi
   });
 }
 
+export function mcPingWithProxy(host: string, port: number, timeout = 5000): Promise<McPingResult> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    let resolved = false;
+    const startTime = Date.now();
+
+    socket.setTimeout(timeout);
+
+    socket.on('connect', () => {
+      const proxyHeader = `PROXY TCP4 ${host} ${host} ${port} ${port}\r\n`;
+      const handshake = Buffer.concat([
+        Buffer.from(proxyHeader, 'utf8'),
+        writeVarInt(0),
+        writeVarInt(-1),
+        writeString(host),
+        Buffer.from([(port >> 8) & 0xFF, port & 0xFF]),
+        writeVarInt(1),
+      ]);
+      const handshakePacket = Buffer.concat([writeVarInt(handshake.length), handshake]);
+      const requestPacket = Buffer.concat([writeVarInt(1), writeVarInt(0)]);
+      socket.write(Buffer.concat([handshakePacket, requestPacket]));
+    });
+
+    let dataBuf = Buffer.alloc(0);
+
+    socket.on('data', (data) => {
+      dataBuf = Buffer.concat([dataBuf, data]);
+      if (resolved) return;
+      try {
+        let offset = 0;
+        const { bytes: lenBytes } = readVarInt(dataBuf, offset);
+        offset += lenBytes;
+        const packetId = dataBuf[offset];
+        if (packetId !== 0x00) return;
+        offset++;
+        const { value: strLen, bytes: strBytes } = readVarInt(dataBuf, offset);
+        offset += strBytes;
+        if (dataBuf.length < offset + strLen) return;
+        const jsonStr = dataBuf.slice(offset, offset + strLen).toString('utf8');
+        const json = JSON.parse(jsonStr);
+        resolved = true;
+        socket.destroy();
+        resolve({
+          online: true,
+          latency: Date.now() - startTime,
+          version: json.version,
+          players: json.players,
+          description: json.description,
+          favicon: json.favicon,
+        });
+      } catch {}
+    });
+
+    socket.on('error', (err) => {
+      if (!resolved) {
+        resolved = true;
+        socket.destroy();
+        resolve({ online: false, error: err.message });
+      }
+    });
+
+    socket.on('close', () => {
+      if (!resolved) {
+        resolved = true;
+        resolve({ online: false, error: 'Connection closed' });
+      }
+    });
+
+    socket.on('timeout', () => {
+      if (!resolved) {
+        resolved = true;
+        socket.destroy();
+        resolve({ online: false, error: 'Timed out' });
+      }
+    });
+
+    socket.connect(port, host);
+  });
+}
+
+export function getProxyProtocolHint(versionSource: string): string {
+  const supported: Record<string, string> = {
+    'Paper': 'Configure proxy-protocol in paper.yml: settings.proxy-protocol: true',
+    'Spigot': 'Configure proxy-protocol in spigot.yml: settings.proxy-protocol: true',
+    'Purpur': 'Configure proxy-protocol in purpur.yml: settings.proxy-protocol: true',
+    'Pufferfish': 'Configure proxy-protocol in pufferfish.yml: settings.proxy-protocol: true',
+    'BungeeCord': 'Configure proxy-protocol in config.yml: proxy_protocol: true',
+    'Waterfall': 'Configure proxy-protocol in config.yml: proxy_protocol: true',
+    'Velocity': 'Configure proxy-protocol in velocity.toml: proxy-protocol = true',
+  };
+  if (supported[versionSource]) {
+    return `To fix, either: (1) Disable proxy-protocol in the Playit.gg dashboard for this tunnel, or (2) ${supported[versionSource]}.`;
+  }
+  return 'To fix, disable proxy-protocol in the Playit.gg dashboard for this tunnel (select the tunnel → disable "Proxy Protocol v1").';
+}
+
 export function formatDescription(desc: any): string {
   if (typeof desc === 'string') return desc;
   if (desc?.text) return desc.text;

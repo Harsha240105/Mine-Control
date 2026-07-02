@@ -5,7 +5,7 @@ import path from 'path';
 import os from 'os';
 import dns from 'dns';
 import https from 'https';
-import { mcPing } from './mcPing';
+import { mcPing, mcPingWithProxy, getProxyProtocolHint } from './mcPing';
 import { minecraftServer } from './minecraftServer';
 import { getDatabase } from '../database';
 import { resolveMinecraftDir } from '../paths';
@@ -138,16 +138,11 @@ export async function validateServer(port?: number): Promise<ValidationResult> {
 
   // 6. Localhost Connection
   if (serverRunning) {
-    const localOk = await checkTcpPort('localhost', targetPort);
-    const localIpOk = await checkTcpPort('127.0.0.1', targetPort);
-    if (localOk && localIpOk) {
-      result.localhost = { status: 'pass', message: `localhost:${targetPort} and 127.0.0.1:${targetPort} both reachable` };
-    } else if (localOk) {
-      result.localhost = { status: 'pass', message: `localhost:${targetPort} reachable (127.0.0.1 binding may be restricted)` };
-    } else if (localIpOk) {
-      result.localhost = { status: 'pass', message: `127.0.0.1:${targetPort} reachable (localhost name resolution may be an issue)` };
+    const localOk = await checkTcpPort('127.0.0.1', targetPort);
+    if (localOk) {
+      result.localhost = { status: 'pass', message: `127.0.0.1:${targetPort} reachable` };
     } else {
-      result.localhost = { status: 'fail', message: `Neither localhost nor 127.0.0.1 respond on port ${targetPort}. The server is not listening inside this machine.` };
+      result.localhost = { status: 'fail', message: `127.0.0.1:${targetPort} not reachable. The server is not listening inside this machine.` };
     }
   } else {
     result.localhost = { status: 'skip', message: 'Start the server to test localhost connection' };
@@ -240,7 +235,21 @@ export async function validateServer(port?: number): Promise<ValidationResult> {
         if (ping.online) {
           result.playit = { status: 'pass', message: `Playit.gg tunnel active (${ping.latency}ms) at ${playitAddress}` };
         } else {
-          result.playit = { status: 'fail', message: `Playit.gg tunnel resolves but Minecraft is not responding through it. Check that the tunnel points to localhost:${targetPort} in the Playit.gg dashboard.` };
+          // Tunnel resolves but MC ping fails — check for proxy-protocol mismatch
+          try {
+            const proxyPing = await mcPingWithProxy('127.0.0.1', targetPort, 3000);
+            if (proxyPing.online) {
+              // Local server accepts proxy-protocol — suggest enabling it
+              result.playit = { status: 'fail', message: `Playit.gg tunnel resolves but Minecraft is not responding through it. The tunnel likely has proxy-protocol enabled. Your server software supports it — enable proxy-protocol in your server config (e.g., paper.yml: settings.proxy-protocol: true).` };
+            } else {
+              // Local server rejects proxy-protocol — it won't work with this tunnel
+              const versionSource = ((db.prepare("SELECT version_source FROM servers WHERE id = (SELECT value FROM server_config WHERE key = 'active_server_id')").get() as any)?.version_source) || 'Unknown';
+              const hint = getProxyProtocolHint(versionSource);
+              result.playit = { status: 'fail', message: `Playit.gg tunnel resolves but Minecraft is not responding through it. The tunnel has proxy-protocol-v1 enabled, which ${versionSource} does not support. ${hint}` };
+            }
+          } catch {
+            result.playit = { status: 'fail', message: `Playit.gg tunnel resolves but Minecraft is not responding through it. Check that the tunnel points to localhost:${targetPort} in the Playit.gg dashboard. If using proxy-protocol, the tunnel sends a PROXY header that your server software may not support.` };
+          }
         }
       } else {
         result.playit = { status: 'skip', message: 'Playit.gg configured but server must be running to test tunnel' };
