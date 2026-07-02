@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: GitHub Discussions
+    url: https://github.com/Harsha240105/Mine-Control/discussions
+    about: Please ask general questions and start discussions here.
+  - name: In-app Feedback Center
+    url: https://github.com/Harsha240105/Mine-Control#feedback--issue-management
+    about: Use the Feedback Center in the app to submit issues with automatic diagnostics.
+  - name: Security Vulnerabilities
+    url: https://github.com/Harsha240105/Mine-Control/security/policy
+    about: Please report security vulnerabilities privately. See SECURITY.md for details.

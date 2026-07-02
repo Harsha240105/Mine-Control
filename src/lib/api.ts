@@ -1,9 +1,10 @@
 const API_BASE = '/api';
-const REQUEST_TIMEOUT = 15000;
+const REQUEST_TIMEOUT = 30000;
 
 async function request<T>(
   endpoint: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
+  timeout?: number
 ): Promise<T> {
   const token = localStorage.getItem('mc_token');
 
@@ -22,7 +23,8 @@ async function request<T>(
   }
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
+  const effectiveTimeout = timeout ?? REQUEST_TIMEOUT;
+  const timeoutId = setTimeout(() => controller.abort(), effectiveTimeout);
 
   try {
     const res = await fetch(`${API_BASE}${endpoint}`, {
@@ -32,8 +34,14 @@ async function request<T>(
     });
 
     if (!res.ok) {
-      const error = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(error.error || `Request failed: ${res.status}`);
+      let errorMsg = res.statusText;
+      try {
+        const body = await res.json();
+        errorMsg = body.error || body.message || JSON.stringify(body);
+      } catch {
+        try { errorMsg = await res.text(); } catch {}
+      }
+      throw new Error(errorMsg || `Request failed: ${res.status}`);
     }
 
     return res.json();
@@ -319,9 +327,9 @@ export const api = {
     request<any[]>(`/worlds/${name}/dimensions`),
   downloadWorld: (name: string) => `${API_BASE}/worlds/${name}/download`,
   importWorldZip: (formData: FormData) =>
-    request<any>('/worlds/import/zip', { method: 'POST', body: formData }),
+    request<any>('/worlds/import/zip', { method: 'POST', body: formData }, 300000),
   importWorldFolder: (sourcePath: string, worldName?: string) =>
-    request<any>('/worlds/import/folder', { method: 'POST', body: JSON.stringify({ sourcePath, worldName }) }),
+    request<any>('/worlds/import/folder', { method: 'POST', body: JSON.stringify({ sourcePath, worldName }) }, 300000),
   uploadWorld: (filePath: string, worldName: string) =>
     request<any>('/worlds/upload', {
       method: 'POST',
@@ -451,12 +459,12 @@ export const api = {
     request<any>('/import/analyze', {
       method: 'POST',
       body: JSON.stringify({ filePath }),
-    }),
+    }, 300000),
   importExecute: (filePath: string, config: any) =>
     request<any>('/import/execute', {
       method: 'POST',
       body: JSON.stringify({ filePath, config }),
-    }),
+    }, 300000),
   getSupportedFormats: () => request<any>('/import/supported-formats'),
 
   // Feedback & Issue Management

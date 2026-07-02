@@ -699,12 +699,25 @@ class MinecraftServerManager extends EventEmitter {
         values.push(player.id || username);
         db.prepare(`UPDATE players SET ${updates.join(', ')} WHERE id = ? OR username = ?`).run(...values);
       } else {
-        // Auto-register unknown player
+        // Auto-register unknown player — lookup real UUID from usercache
+        let realUuid: string | undefined;
+        try {
+          const usercachePath = path.join(this.serverDir, 'usercache.json');
+          if (fs.existsSync(usercachePath)) {
+            const cache = JSON.parse(fs.readFileSync(usercachePath, 'utf-8'));
+            const entry = cache.find((e: any) => e.name === username);
+            if (entry) realUuid = entry.uuid;
+          }
+        } catch {}
         const id = require('uuid').v4();
-        const uuid = player?.uuid || id;
+        const uuid = realUuid || id;
         db.prepare(
           'INSERT INTO players (id, username, uuid, status, last_login, first_join, join_date) VALUES (?, ?, ?, ?, ?, ?, ?)'
         ).run(id, username, uuid, 'online', now, now, now);
+        // Run enrichment after creating record with correct UUID
+        if (realUuid) {
+          this.enrichPlayerData(username, { uuid: realUuid, username });
+        }
       }
     } catch (e) {
       // ignore
@@ -714,8 +727,6 @@ class MinecraftServerManager extends EventEmitter {
   private async enrichPlayerDataAsync(username: string, player: any) {
     try {
       const nbt = await import('prismarine-nbt');
-      const { promisify } = await import('util');
-      const parseNbt = promisify(nbt.default ? nbt.default.parse : nbt.parse);
       const fs = await import('fs');
       const path = await import('path');
 
@@ -726,31 +737,50 @@ class MinecraftServerManager extends EventEmitter {
         const match = props.match(/^level-name=(.*)$/m);
         if (match) levelName = match[1].trim();
       }
-      const playerDataDir = path.join(this.serverDir, levelName, 'playerdata');
-      const statsDir = path.join(this.serverDir, levelName, 'stats');
-      const advancementsDir = path.join(this.serverDir, levelName, 'advancements');
+      const worldDir = path.join(this.serverDir, levelName);
+      const fabricPlayerDataDir = path.join(worldDir, 'players', 'data');
+      const fabricStatsDir = path.join(worldDir, 'players', 'stats');
+      const fabricAdvDir = path.join(worldDir, 'players', 'advancements');
+
+      const playerDataDir = path.join(worldDir, 'playerdata');
+      const statsDir = path.join(worldDir, 'stats');
+      const advancementsDir = path.join(worldDir, 'advancements');
+
+      const db = getDatabase();
 
       let uuid = player.uuid;
-      if (!uuid) {
+      // Cross-check UUID against usercache — correct wrong UUIDs in DB
+      try {
         const usercachePath = path.join(this.serverDir, 'usercache.json');
         if (fs.existsSync(usercachePath)) {
           const cache = JSON.parse(fs.readFileSync(usercachePath, 'utf-8'));
           const entry = cache.find((e: any) => e.name === player.username);
-          if (entry) uuid = entry.uuid;
+          if (entry) {
+            if (uuid && uuid !== entry.uuid) {
+              db.prepare('UPDATE players SET uuid = ? WHERE uuid = ?').run(entry.uuid, uuid);
+            }
+            uuid = entry.uuid;
+          }
         }
-      }
+      } catch {}
       if (!uuid) return;
-
-      const db = getDatabase();
       const updateFields: string[] = [];
       const updateValues: any[] = [];
 
-      const playerDataPath = path.join(playerDataDir, `${uuid}.dat`);
-      if (fs.existsSync(playerDataPath)) {
+      const resolveFile = (...paths: string[][]): string | undefined => {
+        const match = paths.find(p => fs.existsSync(path.join(...p)));
+        return match ? path.join(...match) : undefined;
+      };
+
+      const playerDataPath = resolveFile(
+        [playerDataDir, `${uuid}.dat`],
+        [fabricPlayerDataDir, `${uuid}.dat`]
+      );
+      if (playerDataPath) {
         try {
           const buffer = fs.readFileSync(playerDataPath);
-          const { parsed } = (await parseNbt(buffer)) as any;
-          const data = (nbt.default || nbt).simplify(parsed);
+          const { parsed } = await nbt.parse(buffer);
+          const data = nbt.simplify(parsed);
           if (data.Health !== undefined) { updateFields.push('health = ?'); updateValues.push(data.Health); }
           if (data.foodLevel !== undefined) { updateFields.push('food_level = ?'); updateValues.push(data.foodLevel); }
           if (data.XpLevel !== undefined) { updateFields.push('xp_level = ?'); updateValues.push(data.XpLevel); }
@@ -779,8 +809,11 @@ class MinecraftServerManager extends EventEmitter {
         } catch (e) { /* ignore */ }
       }
 
-      const statsPath = path.join(statsDir, `${uuid}.json`);
-      if (fs.existsSync(statsPath)) {
+      const statsPath = resolveFile(
+        [statsDir, `${uuid}.json`],
+        [fabricStatsDir, `${uuid}.json`]
+      );
+      if (statsPath) {
         try {
           const stats = JSON.parse(fs.readFileSync(statsPath, 'utf-8'));
           updateFields.push('statistics = ?'); updateValues.push(JSON.stringify(stats));
@@ -795,8 +828,11 @@ class MinecraftServerManager extends EventEmitter {
         } catch (e) { /* ignore */ }
       }
 
-      const advancementsPath = path.join(advancementsDir, `${uuid}.json`);
-      if (fs.existsSync(advancementsPath)) {
+      const advancementsPath = resolveFile(
+        [advancementsDir, `${uuid}.json`],
+        [fabricAdvDir, `${uuid}.json`]
+      );
+      if (advancementsPath) {
         try {
           updateFields.push('advancements = ?');
           updateValues.push(fs.readFileSync(advancementsPath, 'utf-8'));

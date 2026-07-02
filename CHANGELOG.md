@@ -4,7 +4,31 @@ All notable changes to MineControl OS are documented here.
 
 ---
 
-## v1.0.57 — Proxy-Protocol Mismatch Detection & Warning
+## v1.0.58 — Repository Organization & Production Build
+
+### Repository Structure
+- **New root docs**: SUPPORT.md and ROADMAP.md with comprehensive support channels and development milestones
+- **New issue templates**: Performance Report, Documentation Issue, and Question templates added with detailed environment fields
+- **Issue template config**: `.github/ISSUE_TEMPLATE/config.yml` added to guide users to Discussions and in-app Feedback
+- **Enhanced PR template**: Expanded with test configuration, area checkboxes, local-first principle reminder
+- **New CI workflow**: `.github/workflows/ci.yml` for automated TypeScript type-checking, linting, and build verification on every PR
+- **Labels configuration**: `.github/labels.yml` with 40+ labels organized by issue type, priority, status, area, platform
+- **Documentation**: New `docs/` folder with architecture overview, API reference, development guide, and deployment guide
+- **Updated README**: Version badge bumped to v1.0.57, minor fixes
+
+### Feedback → GitHub Issue Synchronization
+- **Actual GitHub API integration**: The feedback sync queue now creates real GitHub Issues via the GitHub REST API when an issue tracker config is configured with GitHub provider and a valid API token
+- **Diagnostics as issue body**: Auto-collected diagnostics, server logs, crash reports, and system info are included in the GitHub issue body
+- **Sync status tracking**: After successful creation, the ticket's `github_url`, `issue_tracker_url`, and `issue_tracker_id` are saved, and status is updated to `synced`
+- **Error handling**: Failed syncs increment retry count, show the error, and remain in the queue for retry (up to 10 retries)
+- **Credential masking**: Diagnostics are sanitized before sending to GitHub (passwords, tokens, IPs masked)
+
+### Changes
+- Version bumped to 1.0.58
+
+---
+
+## v1.0.57 — Proxy-Protocol Mismatch Detection, Import Fixes & Production Build
 
 ### Bug Fixes
 - **Playit.gg proxy-protocol-v1 detection**: The Playit.gg tunnel was silently failing because `proxy-protocol-v1` is enabled on the tunnel, but the server software (Fabric, Vanilla, Forge, etc.) does not support it. MineControl OS now:
@@ -19,6 +43,19 @@ All notable changes to MineControl OS are documented here.
 - **`mcPingWithProxy()`**: New function that connects with a PROXY v1 header prepended before the Minecraft handshake, empirically verifying if the server supports proxy-protocol
 - **`getProxyProtocolHint()`**: Returns per-software fix instructions (currently supports Paper, Spigot, Purpur, Pufferfish, BungeeCord, Waterfall, Velocity)
 - **PaperMC download API fix**: Updated from sunset v2 API (`api.papermc.io/v2`) to v3 Fill API (`fill.papermc.io/v3`), fixing Paper version downloads that broke on July 1, 2026
+
+### Import System Fixes
+- **REQUEST_TIMEOUT increased**: Default API timeout raised from 15s to 30s; import/world endpoints use 300s (`src/lib/api.ts`)
+- **Import page gate removed**: Import page was blocked by `activeServer` requirement on fresh install — gate removed (`src/pages/Import.tsx`)
+- **ZIP analysis fixed**: ZIP imports returned "Unknown" for all fields because `extract-zip` wasn't called before analysis — now extracts to temp dir, analyzes, then cleans up (`server/services/importServer.ts`)
+- **World folder import Browse button**: Added `window.electronAPI.selectDirectory()` button so users can pick folders without typing paths (`src/pages/Worlds.tsx`)
+- **Analysis display fixed**: Showed `worlds?.length` (always 0 for ZIPs) — changed to `worldName`
+- **Auto-name derived from path**: Imported server auto-name now uses path basename instead of "Imported Server"
+- **Error message propagation**: When `res.json()` fails during import, the error message is preserved through the fallback chain
+
+### Production Build
+- Full clean rebuild with zero TypeScript errors across all 3 targets (client, server, electron)
+- `electron-rebuild` + `electron-builder` produce working installer at `dist/release/MineControl-OS-Setup-1.0.57-x64.exe` (86.5 MB)
 
 ### Changes
 - Version bumped to 1.0.57

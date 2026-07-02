@@ -24,55 +24,32 @@ export function scanPlayerDataFiles(): { username?: string; uuid: string }[] {
   if (!fs.existsSync(serverDir)) return [];
 
   const levelName = getLevelName();
+  const worldDir = path.join(serverDir, levelName);
   const found: { username?: string; uuid: string }[] = [];
 
-  // Scan playerdata/ for UUID .dat files
-  const playerDataDir = path.join(serverDir, levelName, 'playerdata');
-  if (fs.existsSync(playerDataDir)) {
-    try {
-      const files = fs.readdirSync(playerDataDir);
-      for (const file of files) {
-        if (file.endsWith('.dat')) {
-          const uuid = file.replace(/\.dat$/, '');
-          if (uuid.includes('-')) {
-            found.push({ uuid });
+  const scanDir = (dir: string, ext: string) => {
+    if (fs.existsSync(dir)) {
+      try {
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+          if (file.endsWith(ext)) {
+            const uuid = file.replace(new RegExp(`${ext}$`), '');
+            if (uuid.includes('-') && !found.find(f => f.uuid === uuid)) {
+              found.push({ uuid });
+            }
           }
         }
-      }
-    } catch {}
-  }
+      } catch {}
+    }
+  };
 
-  // Scan stats/ for UUID .json files
-  const statsDir = path.join(serverDir, levelName, 'stats');
-  if (fs.existsSync(statsDir)) {
-    try {
-      const files = fs.readdirSync(statsDir);
-      for (const file of files) {
-        if (file.endsWith('.json')) {
-          const uuid = file.replace(/\.json$/, '');
-          if (uuid.includes('-') && !found.find(f => f.uuid === uuid)) {
-            found.push({ uuid });
-          }
-        }
-      }
-    } catch {}
-  }
-
-  // Scan advancements/ for UUID .json files
-  const advDir = path.join(serverDir, levelName, 'advancements');
-  if (fs.existsSync(advDir)) {
-    try {
-      const files = fs.readdirSync(advDir);
-      for (const file of files) {
-        if (file.endsWith('.json')) {
-          const uuid = file.replace(/\.json$/, '');
-          if (uuid.includes('-') && !found.find(f => f.uuid === uuid)) {
-            found.push({ uuid });
-          }
-        }
-      }
-    } catch {}
-  }
+  // Scan standard & Fabric/Carpet paths
+  scanDir(path.join(worldDir, 'playerdata'), '.dat');
+  scanDir(path.join(worldDir, 'players', 'data'), '.dat');
+  scanDir(path.join(worldDir, 'stats'), '.json');
+  scanDir(path.join(worldDir, 'players', 'stats'), '.json');
+  scanDir(path.join(worldDir, 'advancements'), '.json');
+  scanDir(path.join(worldDir, 'players', 'advancements'), '.json');
 
   // Resolve usernames from usercache.json
   const usercachePath = path.join(serverDir, 'usercache.json');

@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
+import https from 'https';
 import { execSync } from 'child_process';
 import { resolvePath, resolveMinecraftDir, getMinecraftDir } from '../paths';
 import { activeServer } from '../activeServer';
@@ -595,8 +596,22 @@ export const feedbackService = {
           continue;
         }
 
-        db.prepare("UPDATE feedback_tickets SET sync_status = 'synced', sync_last_attempt = datetime('now'), updated_at = datetime('now') WHERE id = ?").run(item.ticket_id);
-        db.prepare("UPDATE sync_queue SET status = 'completed', completed_at = datetime('now') WHERE id = ?").run(item.id);
+        // Attempt to create GitHub issue if tracker is configured
+        if (item.action === 'create' || item.action === 'sync') {
+          const config = ticket.server_id
+            ? db.prepare('SELECT * FROM issue_tracker_config WHERE server_id = ? AND enabled = 1').get(ticket.server_id) as any
+            : null;
+
+          if (config && config.provider === 'github' && config.api_token && config.repository) {
+            await this._createGitHubIssue(ticket, config);
+          } else if (config && config.provider === 'github' && (!config.api_token || !config.repository)) {
+            throw new Error('GitHub tracker configured but missing api_token or repository');
+          }
+        }
+
+        const now = new Date().toISOString();
+        db.prepare("UPDATE feedback_tickets SET sync_status = 'synced', sync_last_attempt = ?, updated_at = ? WHERE id = ?").run(now, now, item.ticket_id);
+        db.prepare("UPDATE sync_queue SET status = 'completed', completed_at = ? WHERE id = ?").run(now, item.id);
         synced++;
 
         try { getIO().emit('feedback:synced', { ticketId: item.ticket_id }); } catch {}
@@ -605,8 +620,9 @@ export const feedbackService = {
         const retries = (db.prepare('SELECT retries FROM sync_queue WHERE id = ?').get(item.id) as any)?.retries || 0;
         const maxRetries = item.max_retries || 10;
         if (retries >= maxRetries) {
-          db.prepare("UPDATE sync_queue SET status = 'failed', error = ?, last_attempt = datetime('now') WHERE id = ?").run(err.message, item.id);
-          db.prepare("UPDATE feedback_tickets SET sync_status = 'failed', sync_error = ?, sync_retries = sync_retries + 1 WHERE id = ?").run(err.message, item.ticket_id);
+          const now = new Date().toISOString();
+          db.prepare("UPDATE sync_queue SET status = 'failed', error = ?, last_attempt = ? WHERE id = ?").run(err.message, now, item.id);
+          db.prepare("UPDATE feedback_tickets SET sync_status = 'failed', sync_error = ?, sync_retries = sync_retries + 1, updated_at = ? WHERE id = ?").run(err.message, now, item.ticket_id);
         } else {
           db.prepare("UPDATE sync_queue SET retries = retries + 1, error = ?, last_attempt = datetime('now'), status = 'pending' WHERE id = ?").run(err.message, item.id);
         }
@@ -617,6 +633,148 @@ export const feedbackService = {
 
     try { getIO().emit('feedback:update'); } catch {}
     return { synced, failed, errors };
+  },
+
+  _formatDiagnosticBody(ticket: any): string {
+    const typeLabels: Record<string, string> = {
+      bug: '🐛 Bug Report',
+      feature: '✨ Feature Request',
+      performance: '⚡ Performance Report',
+      crash: '💥 Crash Report',
+      general: '📝 General Feedback',
+    };
+
+    let body = `## ${typeLabels[ticket.issue_type] || 'Issue'}\n\n`;
+    body += `**Ticket ID:** ${ticket.ticket_id}\n`;
+    body += `**Reported by:** ${ticket.username}\n`;
+    body += `**Priority:** ${ticket.priority}\n`;
+    body += `**Date:** ${ticket.created_at}\n\n`;
+
+    if (ticket.summary) {
+      body += `### Summary\n${ticket.summary}\n\n`;
+    }
+
+    body += `### Description\n${ticket.description}\n\n`;
+
+    if (ticket.minecraft_version || ticket.server_software) {
+      body += `### Environment\n`;
+      body += `| Field | Value |\n`;
+      body += `|---|---|\n`;
+      if (ticket.minecraft_version) body += `| Minecraft Version | ${ticket.minecraft_version} |\n`;
+      if (ticket.server_software) body += `| Server Software | ${ticket.server_software} |\n`;
+      if (ticket.server_name) body += `| Server Name | ${ticket.server_name} |\n`;
+      if (ticket.connection_mode) body += `| Connection Mode | ${ticket.connection_mode} |\n`;
+      if (ticket.player_count !== undefined) body += `| Player Count | ${ticket.player_count} |\n`;
+      body += '\n';
+    }
+
+    if (ticket.error_stack_trace) {
+      body += `### Error Stack Trace\n\`\`\`\n${ticket.error_stack_trace.slice(0, 5000)}\n\`\`\`\n\n`;
+    }
+
+    const diag = ticket.diagnostic_data ? (typeof ticket.diagnostic_data === 'string' ? JSON.parse(ticket.diagnostic_data) : ticket.diagnostic_data) : null;
+    if (diag) {
+      body += `### System Diagnostics\n`;
+      body += `| Field | Value |\n`;
+      body += `|---|---|\n`;
+      const diagFields = ['app_version', 'os', 'os_arch', 'cpu_model', 'cpu_cores', 'total_ram_gb', 'free_ram_gb', 'java_version', 'minecraft_version', 'server_software', 'server_port', 'min_ram', 'max_ram', 'node_version', 'plugin_count', 'mod_count', 'firewall_status', 'network_mode', 'uptime_hours'];
+      for (const field of diagFields) {
+        if (diag[field] !== undefined && diag[field] !== null && diag[field] !== '') {
+          body += `| ${field.replace(/_/g, ' ')} | ${diag[field]} |\n`;
+        }
+      }
+      body += '\n';
+
+      if (diag.recent_console_logs && Array.isArray(diag.recent_console_logs) && diag.recent_console_logs.length > 0) {
+        body += `### Recent Console Logs\n\`\`\`\n${diag.recent_console_logs.slice(-50).join('\n')}\n\`\`\`\n\n`;
+      }
+      if (diag.crash_reports && Array.isArray(diag.crash_reports) && diag.crash_reports.length > 0) {
+        body += `### Crash Reports\n\`\`\`\n${diag.crash_reports.slice(-2).join('\n---\n')}\n\`\`\`\n\n`;
+      }
+    }
+
+    if (ticket.connected_plugins && ticket.connected_plugins.length > 0) {
+      const plugins = typeof ticket.connected_plugins === 'string' ? JSON.parse(ticket.connected_plugins) : ticket.connected_plugins;
+      body += `### Plugins (${plugins.length})\n`;
+      body += plugins.map((p: string) => `- ${p}`).join('\n') + '\n\n';
+    }
+
+    if (ticket.connected_mods && ticket.connected_mods.length > 0) {
+      const mods = typeof ticket.connected_mods === 'string' ? JSON.parse(ticket.connected_mods) : ticket.connected_mods;
+      body += `### Mods (${mods.length})\n`;
+      body += mods.map((m: string) => `- ${m}`).join('\n') + '\n\n';
+    }
+
+    body += `---\n*Created by MineControl OS Feedback Sync*\n`;
+    return body;
+  },
+
+  _createGitHubIssue(ticket: any, config: any): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const [owner, repo] = config.repository.split('/');
+      if (!owner || !repo) {
+        reject(new Error('Invalid GitHub repository format. Use "owner/repo".'));
+        return;
+      }
+
+      const typeLabels: Record<string, string> = {
+        bug: 'bug',
+        feature: 'feature',
+        performance: 'performance',
+        crash: 'bug',
+        general: 'question',
+      };
+
+      const title = ticket.summary || `[${ticket.issue_type.toUpperCase()}] ${ticket.ticket_id}`;
+      const body = this._formatDiagnosticBody(ticket);
+      const label = typeLabels[ticket.issue_type] || 'question';
+
+      const issueData = JSON.stringify({
+        title,
+        body,
+        labels: [label, 'feedback-sync'],
+      });
+
+      const req = https.request({
+        hostname: 'api.github.com',
+        path: `/repos/${owner}/${repo}/issues`,
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${config.api_token}`,
+          'Content-Type': 'application/json',
+          'User-Agent': 'MineControl-OS-Feedback-Sync/1.0',
+          'Content-Length': Buffer.byteLength(issueData),
+        },
+      }, (res) => {
+        let data = '';
+        res.on('data', (chunk: string) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+              const result = JSON.parse(data);
+              const db = getDatabase();
+              const now = new Date().toISOString();
+              db.prepare('UPDATE feedback_tickets SET github_url = ?, issue_tracker_url = ?, issue_tracker_id = ?, sync_status = ?, updated_at = ? WHERE id = ?')
+                .run(result.html_url, result.html_url, String(result.number), 'synced', now, ticket.id);
+              resolve();
+            } else {
+              let errMsg = `GitHub API error (${res.statusCode})`;
+              try {
+                const errData = JSON.parse(data);
+                errMsg = errData.message || errMsg;
+              } catch {}
+              reject(new Error(errMsg));
+            }
+          } catch (e: any) {
+            reject(new Error(`Failed to parse GitHub response: ${e.message}`));
+          }
+        });
+      });
+
+      req.on('error', (e) => reject(new Error(`GitHub request failed: ${e.message}`)));
+      req.write(issueData);
+      req.end();
+    });
   },
 
   addToSyncQueue(ticketId: string, action: string = 'create') {

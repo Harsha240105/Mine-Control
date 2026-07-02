@@ -964,8 +964,9 @@ router.post('/health-check', authMiddleware, async (_req: AuthRequest, res) => {
 
 // Version Management - All Minecraft versions
 router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
-  const mcDir = resolveMinecraftDir();
-  const config = minecraftServer.getConfig();
+  try {
+    const mcDir = resolveMinecraftDir();
+    const config = minecraftServer.getConfig();
 
   // Read version from servers table (more reliable than parsing jar filename)
   const db = getDatabase();
@@ -1182,6 +1183,16 @@ router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
     availableVersions: combined,
     downloadedJars,
   });
+  } catch (err) {
+    console.error('Error fetching versions:', err);
+    res.json({
+      currentVersion: 'unknown',
+      currentSource: 'unknown',
+      availableVersions: [],
+      downloadedJars: [],
+      error: 'Failed to load server versions',
+    });
+  }
 });
 
 router.post('/version', authMiddleware, requirePermission('server.start'), async (req: AuthRequest, res) => {

@@ -863,19 +863,19 @@ export default function Players() {
                       <div className="grid grid-cols-2 gap-3">
                         <div className="bg-surface-900 p-3 rounded-lg border border-surface-700/50">
                           <div className="text-xs text-gray-500">Health</div>
-                          <div className="text-lg font-bold text-red-400">{selectedPlayer.health ?? 20}/20</div>
+                          <div className="text-lg font-bold text-red-400">{selectedPlayer.health != null ? `${selectedPlayer.health}/20` : 'Unknown'}</div>
                         </div>
                         <div className="bg-surface-900 p-3 rounded-lg border border-surface-700/50">
                           <div className="text-xs text-gray-500">Food</div>
-                          <div className="text-lg font-bold text-yellow-400">{selectedPlayer.food_level ?? 20}/20</div>
+                          <div className="text-lg font-bold text-yellow-400">{selectedPlayer.food_level != null ? `${selectedPlayer.food_level}/20` : 'Unknown'}</div>
                         </div>
                         <div className="bg-surface-900 p-3 rounded-lg border border-surface-700/50">
                           <div className="text-xs text-gray-500">XP Level</div>
-                          <div className="text-lg font-bold text-green-400">{selectedPlayer.xp_level ?? 0}</div>
+                          <div className="text-lg font-bold text-green-400">{selectedPlayer.xp_level != null ? selectedPlayer.xp_level : 'Unknown'}</div>
                         </div>
                         <div className="bg-surface-900 p-3 rounded-lg border border-surface-700/50">
                           <div className="text-xs text-gray-500">XP Progress</div>
-                          <div className="text-lg font-bold text-green-400">{((selectedPlayer.xp_progress ?? 0) * 100).toFixed(0)}%</div>
+                          <div className="text-lg font-bold text-green-400">{selectedPlayer.xp_progress != null ? `${(selectedPlayer.xp_progress * 100).toFixed(0)}%` : 'Unknown'}</div>
                         </div>
                       </div>
                     </div>
@@ -890,7 +890,7 @@ export default function Players() {
                           <span className="text-sm text-gray-200">{selectedPlayer.dimension || 'Unknown'}</span>
                         </div>
                         <div className="font-mono text-gray-200 text-sm">
-                          X: {Math.round(selectedPlayer.pos_x ?? 0)} &nbsp; Y: {Math.round(selectedPlayer.pos_y ?? 0)} &nbsp; Z: {Math.round(selectedPlayer.pos_z ?? 0)}
+                          {selectedPlayer.pos_x != null && selectedPlayer.pos_y != null && selectedPlayer.pos_z != null ? `X: ${Math.round(selectedPlayer.pos_x)}  Y: ${Math.round(selectedPlayer.pos_y)}  Z: ${Math.round(selectedPlayer.pos_z)}` : 'Unknown'}
                         </div>
                       </div>
                     </div>
@@ -904,11 +904,11 @@ export default function Players() {
                       <div className="grid grid-cols-2 gap-3">
                         <div className="bg-surface-900 p-3 rounded-lg border border-surface-700/50">
                           <div className="text-xs text-gray-500">Deaths</div>
-                          <div className="text-lg font-bold text-red-400">{selectedPlayer.death_count ?? 0}</div>
+                          <div className="text-lg font-bold text-red-400">{selectedPlayer.death_count != null ? selectedPlayer.death_count : 'Unknown'}</div>
                         </div>
                         <div className="bg-surface-900 p-3 rounded-lg border border-surface-700/50">
                           <div className="text-xs text-gray-500">Kills</div>
-                          <div className="text-lg font-bold text-green-400">{selectedPlayer.kills ?? 0}</div>
+                          <div className="text-lg font-bold text-green-400">{selectedPlayer.kills != null ? selectedPlayer.kills : 'Unknown'}</div>
                         </div>
                         <div className="bg-surface-900 p-3 rounded-lg border border-surface-700/50">
                           <div className="text-xs text-gray-500">Playtime</div>

@@ -6,9 +6,6 @@ import { getDatabase } from '../database';
 import { minecraftServer } from '../services/minecraftServer';
 // @ts-ignore
 import nbt from 'prismarine-nbt';
-import { promisify } from 'util';
-
-const parseNbt = promisify(nbt.parse);
 
 const router = Router();
 
@@ -34,20 +31,22 @@ router.get('/:id/player/:uuid', authMiddleware, async (req: AuthRequest, res) =>
   }
 
   const worldDir = path.join(server.directory, levelName);
-  const playerDataPath = path.join(worldDir, 'playerdata', `${uuid}.dat`);
-  const statsPath = path.join(worldDir, 'stats', `${uuid}.json`);
 
-  if (!fs.existsSync(playerDataPath)) {
+  // Check standard and Fabric/Carpet playerdata paths
+  const playerDataPath = [path.join(worldDir, 'playerdata', `${uuid}.dat`), path.join(worldDir, 'players', 'data', `${uuid}.dat`)].find(p => fs.existsSync(p));
+  const statsPath = [path.join(worldDir, 'stats', `${uuid}.json`), path.join(worldDir, 'players', 'stats', `${uuid}.json`)].find(p => fs.existsSync(p));
+
+  if (!playerDataPath) {
     return res.status(404).json({ error: 'Player data not found' });
   }
 
   try {
     const buffer = fs.readFileSync(playerDataPath);
-    const { parsed } = (await parseNbt(buffer)) as any;
+    const { parsed } = await nbt.parse(buffer);
     const data = nbt.simplify(parsed);
 
     let stats = {};
-    if (fs.existsSync(statsPath)) {
+    if (statsPath) {
       stats = JSON.parse(fs.readFileSync(statsPath, 'utf-8'));
     }
 
@@ -65,9 +64,9 @@ router.get('/:id/player/:uuid', authMiddleware, async (req: AuthRequest, res) =>
     res.json({
       success: true,
       inventory: data.Inventory || [],
-      health: data.Health || 20,
-      foodLevel: data.foodLevel || 20,
-      pos: data.Pos || [0, 0, 0],
+      health: data.Health ?? null,
+      foodLevel: data.foodLevel ?? null,
+      pos: data.Pos || null,
       stats: stats,
       ping: ping
     });

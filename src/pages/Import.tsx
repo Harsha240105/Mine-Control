@@ -6,12 +6,10 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { api } from '../lib/api';
-import { useActiveServer } from '../hooks/useActiveServer';
 
 const STEPS = ['Select Source', 'Analysis', 'Configuration', 'Import'];
 
 export default function Import() {
-  const { server: activeServer } = useActiveServer();
   const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [supportedFormats, setSupportedFormats] = useState<any[]>([]);
@@ -75,7 +73,9 @@ export default function Import() {
     try {
       const res = await api.importAnalyze(path);
       setAnalysisResult(res.detection);
-      setServerName(res.detection.name || 'Imported Server');
+      // Derive server name from folder/file basename
+      const detectedName = path.split(/[\\/]/).pop()?.replace(/\.(zip|rar|7z)$/i, '') || 'Imported Server';
+      setServerName(detectedName);
     } catch (err: any) {
       toast.error(err.message || 'Analysis failed');
       setStep(0); // Go back on error
@@ -137,20 +137,6 @@ export default function Import() {
       ))}
     </div>
   );
-
-  if (!activeServer) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center space-y-3">
-          <div className="w-12 h-12 mx-auto rounded-full bg-gray-800 flex items-center justify-center">
-            <Server className="w-6 h-6 text-gray-500" />
-          </div>
-          <p className="text-gray-400 text-sm font-medium">No server selected</p>
-          <p className="text-gray-600 text-xs">Select a server from the Server Library to manage this page.</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-surface-950 flex flex-col relative overflow-hidden">
@@ -238,8 +224,8 @@ export default function Import() {
                         <p className="font-semibold">{analysisResult.plugins?.length || 0}</p>
                       </div>
                       <div className="bg-surface-800 rounded-lg p-4">
-                        <p className="text-sm text-gray-400 mb-1">Worlds Found</p>
-                        <p className="font-semibold">{analysisResult.worlds?.length || 0}</p>
+                        <p className="text-sm text-gray-400 mb-1">World Name</p>
+                        <p className="font-semibold">{analysisResult.worldName || 'world'}</p>
                       </div>
                     </div>
                     

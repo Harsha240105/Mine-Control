@@ -53,6 +53,34 @@ export class ImportService {
     const stats = fs.statSync(sourcePath);
     const isDir = stats.isDirectory();
 
+    // If it's a ZIP/archive, extract to temp dir first, then analyze
+    let cleanupDir: string | null = null;
+    if (!isDir) {
+      try {
+        const extracted = await this.extractArchive(sourcePath);
+        cleanupDir = extracted;
+        sourcePath = extracted;
+      } catch (err: any) {
+        return {
+          software: 'Unknown',
+          version: 'Unknown',
+          worldName: 'world',
+          plugins: [],
+          mods: [],
+          datapacks: [],
+          playerData: [],
+          whitelist: [],
+          operators: [],
+          bannedPlayers: [],
+          serverProperties: {},
+          size: stats.size,
+          javaVersion: 'Unknown',
+          saveVersion: 0,
+          eulaAccepted: false,
+        };
+      }
+    }
+
     const detection: DetectionResult = {
       software: 'Unknown',
       version: 'Unknown',
@@ -70,10 +98,6 @@ export class ImportService {
       saveVersion: 0,
       eulaAccepted: false,
     };
-
-    if (!isDir) {
-      return detection;
-    }
 
     // Detect server software
     for (const { pattern, name } of SOFTWARE_PATTERNS) {
@@ -222,6 +246,11 @@ export class ImportService {
       const ver = execSync('"java" -version 2>&1', { encoding: 'utf-8', timeout: 5000 });
       detection.javaVersion = ver.split('\n')[0] || 'Unknown';
     } catch {}
+
+    // Clean up temp extracted dir if we extracted a ZIP
+    if (cleanupDir && fs.existsSync(cleanupDir)) {
+      try { fs.rmSync(cleanupDir, { recursive: true, force: true }); } catch {}
+    }
 
     return detection;
   }

@@ -588,7 +588,7 @@ export function repairWorld(name: string): { success: boolean; repairs: string[]
   const repairs: string[] = [];
 
   // Ensure essential directories exist
-  const essentialDirs = ['region', 'data', 'playerdata', 'stats', 'advancements'];
+  const essentialDirs = ['region', 'data', 'playerdata', 'stats', 'advancements', 'players/data', 'players/stats', 'players/advancements'];
   for (const dir of essentialDirs) {
     const dirPath = path.join(worldPath, dir);
     if (!fs.existsSync(dirPath)) {

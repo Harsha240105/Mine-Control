@@ -132,12 +132,12 @@ export default function PlayerDetails({ serverId, uuid, username, onClose }: Pla
                     <div>
                       <div className="flex justify-between text-xs mb-1.5">
                         <span className="text-gray-400">Health</span>
-                        <span className="text-red-400 font-bold">{Math.round(data.health)} / 20</span>
+                        <span className="text-red-400 font-bold">{data.health != null ? `${Math.round(data.health)} / 20` : 'Unknown'}</span>
                       </div>
                       <div className="w-full bg-surface-900 rounded-full h-3 border border-surface-700 overflow-hidden">
                         <div 
                           className="bg-gradient-to-r from-red-600 to-red-400 h-full transition-all duration-500 relative"
-                          style={{ width: `${(data.health / 20) * 100}%` }}
+                          style={{ width: `${((data.health ?? 0) / 20) * 100}%` }}
                         >
                           <div className="absolute inset-0 opacity-20 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjZmZmIiBmaWxsLW9wYWNpdHk9IjAuMSIvPgo8L3N2Zz4=')]"></div>
                         </div>
@@ -147,12 +147,12 @@ export default function PlayerDetails({ serverId, uuid, username, onClose }: Pla
                     <div>
                       <div className="flex justify-between text-xs mb-1.5">
                         <span className="text-gray-400">Hunger</span>
-                        <span className="text-yellow-500 font-bold">{Math.round(data.foodLevel)} / 20</span>
+                        <span className="text-yellow-500 font-bold">{data.foodLevel != null ? `${Math.round(data.foodLevel)} / 20` : 'Unknown'}</span>
                       </div>
                       <div className="w-full bg-surface-900 rounded-full h-3 border border-surface-700 overflow-hidden">
                         <div 
                           className="bg-gradient-to-r from-yellow-600 to-yellow-400 h-full transition-all duration-500 relative"
-                          style={{ width: `${(data.foodLevel / 20) * 100}%` }}
+                          style={{ width: `${((data.foodLevel ?? 0) / 20) * 100}%` }}
                         >
                            <div className="absolute inset-0 opacity-20 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjZmZmIiBmaWxsLW9wYWNpdHk9IjAuMSIvPgo8L3N2Zz4=')]"></div>
                         </div>
@@ -165,9 +165,7 @@ export default function PlayerDetails({ serverId, uuid, username, onClose }: Pla
                         Location
                       </div>
                       <div className="font-mono text-gray-200">
-                        X: {Math.round(data.pos[0])} &nbsp; 
-                        Y: {Math.round(data.pos[1])} &nbsp; 
-                        Z: {Math.round(data.pos[2])}
+                        {data.pos ? `X: ${Math.round(data.pos[0])}  Y: ${Math.round(data.pos[1])}  Z: ${Math.round(data.pos[2])}` : 'Unknown'}
                       </div>
                     </div>
                   </div>

@@ -504,7 +504,12 @@ export default function Worlds() {
           <form onSubmit={handleImportFolder} className="space-y-4">
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1">Source Folder Path</label>
-              <input type="text" value={importFolderPath} onChange={(e) => setImportFolderPath(e.target.value)} className="input" placeholder="C:\Users\...\world" required />
+              <div className="flex gap-2">
+                <input type="text" value={importFolderPath} onChange={(e) => setImportFolderPath(e.target.value)} className="input flex-1" placeholder="C:\Users\...\world" required />
+                <button type="button" onClick={async () => { if (window.electronAPI) { const p = await window.electronAPI.selectDirectory(); if (p) setImportFolderPath(p); } }} className="btn-secondary px-3 py-2 text-xs shrink-0">
+                  <FolderOpen size={14} className="inline mr-1" /> Browse
+                </button>
+              </div>
               <p className="text-[10px] text-gray-500 mt-1">Path to a Minecraft world folder containing level.dat and region/</p>
             </div>
             <div>

@@ -1,0 +1,142 @@
+# GitHub Labels Configuration
+# Managed via https://github.com/Harsha240105/Mine-Control/labels
+# Sync with: gh label clone Harsha240105/Mine-Control --force
+
+# Issue Type Labels
+- name: bug
+  color: d73a4a
+  description: Something isn't working as expected
+- name: feature
+  color: a2eeef
+  description: New feature request or enhancement
+- name: performance
+  color: ffb8c6
+  description: Performance or scalability issue
+- name: documentation
+  color: 0075ca
+  description: Improvements or additions to documentation
+- name: question
+  color: d876e3
+  description: Further information is requested
+- name: security
+  color: e99695
+  description: Security vulnerability or concern
+
+# Priority Labels
+- name: priority-low
+  color: bfe5bf
+  description: Low priority — nice to have
+- name: priority-normal
+  color: fbefd2
+  description: Normal priority — default
+- name: priority-high
+  color: ffa07a
+  description: High priority — should be addressed soon
+- name: priority-critical
+  color: d93f0b
+  description: Critical priority — must be addressed immediately
+
+# Status Labels
+- name: status-triage
+  color: c2e0c6
+  description: Needs review and classification
+- name: status-accepted
+  color: 0e8a16
+  description: Accepted and planned for implementation
+- name: status-in-progress
+  color: fbca04
+  description: Currently being worked on
+- name: status-needs-info
+  color: cfd3d7
+  description: Waiting for more information from reporter
+- name: status-wontfix
+  color: ffffff
+  description: Will not be implemented or fixed
+- name: status-duplicate
+  color: cfd3d7
+  description: Duplicate of another issue
+
+# Area Labels
+- name: area-ui
+  color: 1d76db
+  description: Frontend / User Interface
+- name: area-backend
+  color: 5319e7
+  description: Backend API / Server logic
+- name: area-database
+  color: c5def5
+  description: Database schema or queries
+- name: area-electron
+  color: bfd4f2
+  description: Electron main process / IPC
+- name: area-minecraft
+  color: 0d597f
+  description: Minecraft server integration
+- name: area-playit
+  color: 006b75
+  description: Playit.gg tunnel integration
+- name: area-fabric
+  color: c2e0c6
+  description: Fabric / Quilt mod loader
+- name: area-paper
+  color: d4c5f9
+  description: Paper / Spigot / Bukkit
+- name: area-forge
+  color: d4c5f9
+  description: Forge / NeoForge mod loader
+- name: area-backup
+  color: bfdadc
+  description: Backup and restore system
+- name: area-world
+  color: in_progress
+  description: World management and import/export
+- name: area-player
+  color: c5def5
+  description: Player management and detection
+- name: area-plugin
+  color: f9d0c4
+  description: Plugin/mod marketplace and management
+- name: area-network
+  color: d4c5f9
+  description: Network diagnostics and connectivity
+- name: area-update
+  color: e6e6e6
+  description: App update and migration system
+- name: area-feedback
+  color: c2e0c6
+  description: Feedback center and issue tracking
+- name: area-auth
+  color: 5319e7
+  description: Authentication and permissions
+- name: area-discord
+  color: 5865F2
+  description: Discord integration
+
+# Release Labels
+- name: release
+  color: 00ff00
+  description: Part of a release milestone
+
+# Platform Labels
+- name: platform-windows
+  color: 0078D6
+  description: Windows-specific issue
+- name: platform-macos
+  color: 000000
+  description: macOS-specific issue
+- name: platform-linux
+  color: fcc624
+  description: Linux-specific issue
+
+# Automation Labels
+- name: feedback-sync
+  color: 5319e7
+  description: Issue created via in-app Feedback Center sync
+
+# Good for beginners
+- name: good-first-issue
+  color: 7057ff
+  description: Good for newcomers
+- name: help-wanted
+  color: 008672
+  description: Extra attention is needed
