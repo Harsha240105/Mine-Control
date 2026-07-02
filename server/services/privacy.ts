@@ -274,13 +274,20 @@ export const privacyService = {
 
     // 3. Firewall status
     try {
-      const { execSync } = require('child_process');
-      const out = execSync('netsh advfirewall firewall show rule name="MineControl OS Minecraft" dir=in verbose', { encoding: 'utf-8', timeout: 3000 });
-      const isActive = out.includes('Enabled:               Yes');
-      db.prepare('UPDATE security_checks SET status = ?, detail = ?, score_impact = ?, checked_at = datetime(\'now\') WHERE check_type = ?')
-        .run(isActive ? 'pass' : 'warn', isActive ? 'Firewall rule active' : 'Firewall rule not active', isActive ? 0 : -10, 'firewall_status');
-      results.push({ check_type: 'firewall_status', status: isActive ? 'pass' : 'warn', detail: isActive ? 'Firewall rule active' : 'Firewall rule not active' });
-      if (!isActive) deductions += 10;
+      const { firewallManager } = require('./firewallManager');
+      if (!firewallManager.isAdmin()) {
+        db.prepare('UPDATE security_checks SET status = ?, detail = ?, score_impact = ?, checked_at = datetime(\'now\') WHERE check_type = ?')
+          .run('fail', 'Cannot check firewall without admin privileges', -10, 'firewall_status');
+        deductions += 10;
+      } else {
+        const { execSync } = require('child_process');
+        const out = execSync('netsh advfirewall firewall show rule name="MineControl OS Minecraft" dir=in verbose', { encoding: 'utf-8', timeout: 3000 });
+        const isActive = out.includes('Enabled:               Yes');
+        db.prepare('UPDATE security_checks SET status = ?, detail = ?, score_impact = ?, checked_at = datetime(\'now\') WHERE check_type = ?')
+          .run(isActive ? 'pass' : 'warn', isActive ? 'Firewall rule active' : 'Firewall rule not active', isActive ? 0 : -10, 'firewall_status');
+        results.push({ check_type: 'firewall_status', status: isActive ? 'pass' : 'warn', detail: isActive ? 'Firewall rule active' : 'Firewall rule not active' });
+        if (!isActive) deductions += 10;
+      }
     } catch {
       db.prepare('UPDATE security_checks SET status = ?, detail = ?, score_impact = ?, checked_at = datetime(\'now\') WHERE check_type = ?')
         .run('fail', 'Cannot check firewall status', -10, 'firewall_status');

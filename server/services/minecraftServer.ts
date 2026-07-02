@@ -201,8 +201,24 @@ class MinecraftServerManager extends EventEmitter {
       this.emit('server:output', '[MineControl] EULA accepted automatically.\n');
     }
 
-    // Generate default server.properties if missing (fixes NoSuchFileException on first launch)
+    // Validate server-ip in existing server.properties
     const propsPath = path.join(this.serverDir, 'server.properties');
+    if (fs.existsSync(propsPath)) {
+      try {
+        const propsContent = fs.readFileSync(propsPath, 'utf-8');
+        const ipMatch = propsContent.match(/^server-ip=(.*)$/m);
+        if (ipMatch) {
+          const boundIp = ipMatch[1].trim();
+          if (boundIp === '127.0.0.1' || boundIp === 'localhost') {
+            this.emit('server:output', `[MineControl] WARNING: server-ip is set to ${boundIp}. External connections will not work. Auto-fixing by clearing server-ip.\n`);
+            const fixed = propsContent.replace(/^server-ip=.*$/m, 'server-ip=');
+            fs.writeFileSync(propsPath, fixed, 'utf-8');
+          }
+        }
+      } catch {}
+    }
+
+    // Generate default server.properties if missing (fixes NoSuchFileException on first launch)
     if (!fs.existsSync(propsPath)) {
       const defaults = [
         '#Minecraft server properties',
@@ -299,6 +315,40 @@ class MinecraftServerManager extends EventEmitter {
   }
 
   // ── Java resolution: scan .class files, find compatible JDK ──
+  private syncServerProperties(config: any) {
+    const propsPath = path.join(this.serverDir, 'server.properties');
+    if (!fs.existsSync(propsPath)) return;
+    try {
+      let content = fs.readFileSync(propsPath, 'utf-8');
+      const updates: Record<string, string> = {
+        'server-port': String(config.port),
+        'online-mode': config.onlineMode ? 'true' : 'false',
+        'enforce-secure-profile': config.onlineMode ? 'true' : 'false',
+        'server-ip': config.serverIp || '',
+      };
+      let changed = false;
+      for (const [key, value] of Object.entries(updates)) {
+        const regex = new RegExp(`^${key}=.*`, 'm');
+        if (regex.test(content)) {
+          const lineMatch = content.match(regex);
+          if (lineMatch && lineMatch[0] !== `${key}=${value}`) {
+            content = content.replace(regex, `${key}=${value}`);
+            changed = true;
+          }
+        } else {
+          content += `\n${key}=${value}`;
+          changed = true;
+        }
+      }
+      if (changed) {
+        fs.writeFileSync(propsPath, content, 'utf-8');
+        this.emit('server:output', `[MineControl] Synced server.properties to match current config.\n`);
+      }
+    } catch (e) {
+      this.emit('server:output', `[MineControl] Warning: Could not sync server.properties: ${e}\n`);
+    }
+  }
+
   private async resolveJava(jarPath: string, config: any): Promise<{ javaPath: string; javaMajor: number; classVersion: number | null }> {
     const classVersion = await this.detectRequiredJava(jarPath);
     const requiredJava = classVersion !== null ? classVersion - 44 : 21;
@@ -378,6 +428,9 @@ class MinecraftServerManager extends EventEmitter {
       // ── Phase 2: Java resolution ──
       this.emit('server:output', '[MineControl] Resolving Java runtime...\n');
       const { javaPath, javaMajor } = await this.resolveJava(jarPath, config);
+
+      // ── Sync server.properties with current config ──
+      this.syncServerProperties(config);
 
       // ── All checks passed — spawn the process ──
       this.emit('server:output', `[MineControl] Starting with Java ${javaMajor} at "${javaPath}"...\n`);
@@ -518,6 +571,24 @@ class MinecraftServerManager extends EventEmitter {
     }
   }
 
+  private async verifyPortListening(port: number): Promise<boolean> {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const sock = new net.Socket();
+        sock.setTimeout(3000);
+        sock.on('connect', () => { sock.destroy(); resolve(); });
+        sock.on('error', (err) => { sock.destroy(); reject(err); });
+        sock.on('timeout', () => { sock.destroy(); reject(new Error('timeout')); });
+        sock.connect(port, '127.0.0.1');
+      });
+      this.emit('server:output', `[MineControl] Port ${port} is listening for connections.\n`);
+      return true;
+    } catch {
+      this.emit('server:output', `[MineControl] WARNING: Port ${port} is not responding after Done message.\n`);
+      return false;
+    }
+  }
+
   private handleOutput(output: string) {
     if (this.logStream) {
       this.logStream.write(output);
@@ -561,14 +632,16 @@ class MinecraftServerManager extends EventEmitter {
       }
 
       // Done loading — match common Minecraft done message patterns
-      const doneMatch = line.match(/Done\s*\([^)]+\)!\s*For\s+help/i) ||
-                        line.includes('Done') && line.includes('For help') ||
-                        line.includes('Done (') && line.includes(')! For help');
+      const doneMatch = line.match(/Done\s*\([\d.]+s\)\s*!\s*For\s+help/i) ||
+                        line.match(/Done\s*\([\d.]+s\)\s*!\s*For\s+help, type/i) ||
+                        (line.includes('Done (') && line.includes(')! For help'));
       if (doneMatch) {
         this.startedAt = new Date();
         this.hasStartedSuccessfully = true;
         this.setState(ServerState.RUNNING);
         this.emit('server:started');
+        // Verify port is actually listening after Done
+        this.verifyPortListening(parseInt(String(this.getConfig().port || 25565)));
         continue;
       }
 
@@ -885,9 +958,20 @@ class MinecraftServerManager extends EventEmitter {
       config[row.key] = row.value;
     }
 
+    let serverIp = '';
+    try {
+      const propsPath = path.join(this.serverDir, 'server.properties');
+      if (fs.existsSync(propsPath)) {
+        const propsContent = fs.readFileSync(propsPath, 'utf-8');
+        const ipMatch = propsContent.match(/^server-ip=(.*)$/m);
+        if (ipMatch) serverIp = ipMatch[1].trim();
+      }
+    } catch {}
+
     if (server) {
       return {
         name: server.name || 'MineControl OS',
+        serverIp,
         javaPath: server.javaPath || 'java',
         jarFile: server.jarFile || 'server.jar',
         minRam: server.minRam || '2G',
@@ -913,6 +997,7 @@ class MinecraftServerManager extends EventEmitter {
     // Fallback to legacy server_config
     return {
       name: config.name || 'MineControl OS',
+      serverIp,
       javaPath: config.javaPath || 'java',
       jarFile: config.jarFile || 'server.jar',
       minRam: config.minRam || '2G',
@@ -936,6 +1021,10 @@ class MinecraftServerManager extends EventEmitter {
 
   updateConfig(key: string, value: string) {
     const db = getDatabase();
+    // Sync server.properties when relevant keys change
+    const propsKeys = ['port', 'onlineMode', 'serverIp'];
+    const shouldSyncProps = propsKeys.includes(key);
+    const prevConfig = shouldSyncProps ? this.getConfig() : null;
     const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
     if (activeId) {
       // Map common keys to server columns
@@ -967,6 +1056,13 @@ class MinecraftServerManager extends EventEmitter {
       }
     }
     db.prepare('INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)').run(key, value);
+    // Sync server.properties after config change
+    if (shouldSyncProps) {
+      try {
+        const updatedConfig = this.getConfig();
+        this.syncServerProperties(updatedConfig);
+      } catch {}
+    }
   }
 
   getLogs(limit = 100, offset = 0): string[] {

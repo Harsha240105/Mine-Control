@@ -66,10 +66,10 @@ function collectSystemStats() {
   let diskTotal = 0, diskUsed = 0;
   try {
     const { execSync } = require('child_process');
-    const out = execSync('powershell "Get-CimInstance Win32_LogicalDisk -Filter DriveType=3 | Select-Object Size,FreeSpace | ConvertTo-Csv -NoHeader"', { encoding: 'utf-8', timeout: 5000 });
+    const out = execSync('powershell "Get-CimInstance Win32_LogicalDisk -Filter DriveType=3 | Select-Object Size,FreeSpace | ConvertTo-Csv -NoTypeInformation | Select-Object -Skip 1"', { encoding: 'utf-8', timeout: 5000 });
     const lines = out.trim().split('\n').filter((l: string) => l.trim());
     for (const line of lines) {
-      const parts = line.split(',');
+      const parts = line.replace(/"/g, '').split(',');
       if (parts.length >= 2 && parts[0] && parts[1]) {
         const totalBytes = parseInt(parts[0]);
         const freeBytes = parseInt(parts[1]);
@@ -225,11 +225,15 @@ router.post('/restart', authMiddleware, requirePermission('server.restart'), asy
     if (minecraftServer.isStarting) {
       return res.status(400).json({ error: 'Server is currently starting' });
     }
-    minecraftServer.stop().then(() => {
-      setTimeout(() => {
-        minecraftServer.start().catch((err: any) => console.error('[Start Error]', err.message));
-      }, 1000);
-    }).catch((err: any) => console.error('[Stop Error]', err.message));
+    if (minecraftServer.isRunning) {
+      minecraftServer.stop().then(() => {
+        setTimeout(() => {
+          minecraftServer.start().catch((err: any) => console.error('[Start Error]', err.message));
+        }, 1000);
+      }).catch((err: any) => console.error('[Stop Error]', err.message));
+    } else {
+      minecraftServer.start().catch((err: any) => console.error('[Start Error]', err.message));
+    }
     res.json({ success: true, message: 'Server restarting...' });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
@@ -317,24 +321,46 @@ router.get('/properties', authMiddleware, (_req: AuthRequest, res) => {
 
 router.put('/properties', authMiddleware, requirePermission('server.start'), async (req: AuthRequest, res) => {
   await autoBackupIfEnabled('Server properties change', 'autoOnConfigChange');
-  const updates: Record<string, string> = req.body;
+  let updates: Record<string, string> = req.body;
   const mcDir = resolveMinecraftDir();
   const propsPath = path.join(mcDir, 'server.properties');
   if (!fs.existsSync(propsPath)) {
     return res.status(400).json({ error: 'server.properties not found. Start the server first to generate it.' });
   }
+
+  // If online-mode is toggled, also sync enforce-secure-profile
+  if (updates['online-mode'] !== undefined) {
+    const newOnlineMode = updates['online-mode'];
+    if (newOnlineMode === 'false') {
+      updates['enforce-secure-profile'] = 'false';
+      updates['prevent-proxy-connections'] = 'false';
+    } else {
+      updates['enforce-secure-profile'] = 'true';
+    }
+  }
+
   let content = fs.readFileSync(propsPath, 'utf-8');
+  const changedKeys: string[] = [];
   for (const [key, value] of Object.entries(updates)) {
     const regex = new RegExp(`^${key}=.*`, 'm');
     if (regex.test(content)) {
-      content = content.replace(regex, `${key}=${value}`);
+      const before = content.match(regex)![0];
+      if (before !== `${key}=${value}`) {
+        content = content.replace(regex, `${key}=${value}`);
+        changedKeys.push(key);
+      }
     } else {
       content += `\n${key}=${value}`;
+      changedKeys.push(key);
     }
   }
-  fs.writeFileSync(propsPath, content, 'utf-8');
-  emitToAll('server:properties-updated', updates);
-  res.json({ success: true, message: 'Server properties updated. Restart server to apply changes.' });
+  if (changedKeys.length > 0) {
+    fs.writeFileSync(propsPath, content, 'utf-8');
+    emitToAll('server:properties-updated', updates);
+    res.json({ success: true, message: 'Server properties updated. Restart server to apply changes.', changed: changedKeys });
+  } else {
+    res.json({ success: true, message: 'No changes needed.', changed: [] });
+  }
 });
 
 // Connection Info
@@ -369,11 +395,14 @@ router.get('/connection', authMiddleware, async (_req: AuthRequest, res) => {
     if (espMatch) enforceSecureProfile = espMatch[1].trim() !== 'false';
   } catch {}
 
-  // Check Windows Firewall rule for Minecraft port
   let firewallActive = false;
+  let firewallAdmin = false;
   try {
-    const fwOut = execSync(`netsh advfirewall firewall show rule name="MineControl OS Minecraft" dir=in verbose`, { encoding: 'utf-8', timeout: 5000 });
-    firewallActive = fwOut.includes('Enabled:               Yes');
+    firewallAdmin = firewallManager.isAdmin();
+    if (firewallAdmin) {
+      const fwOut = execSync(`netsh advfirewall firewall show rule name="MineControl OS Minecraft" dir=in verbose`, { encoding: 'utf-8', timeout: 5000 });
+      firewallActive = fwOut.includes('Enabled:               Yes');
+    }
   } catch {}
 
   const networkInterfaces = os.networkInterfaces();
@@ -401,6 +430,7 @@ router.get('/connection', authMiddleware, async (_req: AuthRequest, res) => {
     onlineMode,
     enforceSecureProfile,
     firewallActive,
+    firewallAdmin,
     serverVersion: (config.jarFile || '').replace('paper-', '').replace('vanilla-', '').replace('.jar', '') || 'Unknown',
     playitAddress,
     playitEnabled: !!playitAddress,
@@ -1241,9 +1271,13 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
 // Windows Firewall check
 router.get('/firewall-check', authMiddleware, async (_req: AuthRequest, res) => {
   try {
-    const out = execSync(`netsh advfirewall firewall show rule name="MineControl OS Minecraft" dir=in verbose`, { encoding: 'utf-8', timeout: 5000 });
-    const active = out.includes('Enabled:               Yes');
-    res.json({ active, message: active ? 'Firewall rule exists and enabled' : 'No firewall rule found' });
+    if (firewallManager.isAdmin()) {
+      const out = execSync(`netsh advfirewall firewall show rule name="MineControl OS Minecraft" dir=in verbose`, { encoding: 'utf-8', timeout: 5000 });
+      const active = out.includes('Enabled:               Yes');
+      res.json({ active, message: active ? 'Firewall rule exists and enabled' : 'No firewall rule found' });
+    } else {
+      res.json({ active: false, message: 'Cannot check firewall without admin privileges' });
+    }
   } catch {
     res.json({ active: false, message: 'No firewall rule found' });
   }
@@ -1252,6 +1286,9 @@ router.get('/firewall-check', authMiddleware, async (_req: AuthRequest, res) => 
 // Windows Firewall add rule
 router.post('/firewall-add', authMiddleware, requirePermission('server.start'), async (_req: AuthRequest, res) => {
   try {
+    if (!firewallManager.isAdmin()) {
+      return res.status(403).json({ error: 'Admin privileges required to modify firewall rules' });
+    }
     const config = minecraftServer.getConfig();
     execSync(
       `netsh advfirewall firewall add rule name="MineControl OS Minecraft" dir=in action=allow protocol=TCP localport=${config.port} profile=any description="Allow Minecraft server connections (port ${config.port})"`,
@@ -1404,7 +1441,11 @@ router.get('/firewall', authMiddleware, async (_req: AuthRequest, res) => {
       verify = firewallManager.verifyPort(port);
     }
     res.json({
-      ...rule,
+      exists: rule.exists,
+      enabled: rule.enabled,
+      port: rule.port,
+      protocol: rule.protocol,
+      adminRequired: !admin,
       isAdmin: admin,
       isWindows: firewallManager.isWindows(),
       verification: verify,

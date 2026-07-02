@@ -7,7 +7,7 @@
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.52-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.54-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="MIT License"/>
@@ -70,6 +70,9 @@ PaperMC, Purpur, Fabric, Quilt, Forge, NeoForge, Spigot, Folia, Vanilla, Velocit
 - Minecraft protocol ping for live status verification
 - Windows Firewall one-click rule add/remove via netsh
 - Compatibility Manager with launcher-specific indicators
+- 12-step Connection Validator with specific per-step failure messages
+- Smart `server.properties` sync: auto-fixes `server-ip` binding, `enforce-secure-profile` in offline mode
+- TCP port listening verification after "Done" event ensures real reachability
 
 ### Feedback & Issue Management
 - Local-first: no GitHub account required, everything stored in SQLite

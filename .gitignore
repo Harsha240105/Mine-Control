@@ -41,4 +41,5 @@ server-out.log
 *.db-wal
 update-backups/
 SPECIFICATION-*.md
+MineControl OS/
 

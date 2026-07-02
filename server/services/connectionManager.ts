@@ -2,6 +2,8 @@ import net from 'net';
 import dns from 'dns';
 import https from 'https';
 import os from 'os';
+import path from 'path';
+import fs from 'fs';
 import { execSync } from 'child_process';
 import { getDatabase } from '../database';
 import { minecraftServer } from './minecraftServer';
@@ -107,7 +109,6 @@ export class ConnectionManager {
     const running = minecraftServer.isRunning;
     const mcDir = resolveMinecraftDir();
 
-    // Get version info from DB directly
     let serverVersion = '';
     let serverSoftware = '';
     try {
@@ -121,8 +122,7 @@ export class ConnectionManager {
 
     let onlineMode = true;
     try {
-      const fs = require('fs');
-      const propsPath = require('path').join(mcDir, 'server.properties');
+      const propsPath = path.join(mcDir, 'server.properties');
       if (fs.existsSync(propsPath)) {
         const content = fs.readFileSync(propsPath, 'utf-8');
         const match = content.match(/^online-mode=(.*)$/m);
@@ -134,6 +134,7 @@ export class ConnectionManager {
     let playitAddress = '';
     let playitTunnelActive = false;
     let playitLatency: number | null = null;
+    let playitError: string | null = null;
     try {
       const row = db.prepare("SELECT value FROM server_config WHERE key = 'playitAddress'").get() as any;
       playitAddress = row?.value || '';
@@ -142,18 +143,25 @@ export class ConnectionManager {
         playitTunnelActive = await new Promise<boolean>(resolve => {
           dns.resolve(host, (err) => resolve(!err));
         });
-        if (playitTunnelActive && running) {
+        if (!playitTunnelActive) {
+          playitError = `Playit.gg domain ${host} does not resolve. The tunnel agent may not be running.`;
+        } else if (running) {
           const pingPort = parseInt(playitAddress.split(':')[1] || String(port));
           const ping = await mcPing(host, pingPort, 3000);
-          if (ping.online) playitLatency = ping.latency || null;
+          if (ping.online) {
+            playitLatency = ping.latency || null;
+          } else {
+            playitError = `Playit tunnel resolves but Minecraft not responding through it. Check tunnel points to localhost:${port}.`;
+          }
         }
+      } else if (playitAddress) {
+        playitError = `Playit.gg address "${playitAddress}" appears invalid.`;
       }
     } catch {}
 
     const firewallStatus = firewallManager.checkRule();
     const lanIps = getLanAddresses();
 
-    // Test interfaces
     let localPingOk = false;
     let localPingLatency: number | null = null;
     let tcpPortOpen = false;
@@ -178,14 +186,12 @@ export class ConnectionManager {
 
     const publicIp = await fetchPublicIp();
 
-    // Determine recommended method
     let recommended: ConnectionStatus['recommendedMethod'] = 'localhost';
     if (running && tcpPortOpen) {
       if (playitTunnelActive) recommended = 'playit';
       else if (lanResults.some(r => r.reachable)) recommended = 'lan';
     }
 
-    // Save diagnostics to DB
     try {
       db.prepare(`
         INSERT INTO connection_diagnostics 
@@ -201,7 +207,6 @@ export class ConnectionManager {
         recommended, JSON.stringify({ firewallStatus, lanResults })
       );
 
-      // Update connection_config
       const existing = db.prepare('SELECT id FROM connection_config WHERE server_id = ?').get(serverId);
       if (existing) {
         db.prepare('UPDATE connection_config SET last_diagnostics_at = ? WHERE server_id = ?').run(new Date().toISOString(), serverId);
@@ -237,6 +242,7 @@ export class ConnectionManager {
         playit: { available: !!playitAddress, address: playitAddress, status: !playitAddress ? 'not_configured' : playitTunnelActive ? 'online' : 'offline', latency: playitLatency },
         public: { available: !!publicIp, address: publicIp ? `${publicIp}:${port}` : '', status: !running ? 'offline' : 'unknown' },
       },
+      lastPingResult: localPingOk ? { online: true, latency: localPingLatency } : { online: false, error: playitError || 'Server not responding' },
     };
 
     return result;

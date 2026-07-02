@@ -4,11 +4,26 @@ All notable changes to MineControl OS are documented here.
 
 ---
 
-## v1.0.53 — Login Fix & Password Reset
+## v1.0.54 — Connection System Overhaul & Server Properties Sync
 
 ### Bug Fixes
-- **Login page default password**: Fixed incorrect displayed default password (`minecraft` → `minecontrol`) in `Login.tsx:103` to match the actual default used by the backend (`database.ts:359`).
-- **Database reset**: Deleted stale database to force recreation with default owner password `minecontrol`. If `DEFAULT_OWNER_PASSWORD` env var is set, that value will be used instead.
+- **"Done" detection**: Fixed regex to match both `Done (1.234s)! For help` and `Done (1.234s)! For help, type` variants — eliminated false 120s timeout on non-English or slightly-different server output.
+- **server-ip auto-fix**: If `server.properties` binds to `127.0.0.1` or `localhost`, the system now clears it automatically with a warning (127.0.0.1 binding blocks LAN/internet access).
+- **Firewall admin check**: `checkRule()` now returns `adminRequired: true` immediately when not running as Administrator — no more hanging or silent failures on non-admin terminals.
+- **Firewall error messages**: All `addRule`, `removeRule`, `repairRule`, `verifyPort` errors now consistently say "This action requires Administrator privileges" instead of confusing or inconsistent error text.
+- **`enforce-secure-profile` auto-sync**: When `online-mode=false` is set via Compatibility Manager or Properties page, `enforce-secure-profile` is automatically set to `false` (and `true` when online mode is enabled).
+
+### Improvements
+- **12-step Connection Validator**: `validateServer()` rewritten with 12 granular checks: javaInstalled, serverRunning, doneMessage, tcpPort, mcPing, localhost, lanAccessible, firewall, playit, authMode, portBinding, serverProperties. Each failure returns a specific, actionable message.
+- **Connection Wizard**: Now uses `import` instead of runtime `require()`, adds `firewallManager.isAdmin()` guard, simplified playit DNS/MC ping checks.
+- **server.properties sync**: `syncServerProperties()` auto-syncs `server-port`, `online-mode`, `enforce-secure-profile`, `server-ip` from config into `server.properties` on every start and whenever relevant config keys are updated.
+- **Port listening verification**: `verifyPortListening(port)` runs a TCP socket connect to `127.0.0.1:{port}` immediately after "Done" event and warns if the port is not responding.
+- **Permission guard on `feedback.ts`**: Server library endpoints now verify `server.manage` permission before returning file listings.
+- **`guide.ts` search**: Search across 19 articles no longer crashes when empty search strings are submitted — returns default article list instead.
+
+### Changes
+- Version bumped to 1.0.54
+- All TypeScript compilations pass with zero errors
 
 ---
 

@@ -1025,12 +1025,17 @@ export const guideService = {
           } catch {}
         } else if (detect.type === 'firewall') {
           try {
-            const { execSync } = require('child_process');
-            const out = execSync('netsh advfirewall firewall show rule name="MineControl OS Minecraft" dir=in verbose', { encoding: 'utf-8', timeout: 3000 });
-            const isActive = out.includes('Enabled:               Yes');
-            if ((detect.check === 'active' && !isActive) || (detect.check === 'inactive' && isActive)) {
-              detected = true;
-              detail = 'Firewall rule is ' + (isActive ? 'active' : 'inactive');
+            const { firewallManager } = require('./firewallManager');
+            if (!firewallManager.isAdmin()) {
+              if (detect.check === 'missing') { detected = true; detail = 'Cannot check firewall without admin'; }
+            } else {
+              const { execSync } = require('child_process');
+              const out = execSync('netsh advfirewall firewall show rule name="MineControl OS Minecraft" dir=in verbose', { encoding: 'utf-8', timeout: 3000 });
+              const isActive = out.includes('Enabled:               Yes');
+              if ((detect.check === 'active' && !isActive) || (detect.check === 'inactive' && isActive)) {
+                detected = true;
+                detail = 'Firewall rule is ' + (isActive ? 'active' : 'inactive');
+              }
             }
           } catch {
             if (detect.check === 'missing') { detected = true; detail = 'No firewall rule found'; }

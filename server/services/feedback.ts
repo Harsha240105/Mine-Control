@@ -95,8 +95,13 @@ function collectDiagnostics(issueType: string): Record<string, any> {
 
   let firewallStatus = 'unknown';
   try {
-    const fwOut = execSync('netsh advfirewall firewall show rule name="MineControl OS Minecraft" dir=in verbose', { encoding: 'utf-8', timeout: 3000 });
-    firewallStatus = fwOut.includes('Enabled:               Yes') ? 'active' : 'inactive';
+    const { firewallManager } = require('./firewallManager');
+    if (firewallManager.isAdmin()) {
+      const fwOut = execSync('netsh advfirewall firewall show rule name="MineControl OS Minecraft" dir=in verbose', { encoding: 'utf-8', timeout: 3000 });
+      firewallStatus = fwOut.includes('Enabled:               Yes') ? 'active' : 'inactive';
+    } else {
+      firewallStatus = 'no_rule';
+    }
   } catch {
     firewallStatus = 'no_rule';
   }

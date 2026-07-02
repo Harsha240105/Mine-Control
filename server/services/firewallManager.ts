@@ -4,12 +4,32 @@ import os from 'os';
 const RULE_NAME = 'MineControl OS Minecraft';
 
 export class FirewallManager {
+  private _adminChecked = false;
+  private _isAdminCached = false;
+
   isWindows(): boolean {
     return os.platform() === 'win32';
   }
 
-  checkRule(): { exists: boolean; enabled: boolean; port?: string; protocol?: string } {
-    if (!this.isWindows()) return { exists: false, enabled: false };
+  isAdmin(): boolean {
+    if (this._adminChecked) return this._isAdminCached;
+    this._adminChecked = true;
+    if (!this.isWindows()) return false;
+    try {
+      const out = execSync(
+        'powershell -NoProfile -Command "[Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)"',
+        { encoding: 'utf-8', timeout: 3000 }
+      );
+      this._isAdminCached = out.trim() === 'True';
+    } catch {
+      this._isAdminCached = false;
+    }
+    return this._isAdminCached;
+  }
+
+  checkRule(): { exists: boolean; enabled: boolean; port?: string; protocol?: string; adminRequired?: boolean } {
+    if (!this.isWindows()) return { exists: false, enabled: false, adminRequired: false };
+    if (!this.isAdmin()) return { exists: false, enabled: false, adminRequired: true };
     try {
       const out = execSync(`netsh advfirewall firewall show rule name="${RULE_NAME}" dir=in verbose`, { encoding: 'utf-8', timeout: 8000 });
       const exists = out.length > 50;
@@ -17,12 +37,13 @@ export class FirewallManager {
       const portMatch = out.match(/LocalPort:\s+(\d+)/);
       return { exists, enabled, port: portMatch?.[1] || undefined, protocol: 'TCP' };
     } catch {
-      return { exists: false, enabled: false };
+      return { exists: false, enabled: false, adminRequired: false };
     }
   }
 
   addRule(port: number = 25565): { success: boolean; message: string } {
     if (!this.isWindows()) return { success: false, message: 'Firewall management is only available on Windows' };
+    if (!this.isAdmin()) return { success: false, message: 'This action requires Administrator privileges. Restart MineControl OS as Administrator.' };
     try {
       const existing = this.checkRule();
       if (existing.exists && existing.enabled) {
@@ -39,7 +60,7 @@ export class FirewallManager {
       return { success: true, message: `Firewall rule added for TCP port ${port}` };
     } catch (err: any) {
       if (err.message?.includes('Access is denied') || err.message?.includes('required')) {
-        return { success: false, message: 'Administrator permission required. Run MineControl OS as Administrator to modify firewall rules.' };
+        return { success: false, message: 'This action requires Administrator privileges. Restart MineControl OS as Administrator.' };
       }
       return { success: false, message: err.message || 'Failed to add firewall rule' };
     }
@@ -47,6 +68,7 @@ export class FirewallManager {
 
   removeRule(): { success: boolean; message: string } {
     if (!this.isWindows()) return { success: false, message: 'Firewall management is only available on Windows' };
+    if (!this.isAdmin()) return { success: false, message: 'This action requires Administrator privileges. Restart MineControl OS as Administrator.' };
     try {
       execSync(`netsh advfirewall firewall delete rule name="${RULE_NAME}"`, { encoding: 'utf-8', timeout: 10000 });
       return { success: true, message: 'Firewall rule removed' };
@@ -57,13 +79,12 @@ export class FirewallManager {
 
   repairRule(port: number = 25565): { success: boolean; message: string } {
     if (!this.isWindows()) return { success: false, message: 'Firewall management is only available on Windows' };
+    if (!this.isAdmin()) return { success: false, message: 'This action requires Administrator privileges. Restart MineControl OS as Administrator.' };
     try {
-      // Remove existing rule if it exists
       const existing = this.checkRule();
       if (existing.exists) {
         execSync(`netsh advfirewall firewall delete rule name="${RULE_NAME}"`, { encoding: 'utf-8', timeout: 10000 });
       }
-      // Re-create fresh
       execSync(
         `netsh advfirewall firewall add rule name="${RULE_NAME}" dir=in action=allow protocol=TCP localport=${port} description="Allow Minecraft server connections through MineControl OS"`,
         { encoding: 'utf-8', timeout: 10000 }
@@ -71,7 +92,7 @@ export class FirewallManager {
       return { success: true, message: `Firewall rule repaired for TCP port ${port}` };
     } catch (err: any) {
       if (err.message?.includes('Access is denied') || err.message?.includes('required')) {
-        return { success: false, message: 'Administrator permission required. Run MineControl OS as Administrator to modify firewall rules.' };
+        return { success: false, message: 'This action requires Administrator privileges. Restart MineControl OS as Administrator.' };
       }
       return { success: false, message: err.message || 'Failed to repair firewall rule' };
     }
@@ -97,16 +118,9 @@ export class FirewallManager {
     }
   }
 
-  isAdmin(): boolean {
-    try {
-      execSync('net session', { encoding: 'utf-8', timeout: 3000 });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   verifyPort(port: number): { allowed: boolean; message: string } {
+    if (!this.isWindows()) return { allowed: false, message: 'Firewall verification is only available on Windows' };
+    if (!this.isAdmin()) return { allowed: false, message: 'Cannot verify firewall rules without Administrator privileges.' };
     try {
       const out = execSync(`netsh advfirewall firewall show rule name="${RULE_NAME}" dir=in verbose`, { encoding: 'utf-8', timeout: 8000 });
       const hasPort = out.includes(`LocalPort: ${port}`);
