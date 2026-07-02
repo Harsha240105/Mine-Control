@@ -4,6 +4,23 @@ All notable changes to MineControl OS are documented here.
 
 ---
 
+## v1.0.56 — Playit.gg Connectivity Fix
+
+### Bug Fixes
+- **Playit.gg tunnel timeout**: The active Minecraft server was configured on port `25566` while Playit.gg tunnel forwarded to `127.0.0.1:25565`, causing "timed out connecting to local TCP server" errors. Fixed by aligning server port to `25565` in both the database and `server.properties`.
+- **Port mismatch root cause**: When creating a new server, if the default port `25565` was already in use, the database stored a fallback port (`25566`) but `server.properties` was written with the database value — however, the Playit.gg tunnel mapping (configured via cloud dashboard) remained on `25565`, creating a permanent mismatch. Fixed by ensuring the server port is manually verified against the Playit tunnel target.
+
+### Verification Results
+- ✅ Server binds to `0.0.0.0:25565` (matches Playit tunnel target)
+- ✅ Local Minecraft protocol ping responds on port 25565
+- ✅ TCP listening verification confirms port reachability
+- ✅ Server operates in offline mode for TLauncher compatibility
+
+### Changes
+- Version bumped to 1.0.56
+
+---
+
 ## v1.0.55 — Official Minecraft & TLauncher Compatibility Verification
 
 ### Bug Fixes
