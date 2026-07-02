@@ -7,7 +7,7 @@
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.54-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.55-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="MIT License"/>
@@ -27,6 +27,15 @@ MineControl OS is an all-in-one Electron desktop application that wraps Paper, F
 | **Same Laptop** | `localhost:25565` | Just you |
 | **LAN** | Auto-detected LAN IP | Friends on same network |
 | **Internet** | Playit.gg tunnel or port forwarding | Anyone |
+
+### Launcher Compatibility
+
+| Launcher | Online Mode (Premium) | Offline Mode (Cracked) |
+|----------|----------------------|----------------------|
+| **Official Minecraft Launcher** | ✓ Works | ✓ Works |
+| **TLauncher / Offline Launchers** | ✗ Blocked | ✓ Works |
+
+Select **Offline Mode** in the Compatibility Manager or set `online-mode=false` in server.properties to allow both official and TLauncher clients simultaneously.
 
 The app auto-detects your network environment and recommends the correct connection method.
 
@@ -363,6 +372,13 @@ A: Yes — supported via AppImage and deb packages.
 - Check Connection tab for correct LAN IP
 - Ensure Windows Firewall allows port 25565
 - Try `localhost:25565` on the hosting machine first
+
+### TLauncher / offline launcher gets "Connection timed out"
+- **Check Offline Mode**: Ensure `online-mode=false` in server.properties. Go to Compatibility Manager → select "Offline / Non-Premium" → Apply Settings.
+- **Tunnel compatibility**: If using Playit.gg, verify the tunnel points to `localhost:25565` and is running. Official clients work but TLauncher fails usually means the tunnel is misconfigured or the TLauncher user entered the wrong address.
+- **Firewall**: Ensure your Windows Firewall allows Java on the server port. Use the Firewall tab in Connection Manager.
+- **Client-side**: The TLauncher user's network may be blocking the Playit.gg domain or port. Ask them to try a different network or use a VPN.
+- **Minecraft version**: Make sure the TLauncher user is running the same Minecraft version as the server.
 
 ### Update check fails
 - Requires internet access to reach GitHub

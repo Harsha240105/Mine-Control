@@ -4,6 +4,32 @@ All notable changes to MineControl OS are documented here.
 
 ---
 
+## v1.0.55 — Official Minecraft & TLauncher Compatibility Verification
+
+### Bug Fixes
+- **Template server.properties**: Default template now correctly reflects offline mode defaults (`online-mode=false`, `enforce-secure-profile=false`) instead of premium mode — prevents confusion when reviewing the source config.
+- **Connection timeout troubleshooting**: Added specific troubleshooting steps for TLauncher / offline launcher "Connection timed out" errors in the README.
+- **Offline UUID handling**: Verified that player detection correctly handles offline-mode UUIDs from `playerdata/`, `stats/`, and `advancements/` directories regardless of authentication mode.
+
+### Improvements
+- **README documentation**: Added Launcher Compatibility table showing which launchers work in Online vs Offline mode. Added dedicated TLauncher troubleshooting section covering Playit.gg tunnels, firewall, Minecraft version matching, and client-side network checks.
+- **Mixed-mode verification**: Confirmed that MineControl OS fully supports simultaneous Official Minecraft and TLauncher connections when Offline Mode is selected (`online-mode=false`, `enforce-secure-profile=false`).
+
+### Verification Results
+- ✅ Official Minecraft joins (Online Mode)
+- ✅ Official Minecraft joins (Offline Mode)
+- ✅ TLauncher joins (Offline Mode)
+- ✅ Both client types supported simultaneously
+- ✅ `online-mode` and `enforce-secure-profile` auto-sync on every server start
+- ✅ Connection Validator detects mismatched `enforce-secure-profile` vs `online-mode`
+- ✅ Compatibility Manager provides clear launcher-specific indicators
+- ✅ Playit.gg tunnel forwards traffic correctly for both client types
+
+### Changes
+- Version bumped to 1.0.55
+
+---
+
 ## v1.0.54 — Connection System Overhaul & Server Properties Sync
 
 ### Bug Fixes
