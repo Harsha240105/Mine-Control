@@ -182,6 +182,40 @@ router.get('/attachment-file', (req, res) => {
   res.sendFile(filePath);
 });
 
+router.post('/sync-from-github', authMiddleware, async (_req: AuthRequest, res) => {
+  try {
+    const result = await feedbackService.syncAllFromGitHub();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/:id/sync-from-github', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const ticket = await feedbackService.syncTicketFromGitHub(req.params.id);
+    res.json(ticket);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:id/github-comments', authMiddleware, (req: AuthRequest, res) => {
+  const ticket = feedbackService.getTicket(req.params.id);
+  if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+  const comments = feedbackService.getGitHubComments(ticket.id);
+  res.json(comments);
+});
+
+router.post('/:id/sync-comments', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const comments = await feedbackService.syncGitHubComments(req.params.id);
+    res.json(comments);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.delete('/:id/attachments/:attachmentId', authMiddleware, (req: AuthRequest, res) => {
   feedbackService.deleteAttachment(req.params.attachmentId);
   res.json({ success: true });

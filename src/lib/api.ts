@@ -509,6 +509,14 @@ export const api = {
     request<any>(`/feedback/tracker-config?server_id=${serverId}`),
   saveIssueTrackerConfig: (data: any) =>
     request<any>('/feedback/tracker-config', { method: 'POST', body: JSON.stringify(data) }),
+  syncAllFromGitHub: () =>
+    request<any>('/feedback/sync-from-github', { method: 'POST' }),
+  syncTicketFromGitHub: (id: string) =>
+    request<any>(`/feedback/${id}/sync-from-github`, { method: 'POST' }),
+  getGitHubComments: (id: string) =>
+    request<any[]>(`/feedback/${id}/github-comments`),
+  syncGitHubComments: (id: string) =>
+    request<any[]>(`/feedback/${id}/sync-comments`, { method: 'POST' }),
 
   // Privacy & Security
   getPrivacyData: () => request<any>('/privacy/data'),

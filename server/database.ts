@@ -1197,6 +1197,38 @@ function initializeSchema() {
 
     db.prepare('INSERT INTO schema_version (version) VALUES (12)').run();
   }
+
+  if (currentVersion < 13) {
+    // Add GitHub sync columns to feedback_tickets
+    const ticketCols = db.prepare("PRAGMA table_info('feedback_tickets')").all().map((r: any) => r.name);
+    if (!ticketCols.includes('github_state')) db.exec("ALTER TABLE feedback_tickets ADD COLUMN github_state TEXT DEFAULT ''");
+    if (!ticketCols.includes('github_labels')) db.exec("ALTER TABLE feedback_tickets ADD COLUMN github_labels TEXT DEFAULT '[]'");
+    if (!ticketCols.includes('github_milestone')) db.exec("ALTER TABLE feedback_tickets ADD COLUMN github_milestone TEXT DEFAULT ''");
+    if (!ticketCols.includes('github_assignee')) db.exec("ALTER TABLE feedback_tickets ADD COLUMN github_assignee TEXT DEFAULT ''");
+    if (!ticketCols.includes('github_created_at')) db.exec("ALTER TABLE feedback_tickets ADD COLUMN github_created_at TEXT DEFAULT ''");
+    if (!ticketCols.includes('github_updated_at')) db.exec("ALTER TABLE feedback_tickets ADD COLUMN github_updated_at TEXT DEFAULT ''");
+    if (!ticketCols.includes('last_synced_at')) db.exec("ALTER TABLE feedback_tickets ADD COLUMN last_synced_at TEXT DEFAULT ''");
+    if (!ticketCols.includes('duplicate_of')) db.exec("ALTER TABLE feedback_tickets ADD COLUMN duplicate_of TEXT DEFAULT ''");
+
+    // GitHub comments cache table
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS github_comments (
+        id TEXT PRIMARY KEY,
+        ticket_id TEXT NOT NULL,
+        github_comment_id INTEGER NOT NULL,
+        author TEXT NOT NULL DEFAULT '',
+        body TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT '',
+        FOREIGN KEY (ticket_id) REFERENCES feedback_tickets(id) ON DELETE CASCADE
+      );
+      CREATE INDEX IF NOT EXISTS idx_github_comments_ticket ON github_comments(ticket_id);
+      CREATE INDEX IF NOT EXISTS idx_github_comments_github_id ON github_comments(github_comment_id);
+    `);
+
+    db.prepare('INSERT INTO schema_version (version) VALUES (13)').run();
+  }
+
 }
 
 function migrateDefaultServer() {

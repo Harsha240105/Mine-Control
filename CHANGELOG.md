@@ -4,7 +4,22 @@ All notable changes to MineControl OS are documented here.
 
 ---
 
-## v1.0.58 — Repository Organization & Production Build
+## v1.0.58 — Full GitHub Issue Sync & Repository Organization
+
+### Feedback → GitHub Issue Synchronization (Complete)
+- **GitHub Issue auto-creation**: The sync queue creates real GitHub Issues via the GitHub REST API with full issue body (type, summary, diagnostics, console logs, crash reports, plugins, mods, environment)
+- **Duplicate prevention**: Before creating an issue, searches GitHub for matching title/description to prevent duplicates. Detected duplicates update local ticket with existing GitHub URL.
+- **Full metadata storage**: Every synced ticket stores GitHub Issue Number, URL, State (open/closed), Labels, Milestone, Assignee, Created/Updated time in the database
+- **Sync FROM GitHub** (`POST /feedback/sync-from-github`): Periodically fetches issue state, labels, milestone, assignee from GitHub and updates local tickets
+- **Status mapping**: GitHub `closed` → local `resolved`, GitHub labels (`status-accepted`, `status-in-progress`, `status-wontfix`, etc.) → local status changes
+- **Milestone detection**: When an issue is closed with a version milestone (e.g. `v1.0.58`), the ticket is notified as "fixed in vX.X.X"
+- **Comment sync** (`POST /feedback/:id/sync-comments`): Fetches GitHub comments and caches them in a new `github_comments` table
+- **Developer reply notifications**: New comments from non-bot users trigger in-app notifications and real-time Socket.IO events
+- **In-app notifications**: Users are notified for: issue created, duplicate detected, sync failure, status changes from GitHub, developer replies, fix released
+- **Database migration v13**: Adds `github_state`, `github_labels`, `github_milestone`, `github_assignee`, `github_created_at`, `github_updated_at`, `last_synced_at`, `duplicate_of` columns to `feedback_tickets`; new `github_comments` table
+- **Frontend API**: New methods (`syncAllFromGitHub`, `syncTicketFromGitHub`, `getGitHubComments`, `syncGitHubComments`) in the API client
+- **No GitHub account required**: Users submit only through MineControl OS; all GitHub interaction is handled by the backend
+- **Offline queue preserved**: All sync operations go through the existing sync_queue with retry logic (10 retries, exponential backoff)
 
 ### Repository Structure
 - **New root docs**: SUPPORT.md and ROADMAP.md with comprehensive support channels and development milestones
@@ -14,14 +29,7 @@ All notable changes to MineControl OS are documented here.
 - **New CI workflow**: `.github/workflows/ci.yml` for automated TypeScript type-checking, linting, and build verification on every PR
 - **Labels configuration**: `.github/labels.yml` with 40+ labels organized by issue type, priority, status, area, platform
 - **Documentation**: New `docs/` folder with architecture overview, API reference, development guide, and deployment guide
-- **Updated README**: Version badge bumped to v1.0.57, minor fixes
-
-### Feedback → GitHub Issue Synchronization
-- **Actual GitHub API integration**: The feedback sync queue now creates real GitHub Issues via the GitHub REST API when an issue tracker config is configured with GitHub provider and a valid API token
-- **Diagnostics as issue body**: Auto-collected diagnostics, server logs, crash reports, and system info are included in the GitHub issue body
-- **Sync status tracking**: After successful creation, the ticket's `github_url`, `issue_tracker_url`, and `issue_tracker_id` are saved, and status is updated to `synced`
-- **Error handling**: Failed syncs increment retry count, show the error, and remain in the queue for retry (up to 10 retries)
-- **Credential masking**: Diagnostics are sanitized before sending to GitHub (passwords, tokens, IPs masked)
+- **Updated README**: Version badge bumped to v1.0.58, Android "Coming Soon" badge added
 
 ### Changes
 - Version bumped to 1.0.58

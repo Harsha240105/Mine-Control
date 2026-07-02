@@ -709,12 +709,132 @@ export const feedbackService = {
     return body;
   },
 
-  _createGitHubIssue(ticket: any, config: any): Promise<void> {
+  _checkForDuplicate(ticket: any, config: any): Promise<{ isDuplicate: boolean; existingIssue?: any }> {
     return new Promise((resolve, reject) => {
+      const [owner, repo] = config.repository.split('/');
+      if (!owner || !repo) {
+        reject(new Error('Invalid GitHub repository format'));
+        return;
+      }
+
+      const searchTitle = encodeURIComponent(ticket.summary?.slice(0, 80) || ticket.ticket_id);
+      const searchDesc = encodeURIComponent(ticket.description?.slice(0, 80) || '');
+
+      const req = https.request({
+        hostname: 'api.github.com',
+        path: `/search/issues?q=${searchTitle}+repo:${owner}/${repo}+is:issue&sort=created&order=desc`,
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${config.api_token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'MineControl-OS-Feedback-Sync/1.0',
+        },
+      }, (res) => {
+        let data = '';
+        res.on('data', (chunk: string) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            const result = JSON.parse(data);
+            if (result.items && result.items.length > 0) {
+              const match = result.items.find((i: any) =>
+                i.title.toLowerCase().includes(ticket.summary?.toLowerCase().slice(0, 40) || ticket.ticket_id.toLowerCase())
+              );
+              if (match) {
+                resolve({ isDuplicate: true, existingIssue: match });
+                return;
+              }
+            }
+            resolve({ isDuplicate: false });
+          } catch (e: any) {
+            reject(new Error(`Duplicate check failed: ${e.message}`));
+          }
+        });
+      });
+
+      req.on('error', (e) => reject(new Error(`Duplicate check request failed: ${e.message}`)));
+      req.end();
+    });
+  },
+
+  _createNotification(ticketId: string, ticketTitle: string, type: string, message: string) {
+    try {
+      const db = getDatabase();
+      const nid = uuidv4();
+      db.prepare(`
+        INSERT INTO notifications (id, title, message, type, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(nid, `Feedback: ${ticketTitle}`, message, type, new Date().toISOString());
+      try {
+        getIO().emit('notification:new', { id: nid, title: ticketTitle, message, type });
+      } catch {}
+    } catch {}
+  },
+
+  _storeGitHubMetadata(ticketId: string, issue: any) {
+    const db = getDatabase();
+    const now = new Date().toISOString();
+    db.prepare(`
+      UPDATE feedback_tickets SET
+        github_url = ?, issue_tracker_url = ?, issue_tracker_id = ?,
+        github_state = ?, github_labels = ?, github_milestone = ?,
+        github_assignee = ?, github_created_at = ?, github_updated_at = ?,
+        last_synced_at = ?, sync_status = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      issue.html_url, issue.html_url, String(issue.number),
+      issue.state || 'open',
+      JSON.stringify((issue.labels || []).map((l: any) => typeof l === 'string' ? l : l.name)),
+      issue.milestone?.title || '',
+      issue.assignee?.login || '',
+      issue.created_at || now,
+      issue.updated_at || now,
+      now, 'synced', now,
+      ticketId,
+    );
+  },
+
+  _cacheGitHubComments(ticketId: string, comments: any[]) {
+    if (!comments || comments.length === 0) return;
+    const db = getDatabase();
+    const insert = db.prepare(`
+      INSERT OR REPLACE INTO github_comments (id, ticket_id, github_comment_id, author, body, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const c of comments) {
+      insert.run(
+        String(c.id), ticketId, c.id,
+        c.user?.login || 'unknown',
+        c.body || '',
+        c.created_at || new Date().toISOString(),
+        c.updated_at || '',
+      );
+    }
+  },
+
+  _createGitHubIssue(ticket: any, config: any): Promise<void> {
+    return new Promise(async (resolve, reject) => {
       const [owner, repo] = config.repository.split('/');
       if (!owner || !repo) {
         reject(new Error('Invalid GitHub repository format. Use "owner/repo".'));
         return;
+      }
+
+      // Duplicate check
+      try {
+        const dupCheck = await this._checkForDuplicate(ticket, config);
+        if (dupCheck.isDuplicate && dupCheck.existingIssue) {
+          const existing = dupCheck.existingIssue;
+          const db = getDatabase();
+          this._storeGitHubMetadata(ticket.id, existing);
+          db.prepare('UPDATE feedback_tickets SET duplicate_of = ? WHERE id = ?')
+            .run(existing.html_url, ticket.id);
+          this._createNotification(ticket.id, ticket.summary || ticket.ticket_id, 'warning',
+            `Duplicate detected — already tracked in GitHub issue #${existing.number}: ${existing.title}`);
+          reject(new Error(`Duplicate issue found: #${existing.number} — ${existing.title}`));
+          return;
+        }
+      } catch (e: any) {
+        // Duplicate check failed, proceed anyway
       }
 
       const typeLabels: Record<string, string> = {
@@ -752,10 +872,9 @@ export const feedbackService = {
           try {
             if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
               const result = JSON.parse(data);
-              const db = getDatabase();
-              const now = new Date().toISOString();
-              db.prepare('UPDATE feedback_tickets SET github_url = ?, issue_tracker_url = ?, issue_tracker_id = ?, sync_status = ?, updated_at = ? WHERE id = ?')
-                .run(result.html_url, result.html_url, String(result.number), 'synced', now, ticket.id);
+              this._storeGitHubMetadata(ticket.id, result);
+              this._createNotification(ticket.id, ticket.summary || ticket.ticket_id, 'success',
+                `GitHub issue created: #${result.number} — ${result.title}`);
               resolve();
             } else {
               let errMsg = `GitHub API error (${res.statusCode})`;
@@ -763,6 +882,8 @@ export const feedbackService = {
                 const errData = JSON.parse(data);
                 errMsg = errData.message || errMsg;
               } catch {}
+              this._createNotification(ticket.id, ticket.summary || ticket.ticket_id, 'error',
+                `Failed to create GitHub issue: ${errMsg}`);
               reject(new Error(errMsg));
             }
           } catch (e: any) {
@@ -771,9 +892,222 @@ export const feedbackService = {
         });
       });
 
-      req.on('error', (e) => reject(new Error(`GitHub request failed: ${e.message}`)));
+      req.on('error', (e) => {
+        this._createNotification(ticket.id, ticket.summary || ticket.ticket_id, 'error',
+          `GitHub request failed: ${e.message}`);
+        reject(new Error(`GitHub request failed: ${e.message}`));
+      });
       req.write(issueData);
       req.end();
+    });
+  },
+
+  syncTicketFromGitHub(ticketId: string): Promise<any> {
+    return new Promise((resolve, reject) => {
+      const db = getDatabase();
+      const ticket = db.prepare('SELECT * FROM feedback_tickets WHERE id = ?').get(ticketId) as any;
+      if (!ticket) { reject(new Error('Ticket not found')); return; }
+      if (!ticket.issue_tracker_id) { reject(new Error('Ticket has no GitHub issue number')); return; }
+      if (!ticket.github_url) { reject(new Error('Ticket has no GitHub URL')); return; }
+
+      const config = ticket.server_id
+        ? db.prepare('SELECT * FROM issue_tracker_config WHERE server_id = ? AND enabled = 1').get(ticket.server_id) as any
+        : null;
+      if (!config || config.provider !== 'github' || !config.api_token || !config.repository) {
+        reject(new Error('GitHub tracker not configured'));
+        return;
+      }
+
+      const [owner, repo] = config.repository.split('/');
+      if (!owner || !repo) { reject(new Error('Invalid repository')); return; }
+      const issueNumber = ticket.issue_tracker_id;
+
+      // Fetch issue details
+      https.get({
+        hostname: 'api.github.com',
+        path: `/repos/${owner}/${repo}/issues/${issueNumber}`,
+        headers: {
+          'Authorization': `Bearer ${config.api_token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'MineControl-OS-Feedback-Sync/1.0',
+        },
+      }, (res) => {
+        let data = '';
+        res.on('data', (chunk: string) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            if (!res.statusCode || res.statusCode >= 300) {
+              const errData = JSON.parse(data);
+              reject(new Error(errData.message || `GitHub API error ${res.statusCode}`));
+              return;
+            }
+            const issue = JSON.parse(data);
+
+            // Map GitHub state to local status
+            const oldStatus = ticket.status;
+            let newStatus = oldStatus;
+            if (issue.state === 'closed') {
+              newStatus = 'resolved';
+            } else if (issue.state === 'open') {
+              newStatus = 'open';
+            }
+            const now = new Date().toISOString();
+
+            // Store all metadata
+            this._storeGitHubMetadata(ticket.id, issue);
+
+            // Update local status if changed
+            if (newStatus !== oldStatus) {
+              db.prepare('UPDATE feedback_tickets SET status = ?, last_status_change_by = ?, last_status_change_at = ? WHERE id = ?')
+                .run(newStatus, 'github-sync', now, ticket.id);
+              addHistory(ticket.id, 'status', oldStatus, newStatus, 'github-sync', `Auto-synced from GitHub: ${issue.state}`);
+              this._createNotification(ticket.id, ticket.summary || ticket.ticket_id, 'info',
+                `Issue status updated: ${oldStatus} → ${newStatus} (synced from GitHub)`);
+            }
+
+            // Update local status based on GitHub labels
+            const ghLabels = (issue.labels || []).map((l: any) => typeof l === 'string' ? l : l.name);
+            const localStatusLabels: Record<string, string> = {
+              'status-accepted': 'in_review',
+              'status-in-progress': 'in_review',
+              'status-wontfix': 'rejected',
+              'status-duplicate': 'closed',
+              'status-needs-info': 'pending',
+            };
+            for (const [label, mappedStatus] of Object.entries(localStatusLabels)) {
+              if (ghLabels.includes(label) && ticket.status !== mappedStatus) {
+                const old = ticket.status;
+                db.prepare('UPDATE feedback_tickets SET status = ?, last_status_change_by = ?, last_status_change_at = ? WHERE id = ?')
+                  .run(mappedStatus, 'github-sync', now, ticket.id);
+                addHistory(ticket.id, 'status', old, mappedStatus, 'github-sync', `Auto-synced from GitHub label: ${label}`);
+                this._createNotification(ticket.id, ticket.summary || ticket.ticket_id, 'info',
+                  `Issue status updated via GitHub label: ${mappedStatus}`);
+                break;
+              }
+            }
+
+            // Check for released milestone → resolved + notify
+            if (issue.milestone) {
+              const milestoneTitle = issue.milestone.title;
+              db.prepare('UPDATE feedback_tickets SET github_milestone = ? WHERE id = ?').run(milestoneTitle, ticket.id);
+              if (issue.state === 'closed' && milestoneTitle.startsWith('v')) {
+                this._createNotification(ticket.id, ticket.summary || ticket.ticket_id, 'success',
+                  `Issue fixed in ${milestoneTitle} ✓`);
+              }
+            }
+
+            resolve(this.getTicket(ticket.id));
+          } catch (e: any) {
+            reject(new Error(`Failed to parse GitHub response: ${e.message}`));
+          }
+        });
+      }).on('error', (e) => reject(new Error(`GitHub request failed: ${e.message}`)));
+    });
+  },
+
+  syncAllFromGitHub(): Promise<{ synced: number; failed: number; errors: string[] }> {
+    return new Promise(async (resolve) => {
+      const db = getDatabase();
+      const isOnline = await checkConnectivity();
+      if (!isOnline) { resolve({ synced: 0, failed: 0, errors: ['No internet connection'] }); return; }
+
+      const syncedTickets = db.prepare(
+        "SELECT * FROM feedback_tickets WHERE sync_status = 'synced' AND github_url != '' AND issue_tracker_id != ''"
+      ).all() as any[];
+
+      let synced = 0;
+      let failed = 0;
+      const errors: string[] = [];
+
+      for (const ticket of syncedTickets) {
+        try {
+          await this.syncTicketFromGitHub(ticket.id);
+          synced++;
+        } catch (e: any) {
+          failed++;
+          errors.push(`Ticket ${ticket.ticket_id}: ${e.message}`);
+        }
+      }
+
+      try { getIO().emit('feedback:update'); } catch {}
+      resolve({ synced, failed, errors });
+    });
+  },
+
+  getGitHubComments(ticketId: string) {
+    const db = getDatabase();
+    return db.prepare('SELECT * FROM github_comments WHERE ticket_id = ? ORDER BY created_at ASC').all(ticketId) as any[];
+  },
+
+  syncGitHubComments(ticketId: string): Promise<any[]> {
+    return new Promise((resolve, reject) => {
+      const db = getDatabase();
+      const ticket = db.prepare('SELECT * FROM feedback_tickets WHERE id = ?').get(ticketId) as any;
+      if (!ticket || !ticket.issue_tracker_id || !ticket.github_url) {
+        reject(new Error('Ticket has no GitHub issue'));
+        return;
+      }
+
+      const config = ticket.server_id
+        ? db.prepare('SELECT * FROM issue_tracker_config WHERE server_id = ? AND enabled = 1').get(ticket.server_id) as any
+        : null;
+      if (!config || config.provider !== 'github' || !config.api_token || !config.repository) {
+        reject(new Error('GitHub tracker not configured'));
+        return;
+      }
+
+      const [owner, repo] = config.repository.split('/');
+      if (!owner || !repo) { reject(new Error('Invalid repository')); return; }
+
+      https.get({
+        hostname: 'api.github.com',
+        path: `/repos/${owner}/${repo}/issues/${ticket.issue_tracker_id}/comments`,
+        headers: {
+          'Authorization': `Bearer ${config.api_token}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'MineControl-OS-Feedback-Sync/1.0',
+        },
+      }, (res) => {
+        let data = '';
+        res.on('data', (chunk: string) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            if (!res.statusCode || res.statusCode >= 300) {
+              reject(new Error(`GitHub API error ${res.statusCode}`));
+              return;
+            }
+            const comments = JSON.parse(data);
+
+            // Check for new developer replies (non-system comments)
+            const existingComments = db.prepare('SELECT github_comment_id FROM github_comments WHERE ticket_id = ?').all(ticketId) as any[];
+            const existingIds = new Set(existingComments.map((c: any) => c.github_comment_id));
+            const newReplies = comments.filter((c: any) => !existingIds.has(c.id) && c.user?.type !== 'Bot');
+
+            this._cacheGitHubComments(ticketId, comments);
+
+            // Notify about new developer replies
+            for (const reply of newReplies) {
+              this._createNotification(ticket.id, ticket.summary || ticket.ticket_id, 'info',
+                `Developer replied: "${reply.body?.slice(0, 100)}${(reply.body?.length || 0) > 100 ? '...' : ''}"`);
+              try {
+                getIO().emit('feedback:comment', {
+                  ticketId: ticket.id,
+                  comment: {
+                    id: reply.id,
+                    author: reply.user?.login || 'unknown',
+                    body: reply.body || '',
+                    created_at: reply.created_at,
+                  },
+                });
+              } catch {}
+            }
+
+            resolve(comments);
+          } catch (e: any) {
+            reject(new Error(`Failed to parse comments: ${e.message}`));
+          }
+        });
+      }).on('error', (e) => reject(new Error(`GitHub request failed: ${e.message}`)));
     });
   },
 
@@ -843,6 +1177,7 @@ export const feedbackService = {
       log_snapshots: row.log_snapshots ? JSON.parse(row.log_snapshots) : {},
       connected_plugins: row.connected_plugins ? JSON.parse(row.connected_plugins) : [],
       connected_mods: row.connected_mods ? JSON.parse(row.connected_mods) : [],
+      github_labels: row.github_labels ? JSON.parse(row.github_labels) : [],
       votes: row.votes ?? 0,
       sync_retries: row.sync_retries ?? 0,
     };
