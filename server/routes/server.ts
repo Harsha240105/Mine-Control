@@ -26,6 +26,21 @@ import {
 } from '../services/download';
 import { emitToAll } from '../socketManager';
 
+function toStructured(err: any, status: number = 400): { error: string; code: string; reason: string; details: string; repairAction: string } {
+  const error = typeof err === 'string' ? err : (err?.message || String(err));
+  return {
+    error,
+    code: err?.code || (status === 500 ? 'INTERNAL_ERROR' : 'BAD_REQUEST'),
+    reason: err?.reason || error,
+    details: err?.details || (err?.stack ? err.stack.split('\n').slice(0, 3).join(' ') : ''),
+    repairAction: err?.repairAction || (status === 500 ? 'Restart the application if the problem persists' : 'Check your input and try again')
+  };
+}
+
+function sendError(res: any, status: number, err: any) {
+  safeJson(res, status, toStructured(err, status));
+}
+
 const router = Router();
 
 router.get('/java/scan', authMiddleware, async (_req, res) => {
@@ -33,7 +48,7 @@ router.get('/java/scan', authMiddleware, async (_req, res) => {
     const installs = await JavaDetector.scan();
     res.json(installs);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 
@@ -41,13 +56,13 @@ router.post('/java/install', authMiddleware, requirePermission('server.start'), 
   try {
     const { version, source } = req.body;
     if (!version) {
-      return res.status(400).json({ error: 'Version is required' });
+      return sendError(res, 400, { message: 'Version is required', code: 'MISSING_VERSION', reason: 'A Java version must be specified' });
     }
     const result = await minecraftServer.autoInstallJava(version, source || 'paper');
     emitToAll('java:install-complete', result);
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 
@@ -56,7 +71,7 @@ router.get('/validate', authMiddleware, async (_req: AuthRequest, res) => {
     const result = await minecraftServer.validateAll();
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 
@@ -67,17 +82,16 @@ router.get('/java/resolve-required', authMiddleware, async (req: AuthRequest, re
     const required = JavaDetector.getRequiredJavaVersion(version || '1.21', source || 'paper');
     res.json({ required, version, source });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 
 router.post('/java/remove', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { javaPath } = req.body;
-    if (!javaPath) return res.status(400).json({ error: 'Java path required' });
-    // Only allow removing managed JREs
+    if (!javaPath) return sendError(res, 400, { message: 'Java path required', code: 'MISSING_PATH', reason: 'The path to the Java installation must be provided' });
     if (!javaPath.includes('.minecontrol')) {
-      return res.status(400).json({ error: 'Can only remove MineControl-managed Java installations' });
+      return sendError(res, 400, { message: 'Can only remove MineControl-managed Java installations', code: 'NOT_MANAGED', reason: 'Only MineControl-managed Java installations can be removed through this interface' });
     }
     const dir = path.dirname(path.dirname(javaPath));
     if (fs.existsSync(dir)) {
@@ -85,7 +99,7 @@ router.post('/java/remove', authMiddleware, async (req: AuthRequest, res) => {
     }
     res.json({ success: true, message: `Removed Java at ${javaPath}` });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 
@@ -95,7 +109,7 @@ router.post('/java/resolve', authMiddleware, async (req: AuthRequest, res) => {
     const result = await JavaDetector.resolveBestJava(version || '1.21', source || 'paper');
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 
@@ -111,7 +125,6 @@ router.post('/repair', authMiddleware, requirePermission('server.start'), async 
         result = await minecraftServer.autoInstallJava(req.body.version || '21', req.body.source || 'paper');
         break;
       case 'fix-permissions':
-        // Just try writing a test file
         const mcDir = resolveMinecraftDir();
         fs.chmodSync(mcDir, 0o755);
         result = { success: true, message: 'Permissions fixed' };
@@ -125,12 +138,12 @@ router.post('/repair', authMiddleware, requirePermission('server.start'), async 
         result = { success: true, message: `RAM adjusted to ${totalMem}G` };
         break;
       default:
-        return res.status(400).json({ error: `Unknown action: ${action}` });
+        return sendError(res, 400, { message: `Unknown action: ${action}`, code: 'UNKNOWN_ACTION', reason: `The action "${action}" is not recognized`, details: `Valid actions: fix-port, install-java, fix-permissions, kill-port, adjust-ram` });
     }
     emitToAll('server:repair-complete', { action, result });
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 
@@ -336,32 +349,55 @@ function buildStartupError(error: any): { error: string; code: string; reason: s
   return { error: 'Server failed to start', code: 'STARTUP_FAILED', reason: error.message || 'An unexpected error occurred', details: error.message || '', repairAction: 'Check the server console and startup log for details' };
 }
 
+function safeJson(res: any, status: number, body: any) {
+  try {
+    if (!res.headersSent && res.writable && !res.destroyed) {
+      if (!res._errorHandlerAdded) {
+        res._errorHandlerAdded = true;
+        res.on('error', () => {});
+      }
+      res.status(status).json(body);
+    }
+  } catch {
+    // silently ignore - client likely disconnected before response completed
+  }
+}
+
 router.post('/start', authMiddleware, requirePermission('server.start'), async (_req: AuthRequest, res) => {
+  let hasRun = false;
   try {
     if (minecraftServer.isRunning || minecraftServer.isStarting) {
-      return res.status(400).json({ error: 'Server is already running or starting', code: 'ALREADY_RUNNING', reason: 'The server process is already active', details: '', repairAction: 'Wait for the current operation to complete or stop the server first' });
+      safeJson(res, 400, { error: 'Server is already running or starting', code: 'ALREADY_RUNNING', reason: 'The server process is already active', details: '', repairAction: 'Wait for the current operation to complete or stop the server first' });
+      hasRun = true;
+      return;
     }
     await minecraftServer.start();
-    res.json({ success: true, message: 'Server starting...' });
+    safeJson(res, 200, { success: true, message: 'Server starting...' });
+    hasRun = true;
   } catch (error: any) {
     const structured = buildStartupError(error);
-    res.status(400).json(structured);
+    safeJson(res, 400, structured);
+    hasRun = true;
+  } finally {
+    if (!hasRun) {
+      safeJson(res, 500, { error: 'Server start failed with unrecoverable error', code: 'UNKNOWN_ERROR', reason: 'An unexpected error occurred during server startup', details: 'The error handling itself failed', repairAction: 'Check the application logs and restart MineControl OS' });
+    }
   }
 });
 
 router.post('/stop', authMiddleware, requirePermission('server.stop'), async (_req: AuthRequest, res) => {
   try {
     await minecraftServer.stop();
-    res.json({ success: true, message: 'Server stopping...' });
+    safeJson(res, 200, { success: true, message: 'Server stopping...' });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    safeJson(res, 400, buildStartupError(error));
   }
 });
 
 router.post('/restart', authMiddleware, requirePermission('server.restart'), async (_req: AuthRequest, res) => {
   try {
     if (minecraftServer.isStarting) {
-      return res.status(400).json(buildStartupError(new Error('Server is currently starting')));
+      return safeJson(res, 400, buildStartupError(new Error('Server is currently starting')));
     }
     if (minecraftServer.isRunning) {
       minecraftServer.stop().then(() => {
@@ -372,22 +408,22 @@ router.post('/restart', authMiddleware, requirePermission('server.restart'), asy
     } else {
       minecraftServer.start().catch((err: any) => console.error('[Start Error]', err.message));
     }
-    res.json({ success: true, message: 'Server restarting...' });
+    safeJson(res, 200, { success: true, message: 'Server restarting...' });
   } catch (error: any) {
-    res.status(400).json(buildStartupError(error));
+    safeJson(res, 400, buildStartupError(error));
   }
 });
 
 router.post('/command', authMiddleware, requirePermission('console.send'), async (req: AuthRequest, res) => {
   const { command } = req.body;
   if (!command) {
-    return res.status(400).json({ error: 'Command is required' });
+    return safeJson(res, 400, { error: 'Command is required', code: 'COMMAND_REQUIRED', reason: 'A command string must be provided', details: '', repairAction: 'Enter a command before sending' });
   }
   try {
     await minecraftServer.sendCommand(command);
-    res.json({ success: true });
+    safeJson(res, 200, { success: true });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    safeJson(res, 400, buildStartupError(error));
   }
 });
 
@@ -401,7 +437,7 @@ router.get('/logs', authMiddleware, requirePermission('console.read'), (req: Aut
 router.get('/logs/search', authMiddleware, requirePermission('console.read'), (req: AuthRequest, res) => {
   const query = req.query.q as string;
   if (!query) {
-    return res.status(400).json({ error: 'Search query required' });
+    return safeJson(res, 400, { error: 'Search query required', code: 'QUERY_REQUIRED', reason: 'A search query parameter is required', details: 'Add ?q=your_search_term to the request', repairAction: 'Provide a search query' });
   }
   const results = minecraftServer.searchLogs(query);
   res.json(results);
@@ -467,7 +503,7 @@ router.put('/properties', authMiddleware, requirePermission('server.start'), asy
   const mcDir = resolveMinecraftDir();
   const propsPath = path.join(mcDir, 'server.properties');
   if (!fs.existsSync(propsPath)) {
-    return res.status(400).json({ error: 'server.properties not found. Start the server first to generate it.' });
+    return safeJson(res, 400, { error: 'server.properties not found. Start the server first to generate it.', code: 'PROPERTIES_MISSING', reason: 'The server.properties file has not been generated yet', details: propsPath, repairAction: 'Start the server at least once to generate the file' });
   }
 
   // If online-mode is toggled, also sync enforce-secure-profile
@@ -1383,7 +1419,7 @@ router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
 router.post('/version', authMiddleware, requirePermission('server.start'), async (req: AuthRequest, res) => {
   const { version, source } = req.body;
   if (!version) {
-    return res.status(400).json({ error: 'Version is required' });
+    return safeJson(res, 400, { error: 'Version is required', code: 'VERSION_REQUIRED', reason: 'A Minecraft version must be specified', details: '', repairAction: 'Provide a version string (e.g., "1.21")' });
   }
 
   await autoBackupIfEnabled('Minecraft version change to ' + version, 'autoOnVersionChange');
@@ -1480,9 +1516,9 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
     else if (useFolia) displaySource = 'Folia';
     else if (usePufferfish) displaySource = 'Pufferfish';
     emitToAll('server:version-changed', { version, source: displaySource });
-    res.json({ success: true, message: `Switched to ${displaySource} ${version}. Start the server to apply.` });
+    safeJson(res, 200, { success: true, message: `Switched to ${displaySource} ${version}. Start the server to apply.` });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    safeJson(res, 400, buildStartupError(error));
   }
 });
 
@@ -1505,16 +1541,16 @@ router.get('/firewall-check', authMiddleware, async (_req: AuthRequest, res) => 
 router.post('/firewall-add', authMiddleware, requirePermission('server.start'), async (_req: AuthRequest, res) => {
   try {
     if (!firewallManager.isAdmin()) {
-      return res.status(403).json({ error: 'Admin privileges required to modify firewall rules' });
+      return safeJson(res, 403, { error: 'Admin privileges required to modify firewall rules', code: 'ADMIN_REQUIRED', reason: 'Windows Administrator privileges are needed to modify firewall rules', details: '', repairAction: 'Restart MineControl OS as Administrator' });
     }
     const config = minecraftServer.getConfig();
     execSync(
       `netsh advfirewall firewall add rule name="MineControl OS Minecraft" dir=in action=allow protocol=TCP localport=${config.port} profile=any description="Allow Minecraft server connections (port ${config.port})"`,
       { encoding: 'utf-8', timeout: 10000 }
     );
-    res.json({ success: true, message: `Firewall rule added for port ${config.port}` });
+    safeJson(res, 200, { success: true, message: `Firewall rule added for port ${config.port}` });
   } catch (err: any) {
-    res.status(500).json({ error: `Failed to add firewall rule: ${err.message}` });
+    safeJson(res, 500, err);
   }
 });
 
@@ -1523,7 +1559,7 @@ router.post('/gamemode', authMiddleware, requirePermission('server.start'), asyn
   const { mode } = req.body;
   const validModes = ['survival', 'creative', 'adventure', 'spectator'];
   if (!validModes.includes(mode)) {
-    return res.status(400).json({ error: `Invalid mode. Choose from: ${validModes.join(', ')}` });
+    return safeJson(res, 400, { error: `Invalid mode. Choose from: ${validModes.join(', ')}`, code: 'INVALID_GAMEMODE', reason: `"${mode}" is not a valid game mode`, details: `Valid modes: ${validModes.join(', ')}`, repairAction: 'Choose one of: survival, creative, adventure, spectator' });
   }
 
   minecraftServer.updateConfig('gamemode', mode);
@@ -1582,7 +1618,7 @@ router.get('/connection-wizard', authMiddleware, async (_req: AuthRequest, res) 
     const data = await getConnectionWizardData();
     res.json(data);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 
@@ -1594,7 +1630,7 @@ router.get('/connection/status', authMiddleware, async (_req: AuthRequest, res) 
     const status = await connectionManager.getFullStatus();
     res.json(status);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 
@@ -1605,7 +1641,7 @@ router.post('/connection/test-join', authMiddleware, async (req: AuthRequest, re
     const result = await connectionManager.testJoin(address);
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 
@@ -1616,7 +1652,7 @@ router.get('/connection/diagnostics', authMiddleware, async (req: AuthRequest, r
     const history = await connectionManager.getDiagnosticsHistory(limit);
     res.json(history);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 
@@ -1631,7 +1667,7 @@ router.post('/connection/preferred-mode', authMiddleware, async (req: AuthReques
     connectionManager.setPreferredMode(mode);
     res.json({ success: true, mode });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 
@@ -1641,7 +1677,7 @@ router.post('/connection/refresh', authMiddleware, async (_req: AuthRequest, res
     await connectionManager.emitConnectionUpdate();
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 
@@ -1669,7 +1705,7 @@ router.get('/firewall', authMiddleware, async (_req: AuthRequest, res) => {
       verification: verify,
     });
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 
@@ -1683,7 +1719,7 @@ router.post('/firewall/add', authMiddleware, requirePermission('admin'), async (
     await connectionManager.emitConnectionUpdate();
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 
@@ -1694,7 +1730,7 @@ router.post('/firewall/remove', authMiddleware, requirePermission('admin'), asyn
     await connectionManager.emitConnectionUpdate();
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 
@@ -1707,7 +1743,7 @@ router.post('/firewall/repair', authMiddleware, requirePermission('admin'), asyn
     await connectionManager.emitConnectionUpdate();
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 
@@ -1730,7 +1766,7 @@ router.post('/firewall/verify', authMiddleware, async (req: AuthRequest, res) =>
     const result = firewallManager.verifyPort(parseInt(port) || 25565);
     res.json(result);
   } catch (err: any) {
-    res.status(500).json({ error: err.message });
+    sendError(res, 500, err);
   }
 });
 

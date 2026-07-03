@@ -117,7 +117,13 @@ app.use('/api/uninstall', uninstallRoutes);
 
 // API 404 handler (unknown API routes return JSON, not HTML)
 app.use('/api/*', (req, res) => {
-  res.status(404).json({ error: `API route not found: ${req.method} ${req.originalUrl}` });
+  res.status(404).json({
+    error: `API route not found: ${req.method} ${req.originalUrl}`,
+    code: 'ROUTE_NOT_FOUND',
+    reason: 'The requested API endpoint does not exist',
+    details: `${req.method} ${req.originalUrl}`,
+    repairAction: 'Check the URL and try again'
+  });
 });
 
 // Global error handler
@@ -126,9 +132,13 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   if (res.headersSent) {
     return next(err);
   }
-  res.status(err.status || 500).json({ 
+  const status = err.status || 500;
+  res.status(status).json({
     error: err.message || 'Internal server error',
-    code: err.code || 'INTERNAL_ERROR'
+    code: err.code || 'INTERNAL_ERROR',
+    reason: err.reason || (status === 400 ? 'Bad request' : 'An unexpected error occurred on the server'),
+    details: err.details || (err.stack ? err.stack.split('\n').slice(0, 3).join(' ') : ''),
+    repairAction: err.repairAction || (status === 400 ? 'Check your input and try again' : 'Restart the application if the problem persists')
   });
 });
 
@@ -363,9 +373,19 @@ cron.schedule('0 0 * * 0', () => {
 // Catch unhandled errors
 process.on('uncaughtException', (err) => {
   console.error('[Uncaught Exception]', err);
+  console.error('[Uncaught Exception] The application is in an undefined state. Exiting after logging.');
+  try {
+    const logPath = path.join(process.env.APP_DATA_PATH || __dirname, 'crash.log');
+    fs.writeFileSync(logPath, `[${new Date().toISOString()}] Uncaught Exception: ${err.stack || err.message}\n`, { flag: 'a' });
+  } catch {}
 });
 process.on('unhandledRejection', (reason) => {
   console.error('[Unhandled Rejection]', reason);
+  try {
+    const logPath = path.join(process.env.APP_DATA_PATH || __dirname, 'crash.log');
+    const message = reason instanceof Error ? reason.stack || reason.message : String(reason);
+    fs.writeFileSync(logPath, `[${new Date().toISOString()}] Unhandled Rejection: ${message}\n`, { flag: 'a' });
+  } catch {}
 });
 
 // Initialize active server
