@@ -461,17 +461,34 @@ export const api = {
   testGitHubConnection: (owner: string, repo: string, token?: string) =>
     request<any>('/github/test-connection', { method: 'POST', body: JSON.stringify({ owner, repo, token }) }),
 
-  // Import
+  // Universal Import System
   importAnalyze: (filePath: string) =>
     request<any>('/import/analyze', {
       method: 'POST',
       body: JSON.stringify({ filePath }),
     }, 300000),
+  importAnalyzePlayers: (worldPath: string) =>
+    request<any>('/import/analyze-players', {
+      method: 'POST',
+      body: JSON.stringify({ worldPath }),
+    }, 300000),
+  importValidate: (filePath: string) =>
+    request<any>('/import/validate', {
+      method: 'POST',
+      body: JSON.stringify({ filePath }),
+    }, 300000),
+  importSummary: (filePath: string) =>
+    request<any>('/import/summary', {
+      method: 'POST',
+      body: JSON.stringify({ filePath }),
+    }, 300000),
+  importGetServers: () =>
+    request<any>('/import/servers'),
   importExecute: (filePath: string, config: any) =>
     request<any>('/import/execute', {
       method: 'POST',
       body: JSON.stringify({ filePath, config }),
-    }, 300000),
+    }, 600000),
   getSupportedFormats: () => request<any>('/import/supported-formats'),
 
   // Feedback & Issue Management
