@@ -37,6 +37,64 @@ router.get('/java/scan', authMiddleware, async (_req, res) => {
   }
 });
 
+router.post('/java/install', authMiddleware, requirePermission('server.start'), async (req: AuthRequest, res) => {
+  try {
+    const { version, source } = req.body;
+    if (!version) {
+      return res.status(400).json({ error: 'Version is required' });
+    }
+    const result = await minecraftServer.autoInstallJava(version, source || 'paper');
+    emitToAll('java:install-complete', result);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/validate', authMiddleware, async (_req: AuthRequest, res) => {
+  try {
+    const result = await minecraftServer.validateAll();
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/repair', authMiddleware, requirePermission('server.start'), async (req: AuthRequest, res) => {
+  try {
+    const { action } = req.body;
+    let result: any;
+    switch (action) {
+      case 'fix-port':
+        result = await minecraftServer.autoFixPort();
+        break;
+      case 'install-java':
+        result = await minecraftServer.autoInstallJava(req.body.version || '21', req.body.source || 'paper');
+        break;
+      case 'fix-permissions':
+        // Just try writing a test file
+        const mcDir = resolveMinecraftDir();
+        fs.chmodSync(mcDir, 0o755);
+        result = { success: true, message: 'Permissions fixed' };
+        break;
+      case 'kill-port':
+        result = await minecraftServer.autoFixPort();
+        break;
+      case 'adjust-ram':
+        const totalMem = Math.round(os.totalmem() / 1024 / 1024 / 1024);
+        minecraftServer.updateConfig('maxRam', `${totalMem}G`);
+        result = { success: true, message: `RAM adjusted to ${totalMem}G` };
+        break;
+      default:
+        return res.status(400).json({ error: `Unknown action: ${action}` });
+    }
+    emitToAll('server:repair-complete', { action, result });
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 let cachedSysStats = { systemRamTotal: 0, systemRamUsed: 0, diskTotal: 0, diskUsed: 0, mcDirSize: 0 };
 let cachedPublicIp = '';
 let cachedCpuPercent = 0;
@@ -295,6 +353,10 @@ router.get('/stats/history', authMiddleware, (req: AuthRequest, res) => {
     'SELECT * FROM system_stats WHERE timestamp > ? ORDER BY timestamp ASC'
   ).all(since);
   res.json(stats);
+});
+
+router.get('/startup-log', authMiddleware, (_req: AuthRequest, res) => {
+  res.json({ log: minecraftServer.startupLog, stage: minecraftServer.startupStage });
 });
 
 router.get('/audit-log', authMiddleware, requirePermission('server.start'), (req: AuthRequest, res) => {

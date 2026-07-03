@@ -7,6 +7,7 @@ import { EventEmitter } from 'events';
 import unzipper from 'unzipper';
 import { getDatabase } from '../database';
 import { resolveMinecraftDir, setMinecraftDir } from '../paths';
+import { JavaDetector, JavaDownloader } from './JavaDetector';
 
 export enum ServerState {
   STOPPED = 'stopped',
@@ -110,6 +111,20 @@ class MinecraftServerManager extends EventEmitter {
     }
   }
 
+  private _startupLog: string[] = [];
+
+  get startupLog(): string[] { return [...this._startupLog]; }
+
+  private appendStartupLog(msg: string) {
+    this._startupLog.push(msg);
+    this.emit('server:output', `[Startup] ${msg}\n`);
+  }
+
+  get startupStage(): string {
+    if (this._startupLog.length === 0) return '';
+    return this._startupLog[this._startupLog.length - 1];
+  }
+
   private cleanup() {
     if (this.statsInterval) {
       clearInterval(this.statsInterval);
@@ -173,6 +188,234 @@ class MinecraftServerManager extends EventEmitter {
     }
   }
 
+  // ── Full validation pipeline — runs BEFORE entering STARTING ──
+  async validateAll(): Promise<{
+    valid: boolean;
+    checks: Array<{ name: string; passed: boolean; message: string; actionable: boolean; action?: string }>;
+    config: any;
+    jarPath: string;
+    javaPath: string;
+    javaMajor: number;
+  }> {
+    const checks: Array<{ name: string; passed: boolean; message: string; actionable: boolean; action?: string }> = [];
+    const config = this.getConfig();
+    const jarFileName = config.jarFile || 'server.jar';
+    const jarPath = path.join(this.serverDir, jarFileName);
+    let javaPath = config.javaPath || 'java';
+    let javaMajor = 0;
+
+    const add = (name: string, passed: boolean, message: string, actionable = false, action?: string) =>
+      checks.push({ name, passed, message, actionable, action });
+
+    // 1. Disk writable
+    try {
+      const testFile = path.join(this.serverDir, '.write-test');
+      fs.writeFileSync(testFile, 'test');
+      fs.unlinkSync(testFile);
+      add('Disk Writable', true, 'Server directory is writable');
+    } catch {
+      add('Disk Writable', false, 'Server directory is not writable. Check permissions.', true, 'fix-permissions');
+    }
+
+    // 2. RAM allocation
+    const minRam = parseInt(config.minRam || '2');
+    const maxRam = parseInt(config.maxRam || '8');
+    const totalMem = Math.round(os.totalmem() / 1024 / 1024 / 1024);
+    add('RAM Check', maxRam <= totalMem, `Allocated ${maxRam}GB, system has ${totalMem}GB total RAM${maxRam > totalMem ? '. Reduce max RAM allocation.' : ''}`, true, 'adjust-ram');
+
+    // 3. Jar exists
+    let waitCount = 0;
+    while (fs.existsSync(jarPath + '.download') && waitCount < 120) {
+      if (waitCount === 0) this.emit('server:output', '[MineControl] Waiting for jar download to finish...\n');
+      await new Promise(r => setTimeout(r, 2000));
+      waitCount++;
+    }
+    if (fs.existsSync(jarPath)) {
+      add('Server Jar', true, `Found: ${jarFileName}`);
+    } else {
+      add('Server Jar', false, `Missing: ${jarFileName}. Download a server version from the Software page.`, true, 'download-server');
+    }
+
+    // 4. EULA
+    const eulaPath = path.join(this.serverDir, 'eula.txt');
+    let eulaOk = false;
+    try {
+      const eulaContent = fs.readFileSync(eulaPath, 'utf-8');
+      eulaOk = eulaContent.includes('eula=true');
+    } catch {}
+    if (!eulaOk) {
+      fs.writeFileSync(eulaPath, 'eula=true\n');
+      add('EULA', true, 'Accepted automatically by MineControl OS');
+    } else {
+      add('EULA', true, 'Already accepted');
+    }
+
+    // 5. Port available
+    const portCheck = await this.checkPort(config.port);
+    if (portCheck.available) {
+      add('Port Check', true, `Port ${config.port} is available`);
+    } else {
+      let processName = 'unknown';
+      if (portCheck.pid) {
+        try {
+          const taskOut = execSync(`tasklist /FI "PID eq ${portCheck.pid}" /FO CSV /NH`, { encoding: 'utf-8', timeout: 5000 });
+          const match = taskOut.match(/"([^"]+)"/);
+          processName = match ? match[1] : `PID ${portCheck.pid}`;
+        } catch {}
+      }
+      const isJava = processName.toLowerCase().includes('java');
+      if (isJava) {
+        add('Port Check', false, `Port ${config.port} is in use by a Java process (PID: ${portCheck.pid}). Can auto-kill.`, true, 'kill-port');
+      } else {
+        add('Port Check', false, `Port ${config.port} is in use by ${processName}${portCheck.pid ? ` (PID: ${portCheck.pid})` : ''}.`, true, 'change-port');
+      }
+    }
+
+    // 6. Java check
+    const javaValidation = await this.validateJavaInternal(config, jarPath);
+    javaPath = javaValidation.javaPath;
+    javaMajor = javaValidation.javaMajor;
+    for (const c of javaValidation.checks) add(c.name, c.passed, c.message, c.actionable, c.action);
+
+    // 7. Fabric loader check
+    if (config.jarFile?.toLowerCase().includes('fabric')) {
+      const loaderJar = path.join(this.serverDir, 'fabric-server-launch.jar');
+      const exists = fs.existsSync(loaderJar);
+      add('Fabric Loader', exists, exists ? 'fabric-server-launch.jar found' : 'Missing fabric-server-launch.jar. Run Repair Fabric.', true, 'repair-fabric');
+    }
+
+    // 8. Forge libraries check
+    if (config.jarFile?.toLowerCase().includes('forge')) {
+      const librariesDir = path.join(this.serverDir, 'libraries');
+      const exists = fs.existsSync(librariesDir);
+      add('Forge Libraries', exists, exists ? 'Forge libraries directory found' : 'Missing Forge libraries. Run Repair Forge.', true, 'repair-forge');
+    }
+
+    // 9. Quilt loader check
+    if (config.jarFile?.toLowerCase().includes('quilt')) {
+      const loaderJar = path.join(this.serverDir, 'quilt-server-launch.jar');
+      const exists = fs.existsSync(loaderJar);
+      add('Quilt Loader', exists, exists ? 'quilt-server-launch.jar found' : 'Missing Quilt loader. Run Repair Quilt.', true, 'repair-quilt');
+    }
+
+    // 10. Mods folder writable
+    const modsDir = path.join(this.serverDir, 'mods');
+    try {
+      if (!fs.existsSync(modsDir)) fs.mkdirSync(modsDir, { recursive: true });
+      const testFile = path.join(modsDir, '.write-test');
+      fs.writeFileSync(testFile, 'test');
+      fs.unlinkSync(testFile);
+      add('Mods Folder', true, 'Mods directory is writable');
+    } catch {
+      add('Mods Folder', false, 'Mods directory is not writable. Check permissions.', true, 'fix-permissions');
+    }
+
+    // 11. World directory
+    const propsPath = path.join(this.serverDir, 'server.properties');
+    let levelName = 'world';
+    try {
+      if (fs.existsSync(propsPath)) {
+        const propsContent = fs.readFileSync(propsPath, 'utf-8');
+        const m = propsContent.match(/^level-name=(.*)$/m);
+        if (m) levelName = m[1].trim();
+      }
+    } catch {}
+    const worldDir = path.join(this.serverDir, levelName);
+    const worldExists = fs.existsSync(path.join(worldDir, 'level.dat')) || fs.existsSync(worldDir);
+    add('World', true, worldExists ? `Found at ${levelName}` : 'Will generate on first start');
+
+    const allPassed = checks.every(c => c.passed);
+    return { valid: allPassed, checks, config, jarPath, javaPath, javaMajor };
+  }
+
+  private async validateJavaInternal(config: any, jarPath: string): Promise<{
+    javaPath: string;
+    javaMajor: number;
+    checks: Array<{ name: string; passed: boolean; message: string; actionable: boolean; action?: string }>;
+  }> {
+    const checks: Array<{ name: string; passed: boolean; message: string; actionable: boolean; action?: string }> = [];
+    const add = (name: string, passed: boolean, message: string, actionable = false, action?: string) =>
+      checks.push({ name, passed, message, actionable, action });
+
+    const classVersion = await this.detectRequiredJava(jarPath);
+    const required = classVersion !== null ? classVersion - 44 : 17;
+
+    let javaPath = config.javaPath || 'java';
+    let javaMajor = 0;
+
+    const checkJavaAt = async (jPath: string): Promise<number> => {
+      try {
+        const out = execSync(`"${jPath}" -version 2>&1`, { encoding: 'utf8', timeout: 10000 });
+        const m = out.match(/version "(?:1\.)?(\d+)/);
+        return m ? parseInt(m[1], 10) : 0;
+      } catch { return 0; }
+    };
+
+    javaMajor = await checkJavaAt(javaPath);
+
+    if (javaMajor >= required) {
+      add('Java Check', true, `Java ${javaMajor} found at "${javaPath}"`);
+      return { javaPath, javaMajor, checks };
+    }
+
+    if (javaMajor > 0) {
+      add('Java Version', false, `Configured Java at "${javaPath}" is version ${javaMajor}, but Java ${required}+ is needed.`, true, 'install-java');
+    }
+
+    const installed = await JavaDetector.scan();
+    const viable = installed.filter(j => j.majorVersion >= required).sort((a: any, b: any) => a.majorVersion - b.majorVersion);
+
+    if (viable.length > 0) {
+      javaPath = viable[0].path;
+      javaMajor = viable[0].majorVersion;
+      add('Java Check', true, `Auto-selected Java ${javaMajor} at "${javaPath}"`);
+      return { javaPath, javaMajor, checks };
+    }
+
+    const latest = installed.sort((a: any, b: any) => b.majorVersion - a.majorVersion)[0];
+    if (installed.length > 0) {
+      add('Java Version', false,
+        `Need Java ${required}+, but only found: ${installed.map((j: any) => `Java ${j.majorVersion}`).join(', ')}.`,
+        true, 'install-java');
+    } else {
+      add('Java Version', false, `Java not found. Minecraft requires Java ${required}+.`, true, 'install-java');
+    }
+
+    return { javaPath: config.javaPath || 'java', javaMajor: 0, checks };
+  }
+
+  // ── Auto-repair methods ──
+  async autoInstallJava(version: string, source: string): Promise<{ success: boolean; javaPath: string; message: string }> {
+    const controlDir = path.resolve(this.serverDir, '..', '.minecontrol');
+    const javaPath = await JavaDownloader.ensureJavaForMinecraft(version, source, controlDir, (pct) => {
+      this.emit('server:output', `[MineControl] Downloading Java... ${pct}%\n`);
+    });
+    const exists = fs.existsSync(javaPath);
+    if (exists) {
+      this.getConfig().javaPath = javaPath;
+      this.updateConfig('javaPath', javaPath);
+      return { success: true, javaPath, message: `Java installed at ${javaPath}` };
+    }
+    return { success: false, javaPath: '', message: 'Failed to install Java automatically.' };
+  }
+
+  async autoFixPort(): Promise<{ success: boolean; message: string }> {
+    const config = this.getConfig();
+    const portCheck = await this.checkPort(config.port);
+    if (portCheck.available) return { success: true, message: 'Port is available' };
+    if (portCheck.pid) {
+      try {
+        execSync(`taskkill /PID ${portCheck.pid} /F`, { timeout: 5000 });
+        await new Promise(r => setTimeout(r, 1000));
+        const recheck = await this.checkPort(config.port);
+        if (recheck.available) return { success: true, message: `Killed process holding port ${config.port}` };
+      } catch {}
+    }
+    const newPort = 25565 + Math.floor(Math.random() * 1000);
+    this.updateConfig('port', String(newPort));
+    return { success: true, message: `Changed port to ${newPort}` };
+  }
+
   // ── Pre-flight validation: runs BEFORE entering STARTING ──
   private async validatePreFlight(): Promise<{ config: any; jarFileName: string; jarPath: string }> {
     const config = this.getConfig();
@@ -190,7 +433,7 @@ class MinecraftServerManager extends EventEmitter {
     }
 
     if (!fs.existsSync(jarPath)) {
-      throw new Error(`Server jar not found: ${jarFileName} is missing. Run a Repair or download a server version from the Software page first.`);
+      throw new Error(`Missing: ${jarFileName}. Download a server version from the Software page first.`);
     }
 
     // EULA
@@ -218,7 +461,6 @@ class MinecraftServerManager extends EventEmitter {
       } catch {}
     }
 
-    // Generate default server.properties if missing (fixes NoSuchFileException on first launch)
     if (!fs.existsSync(propsPath)) {
       const defaults = [
         '#Minecraft server properties',
@@ -279,36 +521,6 @@ class MinecraftServerManager extends EventEmitter {
       ].join('\n');
       fs.writeFileSync(propsPath, defaults, 'utf-8');
       this.emit('server:output', '[MineControl] Generated default server.properties.\n');
-    }
-
-    // Port check
-    const portCheck = await this.checkPort(config.port);
-    if (!portCheck.available) {
-      let processName = 'unknown';
-      if (portCheck.pid) {
-        try {
-          const taskOut = execSync(`tasklist /FI "PID eq ${portCheck.pid}" /FO CSV /NH`, { encoding: 'utf-8', timeout: 5000 });
-          const match = taskOut.match(/"([^"]+)"/);
-          processName = match ? match[1] : `PID ${portCheck.pid}`;
-        } catch {}
-      }
-      const isJava = processName.toLowerCase().includes('java');
-      if (isJava && portCheck.pid) {
-        try {
-          execSync(`taskkill /PID ${portCheck.pid} /F`, { timeout: 5000 });
-          this.emit('server:output', `[MineControl] Killed orphaned Java process (PID: ${portCheck.pid}) that was holding port ${config.port}\n`);
-          await new Promise(r => setTimeout(r, 1000));
-          const recheck = await this.checkPort(config.port);
-          if (!recheck.available) {
-            throw new Error(`Port ${config.port} is still in use after killing Java process (PID: ${portCheck.pid}). Another application is using it.`);
-          }
-        } catch (e: any) {
-          if (e.message?.startsWith('Port')) throw e;
-          throw new Error(`Port ${config.port} is in use by ${processName} (PID: ${portCheck.pid}). Failed to auto-kill. Please close it manually.`);
-        }
-      } else {
-        throw new Error(`Port ${config.port} is in use by ${processName}${portCheck.pid ? ` (PID: ${portCheck.pid})` : ''}. Please stop that process or change the server port in Settings.`);
-      }
     }
 
     return { config, jarFileName, jarPath };
@@ -416,26 +628,91 @@ class MinecraftServerManager extends EventEmitter {
     this.hasStartedSuccessfully = false;
     this.restartAttempts = 0;
     this.crashLog = [];
+    this._startupLog = [];
 
     try {
-      // Enter STARTING state immediately so the UI reflects the transition
       this.setState(ServerState.STARTING);
 
       // ── Phase 1: Pre-flight validation ──
-      this.emit('server:output', '[MineControl] Pre-flight validation...\n');
+      this.appendStartupLog('Checking server jar...');
       const { config, jarFileName, jarPath } = await this.validatePreFlight();
+      this.appendStartupLog(`Server jar OK: ${jarFileName}`);
 
-      // ── Phase 2: Java resolution ──
-      this.emit('server:output', '[MineControl] Resolving Java runtime...\n');
-      const { javaPath, javaMajor } = await this.resolveJava(jarPath, config);
+      // ── Phase 2: Java validation ──
+      this.appendStartupLog('Checking Java runtime...');
+      let { javaPath, javaMajor, classVersion } = await this.resolveJava(jarPath, config);
+      const required = classVersion !== null ? classVersion - 44 : 17;
 
-      // ── Sync server.properties with current config ──
+      if (javaMajor < required) {
+        this.appendStartupLog(`Java ${javaMajor} is too old. Need Java ${required}+. Checking for auto-install...`);
+        const allJava = await JavaDetector.scan();
+        const viable = allJava.filter(j => j.majorVersion >= required);
+        if (viable.length === 0) {
+          this.appendStartupLog(`Downloading Java ${required} automatically...`);
+          const controlDir = path.resolve(this.serverDir, '..', '.minecontrol');
+          javaPath = await JavaDownloader.ensureJavaForMinecraft(
+            path.basename(jarPath).replace(/\.jar$/, ''),
+            config.jarFile?.includes('fabric') ? 'fabric' : 'paper',
+            controlDir,
+            (pct: number) => this.emit('server:output', `[MineControl] Downloading Java ${required}... ${pct}%\n`)
+          );
+          javaMajor = await JavaDownloader.checkJavaVersion(javaPath);
+          this.appendStartupLog(`Auto-installed Java ${javaMajor} at "${javaPath}"`);
+        }
+      }
+
+      this.appendStartupLog(`Java OK: version ${javaMajor} at "${javaPath}"`);
+
+      // ── Phase 3: Library checks ──
+      if (config.jarFile?.toLowerCase().includes('fabric')) {
+        this.appendStartupLog('Checking Fabric loader...');
+        const loaderJar = path.join(this.serverDir, 'fabric-server-launch.jar');
+        if (!fs.existsSync(loaderJar)) {
+          this.appendStartupLog('Fabric loader missing. Attempting repair...');
+          try {
+            const { downloadFabricVersion } = require('./download');
+            const jarVersion = path.basename(jarPath).replace(/\.jar$/, '').replace(/^fabric-/, '');
+            await downloadFabricVersion(jarVersion, loaderJar);
+            this.appendStartupLog('Fabric loader downloaded');
+          } catch (e: any) {
+            this.appendStartupLog(`Fabric repair failed: ${e.message}`);
+          }
+        }
+      }
+
+      if (config.jarFile?.toLowerCase().includes('forge')) {
+        this.appendStartupLog('Checking Forge libraries...');
+        const librariesDir = path.join(this.serverDir, 'libraries');
+        if (!fs.existsSync(librariesDir)) {
+          this.appendStartupLog('Forge libraries missing. Re-run Forge installer.');
+        }
+      }
+
+      if (config.jarFile?.toLowerCase().includes('neoforge')) {
+        this.appendStartupLog('Checking NeoForge libraries...');
+        const librariesDir = path.join(this.serverDir, 'libraries');
+        if (!fs.existsSync(librariesDir)) {
+          this.appendStartupLog('NeoForge libraries missing. Re-run NeoForge installer.');
+        }
+      }
+
+      // ── Phase 4: Sync config ──
+      this.appendStartupLog('Syncing server configuration...');
       this.syncServerProperties(config);
 
-      // ── All checks passed — spawn the process ──
-      this.emit('server:output', `[MineControl] Starting with Java ${javaMajor} at "${javaPath}"...\n`);
+      // ── Phase 5: Memory check ──
+      const totalMem = Math.round(os.totalmem() / 1024 / 1024 / 1024);
+      const maxRamNum = parseInt(config.maxRam || '8');
+      if (maxRamNum > totalMem) {
+        this.appendStartupLog(`WARNING: Allocated ${maxRamNum}GB RAM but system has only ${totalMem}GB. Auto-reducing to ${totalMem}GB.`);
+        this.updateConfig('maxRam', `${totalMem}G`);
+        config.maxRam = `${totalMem}G`;
+      }
+      this.appendStartupLog(`Memory: ${config.minRam} min / ${config.maxRam} max`);
 
-      // Log file
+      // ── All checks passed — spawn ──
+      this.appendStartupLog(`Launching Java ${javaMajor}...`);
+
       const logFileName = `server-${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
       const logPath = path.join(this.serverDir, 'logs', logFileName);
       this.logStream = fs.createWriteStream(logPath, { flags: 'a' });
@@ -475,7 +752,6 @@ class MinecraftServerManager extends EventEmitter {
       } as any);
       this.process = proc;
 
-      // Catch immediate spawn errors
       const spawnErr = await new Promise<Error | null>((resolve) => {
         const onError = (err: Error) => resolve(err);
         proc.once('error', onError);
@@ -487,21 +763,18 @@ class MinecraftServerManager extends EventEmitter {
         this.setState(ServerState.FAILED);
         this._lastError = spawnErr.message;
         this.emit('server:error', spawnErr.message);
-        this.emit('server:output', `[MineControl] Spawn failed: ${spawnErr.message}\n`);
-        throw new Error(`Failed to start Java: ${spawnErr.message}. Check that Java is installed and JAVA_HOME is set.`);
+        this.appendStartupLog(`FAILED: ${spawnErr.message}`);
+        throw new Error(this._lastError!);
       }
 
-      // Wire up output handlers
       proc.stdout?.on('data', (data: Buffer) => this.handleOutput(data.toString()));
       proc.stderr?.on('data', (data: Buffer) => this.handleOutput(`[STDERR] ${data.toString()}`));
 
-      // Process close handler (only fires for unexpected exits, not during a graceful stop)
       proc.on('close', (code) => {
         this.startedAt = null;
         this.process = null;
         this.cleanup();
 
-        // If stop() already transitioned to STOPPING → STOPPED, don't override
         if (this._state === ServerState.STOPPING || this._state === ServerState.STOPPED) {
           if (this._state === ServerState.STOPPING) {
             this.setState(ServerState.STOPPED);
@@ -511,19 +784,28 @@ class MinecraftServerManager extends EventEmitter {
         }
 
         const crashed = code !== 0 || !this.hasStartedSuccessfully;
-        const finalState = crashed ? ServerState.FAILED : ServerState.STOPPED;
 
         this._lastError = null;
         if (crashed && code !== 0) {
-          this._lastError = `Process exited with code ${code}`;
+          const snippet = this.outputBuffer.slice(-20).join('\n');
+          const javaErr = this.outputBuffer.find(l => l.includes('UnsupportedClassVersionError') || l.includes('Unsupported major.minor version') || l.includes('Could not create the Java Virtual Machine') || l.includes('Error: LinkageError'));
+          if (javaErr) {
+            const jvm = javaErr.match(/(?:major\.minor version|class version|UnsupportedClassVersionError)\s+(\d+)/i);
+            const javaClassVersion = jvm ? parseInt(jvm[1], 10) : null;
+            const requiredJava = javaClassVersion ? javaClassVersion - 44 : '?';
+            this._lastError = `Java version mismatch: The server jar requires Java ${requiredJava}+, but Java ${javaMajor} is currently configured.\nSolution: Install Java ${requiredJava}+ and configure it in Settings > Server.\n\n${javaErr}`;
+          } else {
+            this._lastError = this.analyzeExit(code, snippet);
+          }
         } else if (crashed && code === 0 && !this.hasStartedSuccessfully) {
           const snippet = this.outputBuffer.slice(-30).join('\n');
-          this._lastError = `Server exited with code 0 before fully starting.\nPossible causes: invalid server.jar, wrong Java version, or port already in use.\n\nLast output:\n${snippet}`;
+          const analysis = this.analyzeStartupFailure(snippet);
+          this._lastError = analysis;
         }
 
-        this.setState(finalState);
+        this.setState(crashed ? ServerState.FAILED : ServerState.STOPPED);
         this.emit('server:stopped', code);
-        this.emit('server:output', `\n[MineControl] Server stopped with code ${code} → ${finalState}\n`);
+        this.emit('server:output', `\n[MineControl] Server stopped with code ${code}\n`);
 
         if (this._lastError) {
           this.emit('server:error', this._lastError);
@@ -531,25 +813,22 @@ class MinecraftServerManager extends EventEmitter {
         }
       });
 
-      // Process error handler
       proc.on('error', (err) => {
         this.process = null;
         this.cleanup();
         this._lastError = err.message;
         this.setState(ServerState.FAILED);
         this.emit('server:error', err.message);
-        this.emit('server:output', `[MineControl] Runtime error: ${err.message}\n`);
+        this.appendStartupLog(`RUNTIME ERROR: ${err.message}`);
       });
 
-      // Clear done timeout on successful start (register BEFORE timeout to avoid race)
       let doneTimeout: NodeJS.Timeout;
       this.once('server:started', () => clearTimeout(doneTimeout));
 
-      // Done detection timeout — if server hasn't printed 'Done' within 120s, mark as failed
       doneTimeout = setTimeout(() => {
         if (!this.hasStartedSuccessfully && (this._state === ServerState.STARTING)) {
           const snippet = this.outputBuffer.slice(-20).join('\n');
-          this._lastError = `Server did not finish starting within 120 seconds. Possible causes: wrong Java version, corrupted jar, or insufficient RAM.\n\nLast output:\n${snippet}`;
+          this._lastError = this.analyzeStartupFailure(snippet);
           this.emit('server:error', this._lastError);
           this.emit('server:output', `\n[MineControl] ERROR: ${this._lastError}\n`);
           if (this.process) {
@@ -558,9 +837,8 @@ class MinecraftServerManager extends EventEmitter {
           this.cleanup();
           this.setState(ServerState.FAILED);
         }
-      }, 120000);
+      }, 180000);
 
-      // Start process telemetry monitoring
       this.startStatsMonitoring();
 
     } catch (error: any) {
@@ -569,6 +847,70 @@ class MinecraftServerManager extends EventEmitter {
       this.emit('server:error', error.message);
       throw error;
     }
+  }
+
+  private analyzeExit(code: number | null, snippet: string): string {
+    const lower = snippet.toLowerCase();
+    if (lower.includes('could not create the java virtual machine')) {
+      const memMatch = snippet.match(/Xms|Xmx|initial heap size|requested array size/i);
+      return memMatch
+        ? 'Java Virtual Machine creation failed: The allocated RAM may be too large or too small for this system.\nSolution: Reduce Min/Max RAM in Settings > Server, or increase system memory.'
+        : 'Java Virtual Machine creation failed: Invalid JVM arguments.\nSolution: Check server settings or try reducing allocated RAM.';
+    }
+    if (lower.includes('unsupportedclassversionerror') || lower.includes('unsupported major.minor') || lower.includes('major.minor version')) {
+      return 'Java version too old for this server jar.\nSolution: Install a newer Java version (Java 17+ for modern Minecraft). Visit Settings > Manage Java.';
+    }
+    if (lower.includes('could not find or load main class')) {
+      return 'Server jar is corrupted or invalid.\nSolution: Download a fresh server jar from the Software page.';
+    }
+    if (lower.includes('unable to access jarfile') || lower.includes('error: could not open')) {
+      return 'Server jar file is missing or inaccessible.\nSolution: Check that the jar file exists in the server directory.';
+    }
+    if (lower.includes('out of memory') || lower.includes('outofmemory') || lower.includes('java heap space')) {
+      return 'Server ran out of memory.\nSolution: Increase Max RAM in Settings > Server.';
+    }
+    if (lower.includes('address already in use') || lower.includes('bind failed')) {
+      return 'Port is already in use by another application.\nSolution: Change the server port in Settings > Server or stop the other application.';
+    }
+    if (lower.includes('permission denied') || lower.includes('access denied')) {
+      return 'Permission denied. MineControl OS does not have access to the server directory.\nSolution: Run MineControl OS as Administrator.';
+    }
+    if (code === 1) {
+      const lastLines = snippet.split('\n').slice(-5).join('\n');
+      return `Server exited with code 1.\nPossible causes: Missing libraries, incompatible Java version, or corrupted server files.\n\nLast output:\n${lastLines}`;
+    }
+    if (code !== null) {
+      const lastLines = snippet.split('\n').slice(-5).join('\n');
+      return `Server exited with code ${code}.\n\nLast output:\n${lastLines}`;
+    }
+    return 'Server stopped unexpectedly.';
+  }
+
+  private analyzeStartupFailure(snippet: string): string {
+    const lower = snippet.toLowerCase();
+    if (lower.includes('unsupportedclassversionerror') || lower.includes('unsupported major.minor')) {
+      return 'Java version mismatch: The server jar was compiled for a newer Java version.\nSolution: Install Java 21+ from Settings > Manage Java.';
+    }
+    if (lower.includes('could not create the java virtual machine') || lower.includes('could not reserve enough space')) {
+      return 'Insufficient memory: Java could not allocate the requested RAM.\nSolution: Reduce Min/Max RAM in Settings > Server.';
+    }
+    if (lower.includes('fabric') && (lower.includes('not found') || lower.includes('missing'))) {
+      return 'Fabric loader is missing or corrupted.\nSolution: Run Repair Fabric from the server dashboard.';
+    }
+    if (lower.includes('forge') && (lower.includes('not found') || lower.includes('missing'))) {
+      return 'Forge libraries are missing or corrupted.\nSolution: Run Repair Forge from the server dashboard.';
+    }
+    if (lower.includes('quilt') && (lower.includes('not found') || lower.includes('missing'))) {
+      return 'Quilt loader is missing or corrupted.\nSolution: Run Repair Quilt from the server dashboard.';
+    }
+    if (lower.includes('mod') && (lower.includes('error') || lower.includes('crash'))) {
+      return 'A mod caused a crash during startup.\nSolution: Remove recently added mods from the mods folder and try again.';
+    }
+    if (lower.includes('datapack') && lower.includes('error')) {
+      return 'A datapack caused an error during startup.\nSolution: Remove or fix the problematic datapack in the world/datapacks folder.';
+    }
+    const lastLines = snippet.split('\n').slice(-5).join('\n');
+    return `Server did not finish starting. Possible causes: wrong Java version, missing libraries, corrupted jar, or insufficient RAM.\n\nLast output:\n${lastLines}`;
   }
 
   private async verifyPortListening(port: number): Promise<boolean> {

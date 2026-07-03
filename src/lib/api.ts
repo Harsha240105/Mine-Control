@@ -194,6 +194,14 @@ export const api = {
       body: JSON.stringify(settings),
     }),
 
+  // Validation & Repair
+  validateServer: () => request<any>('/server/validate'),
+  repairServer: (action: string, data?: any) =>
+    request<any>('/server/repair', { method: 'POST', body: JSON.stringify({ action, ...data }) }),
+  installJava: (version: string, source?: string) =>
+    request<any>('/server/java/install', { method: 'POST', body: JSON.stringify({ version, source }) }),
+  getStartupLog: () => request<any>('/server/startup-log'),
+
   // Diagnostics
   getDiagnostics: () => request<any[]>('/server/diagnostics'),
   getCrashLogs: () => request<any[]>('/server/crash-logs'),
