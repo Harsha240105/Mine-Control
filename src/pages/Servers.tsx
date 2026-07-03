@@ -6,7 +6,7 @@ import {
   CheckCircle, XCircle, Hash, Layers, Bookmark, Download, ChevronRight,
   AlertTriangle, Loader2,
 } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import toast from 'react-hot-toast';
 import { useActiveServer } from '../hooks/useActiveServer';
 
@@ -167,7 +167,11 @@ export default function Servers() {
         await api.selectServer(serverId);
         await refresh();
       } catch (err: any) {
-        toast.error(err.message);
+        if (err instanceof ApiError && err.code && err.reason) {
+          toast.error(err.reason || err.message, { duration: 5000 });
+        } else {
+          toast.error(err.message || 'Failed to select server');
+        }
         return;
       }
     }
@@ -193,7 +197,14 @@ export default function Servers() {
         toast.success('Server stopped');
       }
     } catch (err: any) {
-      toast.error(err.message);
+      if (err instanceof ApiError && err.code && err.reason) {
+        toast.error(err.reason || 'Server operation failed', { duration: 6000 });
+        if (err.repairAction) {
+          setTimeout(() => toast(err.repairAction || '', { icon: '💡', duration: 8000 }), 100);
+        }
+      } else {
+        toast.error(err.message || 'Server operation failed');
+      }
     }
   };
 
@@ -223,7 +234,11 @@ export default function Servers() {
       });
       toast.success(`Server "${result.server.name}" created!`);
     } catch (err: any) {
-      toast.error(err.message);
+      if (err instanceof ApiError && err.reason) {
+        toast.error(err.reason, { duration: 5000 });
+      } else {
+        toast.error(err.message || 'Failed to create server');
+      }
     }
     setCreating(false);
   };

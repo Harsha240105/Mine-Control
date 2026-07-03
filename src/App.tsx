@@ -27,6 +27,7 @@ import JavaManager from './pages/Java';
 import Guide from './pages/Guide';
 import GitHub from './pages/GitHub';
 import GitHubConfig from './pages/GitHubConfig';
+import GitHubDiagnostics from './pages/GitHubDiagnostics';
 import Servers from './pages/Servers';
 import Compatibility from './pages/Compatibility';
 import Import from './pages/Import';
@@ -126,6 +127,7 @@ export default function App() {
             <Route path="uninstall" element={<Uninstall />} />
             <Route path="settings" element={<Settings />} />
             <Route path="settings/github" element={<GitHubConfig />} />
+            <Route path="github/diagnostics" element={<GitHubDiagnostics />} />
           </Route>
         </Routes>
         </ActiveServerProvider>

@@ -905,6 +905,10 @@ export const feedbackService = {
         let data = '';
         res.on('data', (chunk: string) => { data += chunk; });
         res.on('end', () => {
+          // Log every API request
+          const logEntry = `[GitHub API] POST /repos/${owner}/${repo}/issues → HTTP ${res.statusCode} | repo=${config.repository} | status=${res.statusCode} | body=${data.slice(0, 200)} | timestamp=${new Date().toISOString()}`;
+          try { fs.appendFileSync(resolvePath('data', 'github-sync.log'), logEntry + '\n'); } catch {}
+
           try {
             if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
               const result = JSON.parse(data);
@@ -918,6 +922,13 @@ export const feedbackService = {
                 const errData = JSON.parse(data);
                 errMsg = errData.message || errMsg;
               } catch {}
+
+              // Map specific status codes to user-friendly messages
+              if (res.statusCode === 401) errMsg = 'Invalid GitHub token. Generate a new token at GitHub Settings → Developer settings → Personal access tokens → Fine-grained tokens with Issues: Read & Write permission.';
+              else if (res.statusCode === 403) errMsg = 'Token does not have Issues: Write permission for this repository. Update your token permissions.';
+              else if (res.statusCode === 404) errMsg = `Repository "${owner}/${repo}" not found. Check the owner and repository name.`;
+              else if (res.statusCode === 422) errMsg = 'Invalid issue payload. The issue title or body may contain invalid characters or exceed size limits.';
+
               this._createNotification(ticket.id, ticket.summary || ticket.ticket_id, 'error',
                 `Failed to create GitHub issue: ${errMsg}`);
               reject(new Error(errMsg));

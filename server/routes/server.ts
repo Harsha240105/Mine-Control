@@ -297,17 +297,55 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
   res.json(status);
 });
 
+function buildStartupError(error: any): { error: string; code: string; reason: string; details: string; repairAction: string } {
+  const msg = (error?.message || String(error || '')).toLowerCase();
+
+  if (msg.includes('already running') || msg.includes('already starting'))
+    return { error: 'Server is already running or starting', code: 'ALREADY_RUNNING', reason: 'The server process is already active', details: error.message, repairAction: 'Wait for the current operation to complete or stop the server first' };
+
+  if (msg.includes('missing') || msg.includes('not found'))
+    return { error: 'Server jar not found', code: 'JAR_MISSING', reason: 'The server jar file does not exist in the server directory', details: error.message, repairAction: 'Download a server version from the Software page' };
+
+  if (msg.includes('java') && (msg.includes('version') || msg.includes('detected')))
+    return { error: 'Java version mismatch', code: 'JAVA_MISMATCH', reason: error.message, details: error.message, repairAction: 'Use Java Manager to install or select the correct Java version' };
+
+  if (msg.includes('fabric') && (msg.includes('missing') || msg.includes('not found')))
+    return { error: 'Fabric loader missing', code: 'FABRIC_MISSING', reason: 'The Fabric loader library was not found', details: error.message, repairAction: 'Reinstall Fabric from the Software page or run Repair Fabric' };
+
+  if (msg.includes('forge') && (msg.includes('missing') || msg.includes('libraries')))
+    return { error: 'Forge libraries missing', code: 'FORGE_MISSING', reason: 'Forge dependency libraries are incomplete', details: error.message, repairAction: 'Re-run the Forge installer from the Software page' };
+
+  if (msg.includes('permission') || msg.includes('access denied') || msg.includes('eacces'))
+    return { error: 'Permission denied', code: 'PERMISSION_DENIED', reason: 'MineControl does not have write access to the server directory', details: error.message, repairAction: 'Run MineControl as Administrator' };
+
+  if (msg.includes('eula'))
+    return { error: 'EULA not accepted', code: 'EULA_MISSING', reason: 'The Minecraft EULA has not been accepted', details: error.message, repairAction: 'EULA will be auto-accepted on next start' };
+
+  if (msg.includes('port') || msg.includes('address in use') || msg.includes('eaddrinuse'))
+    return { error: 'Port already in use', code: 'PORT_IN_USE', reason: 'The server port is already occupied by another process', details: error.message, repairAction: 'Change the server port in Settings or kill the process holding the port' };
+
+  if (msg.includes('download') || msg.includes('timeout'))
+    return { error: 'Download failed', code: 'DOWNLOAD_FAILED', reason: 'Could not download required files', details: error.message, repairAction: 'Check your internet connection and try again' };
+
+  if (msg.includes('corrupt') || msg.includes('invalid') || msg.includes('unexpected'))
+    return { error: 'Corrupted installation', code: 'INSTALLATION_CORRUPTED', reason: 'Server files appear to be corrupted', details: error.message, repairAction: 'Download a fresh server version from the Software page' };
+
+  if (msg.includes('disk') || msg.includes('space') || msg.includes('quota'))
+    return { error: 'Disk space insufficient', code: 'DISK_FULL', reason: 'Not enough free disk space to start the server', details: error.message, repairAction: 'Free up disk space or move the server to a different drive' };
+
+  return { error: 'Server failed to start', code: 'STARTUP_FAILED', reason: error.message || 'An unexpected error occurred', details: error.message || '', repairAction: 'Check the server console and startup log for details' };
+}
+
 router.post('/start', authMiddleware, requirePermission('server.start'), async (_req: AuthRequest, res) => {
   try {
     if (minecraftServer.isRunning || minecraftServer.isStarting) {
-      return res.status(400).json({ error: 'Server is already running or starting' });
+      return res.status(400).json({ error: 'Server is already running or starting', code: 'ALREADY_RUNNING', reason: 'The server process is already active', details: '', repairAction: 'Wait for the current operation to complete or stop the server first' });
     }
-    // Await the start promise so pre-check errors (missing jar, incompatible Java)
-    // propagate to the HTTP response instead of being swallowed.
     await minecraftServer.start();
     res.json({ success: true, message: 'Server starting...' });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    const structured = buildStartupError(error);
+    res.status(400).json(structured);
   }
 });
 
@@ -323,7 +361,7 @@ router.post('/stop', authMiddleware, requirePermission('server.stop'), async (_r
 router.post('/restart', authMiddleware, requirePermission('server.restart'), async (_req: AuthRequest, res) => {
   try {
     if (minecraftServer.isStarting) {
-      return res.status(400).json({ error: 'Server is currently starting' });
+      return res.status(400).json(buildStartupError(new Error('Server is currently starting')));
     }
     if (minecraftServer.isRunning) {
       minecraftServer.stop().then(() => {
@@ -336,7 +374,7 @@ router.post('/restart', authMiddleware, requirePermission('server.restart'), asy
     }
     res.json({ success: true, message: 'Server restarting...' });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    res.status(400).json(buildStartupError(error));
   }
 });
 

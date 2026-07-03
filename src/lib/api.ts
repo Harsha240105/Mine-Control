@@ -1,6 +1,24 @@
 const API_BASE = '/api';
 const REQUEST_TIMEOUT = 30000;
 
+export class ApiError extends Error {
+  code?: string;
+  reason?: string;
+  details?: string;
+  repairAction?: string;
+  status?: number;
+
+  constructor(msg: string, extra?: { code?: string; reason?: string; details?: string; repairAction?: string; status?: number }) {
+    super(msg);
+    this.name = 'ApiError';
+    this.code = extra?.code;
+    this.reason = extra?.reason;
+    this.details = extra?.details;
+    this.repairAction = extra?.repairAction;
+    this.status = extra?.status;
+  }
+}
+
 async function request<T>(
   endpoint: string,
   options: RequestInit = {},
@@ -35,19 +53,27 @@ async function request<T>(
 
     if (!res.ok) {
       let errorMsg = res.statusText;
+      let code: string | undefined;
+      let reason: string | undefined;
+      let details: string | undefined;
+      let repairAction: string | undefined;
       try {
         const body = await res.json();
         errorMsg = body.error || body.message || JSON.stringify(body);
+        code = body.code;
+        reason = body.reason;
+        details = body.details;
+        repairAction = body.repairAction;
       } catch {
         try { errorMsg = await res.text(); } catch {}
       }
-      throw new Error(errorMsg || `Request failed: ${res.status}`);
+      throw new ApiError(errorMsg || `Request failed: ${res.status}`, { code, reason, details, repairAction, status: res.status });
     }
 
     return res.json();
   } catch (err: any) {
     if (err.name === 'AbortError') {
-      throw new Error('Request timed out - server may be unavailable');
+      throw new ApiError('Request timed out - server may be unavailable', { code: 'TIMEOUT' });
     }
     throw err;
   } finally {

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Terminal, Send, Download, Search, X, Trash2, ChevronDown, Server } from 'lucide-react';
-import { api } from '../lib/api';
+import { api, ApiError } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
 import { useActiveServer } from '../hooks/useActiveServer';
 import toast from 'react-hot-toast';

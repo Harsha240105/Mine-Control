@@ -69,6 +69,7 @@ const navItems = [
 
 const bottomNavItems = [
   { path: '/java', label: 'Java', icon: Coffee },
+  { path: '/github/diagnostics', label: 'GitHub Sync', icon: Github },
   { path: '/connection/wizard', label: 'Connect Wizard', icon: Radio },
   { path: '/diagnostics', label: 'Diagnostics', icon: Stethoscope },
   { path: '/guide', label: 'Guide', icon: BookOpen },
