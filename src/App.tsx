@@ -23,6 +23,7 @@ import Connection from './pages/Connection';
 import ConnectionWizard from './pages/ConnectionWizard';
 import MapView from './pages/MapView';
 import Diagnostics from './pages/Diagnostics';
+import JavaManager from './pages/Java';
 import Guide from './pages/Guide';
 import GitHub from './pages/GitHub';
 import GitHubConfig from './pages/GitHubConfig';
@@ -116,6 +117,7 @@ export default function App() {
             <Route path="discord" element={<Discord />} />
             <Route path="feedback" element={<Feedback />} />
             <Route path="map" element={<MapView />} />
+            <Route path="java" element={<JavaManager />} />
             <Route path="diagnostics" element={<Diagnostics />} />
             <Route path="guide" element={<Guide />} />
             <Route path="github" element={<GitHub />} />

@@ -194,12 +194,17 @@ export const api = {
       body: JSON.stringify(settings),
     }),
 
+  // Java Manager
+  getJavaScan: () => request<any>('/server/java/scan'),
+  installJava: (version: string, source?: string) =>
+    request<any>('/server/java/install', { method: 'POST', body: JSON.stringify({ version, source }) }),
+  resolveBestJava: (version: string, source: string) =>
+    request<any>('/server/java/resolve', { method: 'POST', body: JSON.stringify({ version, source }) }),
+
   // Validation & Repair
   validateServer: () => request<any>('/server/validate'),
   repairServer: (action: string, data?: any) =>
     request<any>('/server/repair', { method: 'POST', body: JSON.stringify({ action, ...data }) }),
-  installJava: (version: string, source?: string) =>
-    request<any>('/server/java/install', { method: 'POST', body: JSON.stringify({ version, source }) }),
   getStartupLog: () => request<any>('/server/startup-log'),
 
   // Diagnostics

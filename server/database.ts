@@ -1256,6 +1256,15 @@ function initializeSchema() {
     db.prepare('INSERT INTO schema_version (version) VALUES (15)').run();
   }
 
+  if (currentVersion < 16) {
+    const serverCols16 = db.prepare("PRAGMA table_info('servers')").all().map((r: any) => r.name);
+    if (!serverCols16.includes('javaVersion')) db.exec("ALTER TABLE servers ADD COLUMN javaVersion TEXT DEFAULT ''");
+    if (!serverCols16.includes('javaVendor')) db.exec("ALTER TABLE servers ADD COLUMN javaVendor TEXT DEFAULT ''");
+    if (!serverCols16.includes('javaHome')) db.exec("ALTER TABLE servers ADD COLUMN javaHome TEXT DEFAULT ''");
+
+    db.prepare('INSERT INTO schema_version (version) VALUES (16)').run();
+  }
+
 }
 
 function migrateDefaultServer() {

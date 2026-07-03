@@ -60,6 +60,16 @@ router.get('/validate', authMiddleware, async (_req: AuthRequest, res) => {
   }
 });
 
+router.post('/java/resolve', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { version, source } = req.body;
+    const result = await JavaDetector.resolveBestJava(version || '1.21', source || 'paper');
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/repair', authMiddleware, requirePermission('server.start'), async (req: AuthRequest, res) => {
   try {
     const { action } = req.body;

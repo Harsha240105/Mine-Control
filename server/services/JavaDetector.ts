@@ -6,6 +6,8 @@ import os from 'os';
 
 const execAsync = promisify(exec);
 
+export type JavaSource = 'PATH' | 'JAVA_HOME' | 'REGISTRY' | 'INSTALL_DIR' | 'WHERE_COMMAND' | 'MANAGED' | 'KNOWN_PATH';
+
 export interface JavaVersion {
   path: string;
   version: string;
@@ -14,16 +16,15 @@ export interface JavaVersion {
   arch: string;
   is64bit: boolean;
   javaHome: string;
+  source: JavaSource;
 }
 
-// Minecraft major version → minimum required Java version
 const MC_JAVA_REQUIREMENTS: Record<string, number> = {
   '1.0': 6, '1.1': 6, '1.2': 6, '1.3': 6, '1.4': 6, '1.5': 6, '1.6': 6, '1.7': 6,
   '1.8': 8, '1.9': 8, '1.10': 8, '1.11': 8, '1.12': 8, '1.13': 8, '1.14': 8, '1.15': 8, '1.16': 8,
   '1.17': 16, '1.18': 17, '1.19': 17, '1.20': 17, '1.21': 21,
 };
 
-// Software → minimum Java version
 const SOFTWARE_JAVA_REQUIREMENTS: Record<string, number> = {
   paper: 17, purpur: 17, fabric: 17, forge: 17, neoforge: 17,
   quilt: 17, spigot: 8, folia: 17, pufferfish: 17, vanilla: 8,
@@ -36,22 +37,12 @@ export class JavaDetector {
     const javaPaths = new Set<string>();
     const platform = os.platform();
 
-    javaPaths.add('java');
-    javaPaths.add('javaw');
-
     if (platform === 'win32') {
       this.scanWindows(javaPaths);
     } else if (platform === 'darwin') {
-      this.findInDirMac('/Library/Java/JavaVirtualMachines', javaPaths);
-      this.findInDirUnix('/usr/local/opt', javaPaths);
-      this.findInDirUnix('/opt/homebrew/opt', javaPaths);
+      this.scanMac(javaPaths);
     } else {
-      this.findInDirUnix('/usr/lib/jvm', javaPaths);
-      this.findInDirUnix('/opt/java', javaPaths);
-      this.findInDirUnix('/usr/local/lib', javaPaths);
-      this.findInDirUnix('/snap', javaPaths);
-      if (fs.existsSync('/usr/local/bin/java')) javaPaths.add('/usr/local/bin/java');
-      if (fs.existsSync('/usr/bin/java')) javaPaths.add('/usr/bin/java');
+      this.scanLinux(javaPaths);
     }
 
     const results: JavaVersion[] = [];
@@ -63,11 +54,17 @@ export class JavaDetector {
       }
     }
 
+    results.sort((a, b) => b.majorVersion - a.majorVersion);
     return results;
   }
 
+  private static addPath(set: Set<string>, p: string) {
+    const normalized = p.replace(/\\/g, '/').trim();
+    if (normalized && !set.has(normalized)) set.add(normalized);
+  }
+
   private static scanWindows(set: Set<string>) {
-    const searchDirs = [
+    const installDirs = [
       'C:/Program Files/Java',
       'C:/Program Files/Eclipse Adoptium',
       'C:/Program Files/Microsoft',
@@ -76,14 +73,49 @@ export class JavaDetector {
       'C:/Program Files/BellSoft',
       'C:/Program Files (x86)/Java',
       'C:/Program Files (x86)/Eclipse Adoptium',
-      process.env.JAVA_HOME || '',
+      'C:/Program Files (x86)/Microsoft',
+      'C:/Program Files (x86)/Amazon Corretto',
+      'C:/Program Files (x86)/Zulu',
+      'C:/Program Files/AdoptOpenJDK',
+      'C:/Program Files/Oracle',
+      'C:/Program Files/JavaSoft',
+      'C:/ProgramData/Oracle/Java',
+      'C:/ProgramData/Java',
       `${process.env.LOCALAPPDATA || ''}/Programs/Eclipse Adoptium`,
       `${process.env.LOCALAPPDATA || ''}/Programs/Java`,
+      `${process.env.LOCALAPPDATA || ''}/Programs/Microsoft`,
+      `${process.env.LOCALAPPDATA || ''}/Programs/Amazon Corretto`,
+      `${process.env.LOCALAPPDATA || ''}/Programs/Zulu`,
+      `${process.env.LOCALAPPDATA || ''}/Programs/BellSoft`,
       `${process.env.USERPROFILE || ''}/.minecontrol/jre`,
     ];
-    for (const dir of searchDirs) {
-      if (dir) this.findInDir(dir.replace(/\\/g, '/'), set);
+    for (const dir of installDirs) {
+      if (dir) this.findInDir(dir.replace(/\\/g, '/'), set, 'INSTALL_DIR');
     }
+
+    // JAVA_HOME
+    const javaHome = process.env.JAVA_HOME;
+    if (javaHome) {
+      const binDir = path.join(javaHome, 'bin').replace(/\\/g, '/');
+      this.findInDir(binDir, set, 'JAVA_HOME');
+      for (const exe of ['bin/java.exe', 'bin/javaw.exe', 'bin/java']) {
+        const full = path.join(javaHome.replace(/\\/g, '/'), exe);
+        if (fs.existsSync(full)) this.addPath(set, full);
+      }
+    }
+
+    // PATH entries
+    const pathEnv = process.env.PATH || '';
+    for (const entry of pathEnv.split(';')) {
+      const trimmed = entry.trim();
+      if (!trimmed) continue;
+      for (const exe of ['java.exe', 'javaw.exe', 'java']) {
+        const full = path.join(trimmed, exe).replace(/\\/g, '/');
+        if (fs.existsSync(full)) this.addPath(set, full);
+      }
+    }
+
+    // where java
     try {
       const out = execSync('where java 2>nul', { encoding: 'utf8', timeout: 5000 });
       for (const line of out.split('\n')) {
@@ -91,19 +123,81 @@ export class JavaDetector {
         if (p && !set.has(p)) set.add(p);
       }
     } catch {}
-    try {
-      const out = execSync('reg query "HKLM\\SOFTWARE\\JavaSoft\\JDK" /s 2>nul', { encoding: 'utf8', timeout: 5000 });
-      for (const line of out.split('\n')) {
-        const m = line.match(/JavaHome\s+REG_SZ\s+(.+)/);
-        if (m) {
-          const home = m[1].trim().replace(/\\/g, '/');
-          this.findInDir(home, set);
+
+    // Registry: HKLM JavaSoft JDK
+    for (const key of [
+      'HKLM\\SOFTWARE\\JavaSoft\\JDK',
+      'HKLM\\SOFTWARE\\JavaSoft\\JRE',
+      'HKLM\\SOFTWARE\\JavaSoft\\Java Development Kit',
+      'HKLM\\SOFTWARE\\JavaSoft\\Java Runtime Environment',
+      'HKLM\\SOFTWARE\\Eclipse Adoptium\\JDK',
+      'HKLM\\SOFTWARE\\Microsoft\\JDK',
+      'HKCU\\SOFTWARE\\JavaSoft\\JDK',
+      'HKCU\\SOFTWARE\\JavaSoft\\JRE',
+    ]) {
+      try {
+        const out = execSync(`reg query "${key}" /s 2>nul`, { encoding: 'utf8', timeout: 5000 });
+        for (const line of out.split('\n')) {
+          const m = line.match(/(?:JavaHome|Path)\s+REG_SZ\s+(.+)/);
+          if (m) {
+            const home = m[1].trim().replace(/\\/g, '/');
+            this.findInDir(home, set, 'REGISTRY');
+            for (const exe of ['bin/java.exe', 'bin/javaw.exe', 'bin/java']) {
+              const full = path.join(home, exe).replace(/\\/g, '/');
+              if (fs.existsSync(full)) this.addPath(set, full);
+            }
+          }
         }
+      } catch {}
+    }
+
+    // Managed JRE
+    const managedDir = path.join(process.env.USERPROFILE || '', '.minecontrol', 'jre').replace(/\\/g, '/');
+    this.findInDir(managedDir, set, 'MANAGED');
+  }
+
+  private static scanMac(set: Set<string>) {
+    this.findInDirMac('/Library/Java/JavaVirtualMachines', set);
+    this.findInDirUnix('/usr/local/opt', set);
+    this.findInDirUnix('/opt/homebrew/opt', set);
+    if (fs.existsSync('/usr/bin/java')) this.addPath(set, '/usr/bin/java');
+    // brew
+    try {
+      const out = execSync('brew --prefix openjdk 2>/dev/null', { encoding: 'utf8', timeout: 5000 });
+      const p = out.trim();
+      if (p) {
+        const javaExe = path.join(p, 'bin', 'java');
+        if (fs.existsSync(javaExe)) this.addPath(set, javaExe);
+      }
+    } catch {}
+    try {
+      const out = execSync('ls /usr/local/Cellar/openjdk*/bin/java 2>/dev/null', { encoding: 'utf8', timeout: 5000 });
+      for (const line of out.split('\n')) {
+        if (line.trim()) this.addPath(set, line.trim());
       }
     } catch {}
   }
 
-  private static findInDir(baseDir: string, set: Set<string>) {
+  private static scanLinux(set: Set<string>) {
+    this.findInDirUnix('/usr/lib/jvm', set);
+    this.findInDirUnix('/opt/java', set);
+    this.findInDirUnix('/usr/local/lib', set);
+    this.findInDirUnix('/snap', set);
+    if (fs.existsSync('/usr/local/bin/java')) this.addPath(set, '/usr/local/bin/java');
+    if (fs.existsSync('/usr/bin/java')) this.addPath(set, '/usr/bin/java');
+    if (fs.existsSync('/usr/libexec/java_home')) {
+      try {
+        const out = execSync('/usr/libexec/java_home 2>/dev/null', { encoding: 'utf8', timeout: 5000 });
+        const home = out.trim();
+        if (home) {
+          const javaExe = path.join(home, 'bin', 'java');
+          if (fs.existsSync(javaExe)) this.addPath(set, javaExe);
+        }
+      } catch {}
+    }
+  }
+
+  private static findInDir(baseDir: string, set: Set<string>, source: JavaSource = 'INSTALL_DIR') {
     if (!fs.existsSync(baseDir)) return;
     try {
       const entries = fs.readdirSync(baseDir, { withFileTypes: true });
@@ -114,6 +208,11 @@ export class JavaDetector {
             if (fs.existsSync(full)) set.add(full);
           }
         }
+      }
+      // Also check if baseDir itself contains java
+      for (const exe of ['java.exe', 'javaw.exe', 'java']) {
+        const full = path.join(baseDir, exe).replace(/\\/g, '/');
+        if (fs.existsSync(full)) set.add(full);
       }
     } catch {}
   }
@@ -152,12 +251,29 @@ export class JavaDetector {
       let major = 0;
       if (fullVersion.startsWith('1.')) major = parseInt(fullVersion.split('.')[1], 10);
       else major = parseInt(fullVersion.split('.')[0], 10);
+      if (!major) return null;
       const vendor = this.detectVendor(stderr);
-      const archMatch = stderr.match(/(?:64-Bit|64bit|x86_64|amd64)/i);
+      const archMatch = stderr.match(/(?:64-Bit|64bit|x86_64|amd64|AArch64)/i);
       const is64bit = !!archMatch;
       const javaHome = await this.resolveJavaHome(javaPath);
-      return { path: javaPath, version: fullVersion, majorVersion: major, vendor, arch: is64bit ? '64-bit' : '32-bit', is64bit, javaHome };
+      const source = this.detectSource(javaPath);
+      return {
+        path: javaPath, version: fullVersion, majorVersion: major,
+        vendor, arch: is64bit ? '64-bit' : '32-bit', is64bit, javaHome, source,
+      };
     } catch { return null; }
+  }
+
+  private static detectSource(javaPath: string): JavaSource {
+    if (javaPath.includes('.minecontrol')) return 'MANAGED';
+    if (process.env.JAVA_HOME && javaPath.startsWith(process.env.JAVA_HOME.replace(/\\/g, '/'))) return 'JAVA_HOME';
+    const pathEnv = process.env.PATH || '';
+    for (const entry of pathEnv.split(';')) {
+      const dir = entry.trim().replace(/\\/g, '/');
+      if (dir && javaPath.startsWith(dir)) return 'PATH';
+    }
+    if (javaPath === 'java' || javaPath === 'javaw') return 'PATH';
+    return 'INSTALL_DIR';
   }
 
   private static detectVendor(versionOutput: string): string {
@@ -172,6 +288,8 @@ export class JavaDetector {
     if (versionOutput.includes('Oracle')) return 'Oracle';
     if (versionOutput.includes('IBM')) return 'IBM';
     if (versionOutput.includes('SAP')) return 'SAP';
+    if (versionOutput.includes('Semeru')) return 'Semeru';
+    if (versionOutput.includes('Dragonwell')) return 'Dragonwell';
     return 'Unknown';
   }
 
@@ -186,36 +304,72 @@ export class JavaDetector {
         return '';
       }
       const dir = path.dirname(path.dirname(javaPath));
+      if (fs.existsSync(path.join(dir, 'lib', 'jexec'))) return dir;
       if (fs.existsSync(path.join(dir, 'lib', 'modules'))) return dir;
       if (fs.existsSync(path.join(dir, 'jre', 'lib'))) return path.join(dir, 'jre');
+      if (fs.existsSync(path.join(dir, 'bin', 'java'))) return dir;
+      if (fs.existsSync(path.join(dir, 'bin', 'java.exe'))) return dir;
       return dir;
     } catch { return ''; }
   }
 
-  static async validateJava(version: string, source: string): Promise<{
-    ok: boolean;
-    required: number;
-    found: JavaVersion | null;
-    allDetected: JavaVersion[];
-    message: string;
-    canAutoInstall: boolean;
+  static async resolveBestJava(version: string, source: string): Promise<{
+    javaPath: string;
+    javaMajor: number;
+    javaVersion: string;
+    javaVendor: string;
+    javaHome: string;
+    autoDownloaded: boolean;
   }> {
     const required = JavaDetector.getRequiredJavaVersion(version, source);
-    const detected = await JavaDetector.scan();
-    const compatible = detected.filter(j => j.majorVersion >= required).sort((a, b) => a.majorVersion - b.majorVersion);
-    const found = compatible.length > 0 ? compatible[0] : null;
-    const canAutoInstall = required >= 8 && required <= 23;
-    if (found) {
-      return { ok: true, required, found, allDetected: detected, message: `Java ${found.majorVersion} found at "${found.path}"`, canAutoInstall };
+    const installed = await JavaDetector.scan();
+    const compatible = installed.filter(j => j.majorVersion >= required);
+
+    if (compatible.length > 0) {
+      const best = compatible[0];
+      return {
+        javaPath: best.path,
+        javaMajor: best.majorVersion,
+        javaVersion: best.version,
+        javaVendor: best.vendor,
+        javaHome: best.javaHome,
+        autoDownloaded: false,
+      };
     }
-    if (detected.length === 0) {
-      return { ok: false, required, found: null, allDetected: detected, message: `Java not found. Minecraft ${version} requires Java ${required}+.`, canAutoInstall };
+
+    // None compatible — auto-download
+    const controlDir = path.join(os.homedir(), '.minecontrol');
+    const jreDir = path.join(controlDir, 'jre');
+
+    // Check if managed JRE exists and is compatible
+    const managedExe = path.join(jreDir, 'bin', 'java.exe').replace(/\\/g, '/');
+    if (fs.existsSync(managedExe)) {
+      const v = await JavaDownloader.checkJavaVersion(managedExe);
+      if (v >= required) {
+        const info = await JavaDownloader.getVersionInfo(managedExe);
+        return {
+          javaPath: managedExe,
+          javaMajor: v,
+          javaVersion: info.version,
+          javaVendor: info.vendor,
+          javaHome: jreDir,
+          autoDownloaded: false,
+        };
+      }
     }
-    const latest = detected.sort((a, b) => b.majorVersion - a.majorVersion)[0];
+
+    // Download Temurin
+    const downloadPath = await JavaDownloader.downloadAndInstall(required, jreDir, undefined);
+    const exePath = path.join(downloadPath, 'bin', 'java.exe').replace(/\\/g, '/');
+    const maj = await JavaDownloader.checkJavaVersion(exePath);
+    const info2 = await JavaDownloader.getVersionInfo(exePath);
     return {
-      ok: false, required, found: null, allDetected: detected,
-      message: `Java ${latest.majorVersion} found at "${latest.path}" but Minecraft ${version} requires Java ${required}+.\nInstalled: ${detected.map(j => `Java ${j.majorVersion} (${j.vendor})`).join(', ')}`,
-      canAutoInstall,
+      javaPath: exePath,
+      javaMajor: maj,
+      javaVersion: info2.version,
+      javaVendor: info2.vendor,
+      javaHome: downloadPath,
+      autoDownloaded: true,
     };
   }
 
@@ -227,7 +381,8 @@ export class JavaDetector {
     const majorMatch = version.match(/^(\d+\.\d+)/);
     if (majorMatch) {
       const mcVer = majorMatch[1];
-      for (const [range, javaVer] of Object.entries(MC_JAVA_REQUIREMENTS).sort((a, b) => b[0].localeCompare(a[0]))) {
+      const sorted = Object.entries(MC_JAVA_REQUIREMENTS).sort((a, b) => b[0].localeCompare(a[0]));
+      for (const [range, javaVer] of sorted) {
         if (mcVer >= range) return javaVer;
       }
     }
@@ -240,34 +395,23 @@ export class JavaDownloader {
     return `${ADOPTIUM_API}/binary/latest/${majorVersion}/ga/windows/x64/jdk/hotspot/normal/eclipse`;
   }
 
-  static async downloadAndInstall(majorVersion: number, targetDir: string, onProgress?: (pct: number) => void): Promise<string> {
-    const url = await JavaDownloader.getDownloadUrl(majorVersion);
-    const zipPath = path.join(targetDir, `temurin-${majorVersion}-jdk.zip`);
-    const extractDir = path.join(targetDir, `jdk-${majorVersion}`);
-
-    if (fs.existsSync(path.join(extractDir, 'bin', 'java.exe'))) {
-      return extractDir;
+  static async getVersionInfo(javaPath: string): Promise<{ version: string; vendor: string }> {
+    try {
+      const { stderr } = await execAsync(`"${javaPath}" -version`);
+      const verMatch = stderr.match(/version "(.*?)"/);
+      const version = verMatch ? verMatch[1] : 'unknown';
+      let vendor = 'Unknown';
+      if (stderr.includes('Temurin') || stderr.includes('Eclipse Adoptium')) vendor = 'Temurin';
+      else if (stderr.includes('Microsoft')) vendor = 'Microsoft';
+      else if (stderr.includes('Corretto')) vendor = 'Corretto';
+      else if (stderr.includes('Zulu')) vendor = 'Zulu';
+      else if (stderr.includes('Liberica')) vendor = 'Liberica';
+      else if (stderr.includes('Oracle')) vendor = 'Oracle';
+      else if (stderr.includes('OpenJDK')) vendor = 'OpenJDK';
+      return { version, vendor };
+    } catch {
+      return { version: 'unknown', vendor: 'Unknown' };
     }
-
-    fs.mkdirSync(targetDir, { recursive: true });
-    await JavaDownloader.downloadFile(url, zipPath, onProgress);
-    await JavaDownloader.extractZip(zipPath, targetDir);
-    try { fs.unlinkSync(zipPath); } catch {}
-
-    const entries = fs.readdirSync(targetDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isDirectory() && entry.name.startsWith('jdk-')) {
-        const full = path.join(targetDir, entry.name);
-        const javaExe = path.join(full, 'bin', 'java.exe');
-        if (fs.existsSync(javaExe)) {
-          if (full !== extractDir) {
-            try { fs.renameSync(full, extractDir); } catch {}
-          }
-          return extractDir;
-        }
-      }
-    }
-    return extractDir;
   }
 
   static async checkJavaVersion(javaPath: string): Promise<number> {
@@ -278,11 +422,51 @@ export class JavaDownloader {
     } catch { return 0; }
   }
 
-  private static downloadFile(url: string, dest: string, onProgress?: (pct: number) => void): Promise<void> {
+  static async downloadAndInstall(majorVersion: number, targetDir: string, onProgress?: (pct: number) => void): Promise<string> {
+    const url = await JavaDownloader.getDownloadUrl(majorVersion);
+    const zipPath = path.join(targetDir, `temurin-${majorVersion}-jdk.zip`);
+    const extractDir = path.join(targetDir, `jdk-${majorVersion}`);
+
+    if (fs.existsSync(path.join(extractDir, 'bin', 'java.exe'))) {
+      return extractDir;
+    }
+
+    fs.mkdirSync(targetDir, { recursive: true });
+
+    try {
+      await JavaDownloader.downloadFile(url, zipPath, onProgress);
+      await JavaDownloader.extractZip(zipPath, targetDir);
+    } finally {
+      try { fs.unlinkSync(zipPath); } catch {}
+    }
+
+    const entries = fs.readdirSync(targetDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const javaExe = path.join(targetDir, entry.name, 'bin', 'java.exe');
+        if (fs.existsSync(javaExe)) {
+          const full = path.join(targetDir, entry.name);
+          if (full !== extractDir) {
+            try {
+              if (fs.existsSync(extractDir)) {
+                // Remove old extract dir first
+                fs.rmSync(extractDir, { recursive: true, force: true });
+              }
+              fs.renameSync(full, extractDir);
+            } catch {}
+          }
+          return extractDir;
+        }
+      }
+    }
+    return extractDir;
+  }
+
+  static async downloadFile(url: string, dest: string, onProgress?: (pct: number) => void): Promise<void> {
     return new Promise((resolve, reject) => {
       const https = require('https');
-      const fs = require('fs');
-      const file = fs.createWriteStream(dest);
+      const fs2 = require('fs');
+      const file = fs2.createWriteStream(dest);
       https.get(url, (res: any) => {
         const total = parseInt(res.headers['content-length'] || '0', 10);
         let downloaded = 0;
@@ -292,37 +476,22 @@ export class JavaDownloader {
           if (total && onProgress) onProgress(Math.round((downloaded / total) * 100));
         });
         res.on('end', () => { file.end(); resolve(); });
-      }).on('error', (err: Error) => { file.close(); fs.unlinkSync(dest); reject(err); });
+      }).on('error', (err: Error) => {
+        file.close();
+        try { fs2.unlinkSync(dest); } catch {}
+        reject(err);
+      });
     });
   }
 
   private static extractZip(zipPath: string, dest: string): Promise<void> {
     return new Promise((resolve, reject) => {
-      const fs = require('fs');
+      const fs2 = require('fs');
       const unzipper = require('unzipper');
-      fs.createReadStream(zipPath)
+      fs2.createReadStream(zipPath)
         .pipe(unzipper.Extract({ path: dest }))
         .on('close', resolve)
         .on('error', reject);
     });
-  }
-
-  static async ensureJavaForMinecraft(version: string, source: string, controlDir: string, onProgress?: (pct: number) => void): Promise<string> {
-    const required = JavaDetector.getRequiredJavaVersion(version, source);
-    const jreDir = path.join(controlDir, 'jre');
-
-    const existing = JavaDetector.scan();
-    const compatible = (await existing).filter(j => j.majorVersion >= required);
-    if (compatible.length > 0) {
-      return compatible[0].path;
-    }
-
-    const jreBin = path.join(jreDir, 'bin', 'java.exe');
-    if (fs.existsSync(jreBin)) {
-      const v = await JavaDownloader.checkJavaVersion(jreBin);
-      if (v >= required) return jreBin;
-    }
-
-    return path.join(await JavaDownloader.downloadAndInstall(required, jreDir, onProgress), 'bin', 'java.exe');
   }
 }

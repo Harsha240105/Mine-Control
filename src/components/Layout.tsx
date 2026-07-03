@@ -16,6 +16,7 @@ import {
   PowerOff,
   RotateCcw,
   Cpu,
+  Coffee,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -67,6 +68,7 @@ const navItems = [
 ];
 
 const bottomNavItems = [
+  { path: '/java', label: 'Java', icon: Coffee },
   { path: '/connection/wizard', label: 'Connect Wizard', icon: Radio },
   { path: '/diagnostics', label: 'Diagnostics', icon: Stethoscope },
   { path: '/guide', label: 'Guide', icon: BookOpen },

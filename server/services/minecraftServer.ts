@@ -7,7 +7,7 @@ import { EventEmitter } from 'events';
 import unzipper from 'unzipper';
 import { getDatabase } from '../database';
 import { resolveMinecraftDir, setMinecraftDir } from '../paths';
-import { JavaDetector, JavaDownloader } from './JavaDetector';
+import { JavaDetector, JavaDownloader, JavaVersion } from './JavaDetector';
 
 export enum ServerState {
   STOPPED = 'stopped',
@@ -45,6 +45,17 @@ class MinecraftServerManager extends EventEmitter {
   private hasStartedSuccessfully = false;
   private crashLog: string[] = [];
   private _currentTps = 20.0;
+  private _lastJavaLaunch: {
+    executable: string;
+    version: string;
+    majorVersion: number;
+    vendor: string;
+    javaHome: string;
+    args: string[];
+    cwd: string;
+    timestamp: number;
+  } | null = null;
+  private _lastJavaInfo: JavaVersion | null = null;
 
   constructor() {
     super();
@@ -386,17 +397,23 @@ class MinecraftServerManager extends EventEmitter {
 
   // ── Auto-repair methods ──
   async autoInstallJava(version: string, source: string): Promise<{ success: boolean; javaPath: string; message: string }> {
-    const controlDir = path.resolve(this.serverDir, '..', '.minecontrol');
-    const javaPath = await JavaDownloader.ensureJavaForMinecraft(version, source, controlDir, (pct) => {
-      this.emit('server:output', `[MineControl] Downloading Java... ${pct}%\n`);
-    });
-    const exists = fs.existsSync(javaPath);
-    if (exists) {
-      this.getConfig().javaPath = javaPath;
-      this.updateConfig('javaPath', javaPath);
-      return { success: true, javaPath, message: `Java installed at ${javaPath}` };
+    try {
+      const controlDir = path.resolve(this.serverDir, '..', '.minecontrol');
+      const required = JavaDetector.getRequiredJavaVersion(version, source);
+      const jreDir = await JavaDownloader.downloadAndInstall(required, path.join(controlDir, 'jre'), (pct: number) => {
+        this.emit('server:output', `[MineControl] Downloading Java ${required}... ${pct}%\n`);
+      });
+      const exePath = path.join(jreDir, 'bin', 'java.exe').replace(/\\/g, '/');
+      if (fs.existsSync(exePath)) {
+        const maj = await JavaDownloader.checkJavaVersion(exePath);
+        const info = await JavaDownloader.getVersionInfo(exePath);
+        this.saveJavaConfig(exePath, info.version, maj, info.vendor, jreDir);
+        return { success: true, javaPath: exePath, message: `Java ${maj} (${info.vendor}) installed at ${exePath}` };
+      }
+      return { success: false, javaPath: '', message: 'Download succeeded but java.exe not found at expected location.' };
+    } catch (err: any) {
+      return { success: false, javaPath: '', message: `Java auto-install failed: ${err.message}` };
     }
-    return { success: false, javaPath: '', message: 'Failed to install Java automatically.' };
   }
 
   async autoFixPort(): Promise<{ success: boolean; message: string }> {
@@ -561,61 +578,73 @@ class MinecraftServerManager extends EventEmitter {
     }
   }
 
-  private async resolveJava(jarPath: string, config: any): Promise<{ javaPath: string; javaMajor: number; classVersion: number | null }> {
+  private async resolveJava(
+    jarPath: string, config: any, version: string, source: string
+  ): Promise<{ javaPath: string; javaMajor: number; classVersion: number | null; javaVersion: string; javaVendor: string; javaHome: string }> {
     const classVersion = await this.detectRequiredJava(jarPath);
-    const requiredJava = classVersion !== null ? classVersion - 44 : 21;
+    const required = classVersion !== null ? classVersion - 44 : JavaDetector.getRequiredJavaVersion(version, source);
 
-    // Try configured path
-    let javaPath = config.javaPath;
-    let javaMajor: number;
-
-    const tryJavaAt = async (jPath: string): Promise<number> => {
-      try {
-        const out = execSync(`"${jPath}" -version 2>&1`, { encoding: 'utf8', timeout: 10000 });
-        const m = out.match(/version "(\d+)/);
-        return m ? parseInt(m[1], 10) : 0;
-      } catch { return 0; }
-    };
-
-    javaMajor = await tryJavaAt(javaPath);
-
-    if (javaMajor >= requiredJava) {
-      return { javaPath, javaMajor, classVersion };
+    // 1. Try per-server configured path (may be empty string for new servers)
+    let configured = config.javaExecutable || config.javaPath || '';
+    if (configured && configured !== 'java' && configured !== 'javaw') {
+      const maj = await this.checkJavaVersion(configured);
+      if (maj >= required) {
+        const info = await JavaDownloader.getVersionInfo(configured);
+        return { javaPath: configured, javaMajor: maj, classVersion, javaVersion: info.version, javaVendor: info.vendor, javaHome: config.javaHome || '' };
+      }
     }
 
-    // Configured path is absent or too old — scan all installed JDKs
-    const { JavaDetector } = await import('./JavaDetector');
+    // 2. Scan all installed JDKs
     const installed = await JavaDetector.scan();
-    const viable = installed
-      .filter(j => j.majorVersion >= requiredJava)
-      .sort((a, b) => a.majorVersion - b.majorVersion);
+    const viable = installed.filter(j => j.majorVersion >= required);
 
     if (viable.length > 0) {
-      javaPath = viable[0].path;
-      javaMajor = viable[0].majorVersion;
-      this.emit('server:output', `[MineControl] Auto-selected Java at "${javaPath}" (Java ${javaMajor})\n`);
-      return { javaPath, javaMajor, classVersion };
+      const best = viable[0];
+      this.saveJavaConfig(best.path, best.version, best.majorVersion, best.vendor, best.javaHome);
+      return {
+        javaPath: best.path, javaMajor: best.majorVersion, classVersion,
+        javaVersion: best.version, javaVendor: best.vendor, javaHome: best.javaHome,
+      };
     }
 
-    // No compatible JDK found — build error message
-    const installedList = installed.map(j => `  • Java ${j.majorVersion} at "${j.path}"`).join('\n');
-    const classInfo = classVersion !== null
-      ? ` (class version ${classVersion}.0)`
-      : '';
-    throw new Error(
-      `This server jar requires Java ${requiredJava}+${classInfo}, but the configured Java at "${config.javaPath}" is` +
-      (javaMajor > 0 ? ` only Java ${javaMajor}.` : ` not found.`) +
-      `\n\nInstalled JDKs:\n${installedList || '  (none found)'}\n\n` +
-      `No compatible Java ${requiredJava}+ installation found.\n` +
-      `Please install Java ${requiredJava}+ from:\n` +
-      `  • https://adoptium.net/temurin/releases/?version=${requiredJava}\n` +
-      `  • https://www.oracle.com/java/technologies/downloads/\n\n` +
-      `After installing, either:\n` +
-      `  - Add Java ${requiredJava}+ to your PATH\n` +
-      `  - Configure the full path in MineControl Settings\n` +
-      `  - Restart MineControl to auto-detect the new Java`
-    );
+    // 3. Auto-download Temurin
+    this.emit('server:output', `[MineControl] No compatible Java ${required}+ found. Downloading Eclipse Temurin ${required}...\n`);
+    const controlDir = path.resolve(this.serverDir, '..', '.minecontrol');
+    const jreExe = await JavaDownloader.downloadAndInstall(required, path.join(controlDir, 'jre'), (pct) => {
+      this.emit('server:output', `[MineControl] Downloading Java ${required}... ${pct}%\n`);
+    });
+    const exePath = path.join(jreExe, 'bin', 'java.exe').replace(/\\/g, '/');
+    const maj = await JavaDownloader.checkJavaVersion(exePath);
+    const info = await JavaDownloader.getVersionInfo(exePath);
+    this.saveJavaConfig(exePath, info.version, maj, info.vendor, jreExe);
+    return {
+      javaPath: exePath, javaMajor: maj, classVersion,
+      javaVersion: info.version, javaVendor: info.vendor, javaHome: jreExe,
+    };
   }
+
+  private async checkJavaVersion(javaPath: string): Promise<number> {
+    try {
+      const out = execSync(`"${javaPath}" -version 2>&1`, { encoding: 'utf8', timeout: 10000 });
+      const m = out.match(/version "(?:1\.)?(\d+)/);
+      return m ? parseInt(m[1], 10) : 0;
+    } catch { return 0; }
+  }
+
+  private saveJavaConfig(javaPath: string, javaVersion: string, javaMajor: number, javaVendor: string, javaHome: string) {
+    this._lastJavaInfo = { path: javaPath, version: javaVersion, majorVersion: javaMajor, vendor: javaVendor, javaHome, arch: '64-bit', is64bit: true, source: 'MANAGED' };
+    try {
+      const db = getDatabase();
+      const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+      if (activeId) {
+        db.prepare("UPDATE servers SET javaPath = ?, javaVersion = ?, javaVendor = ?, javaHome = ?, updated_at = datetime('now') WHERE id = ?")
+          .run(javaPath, `${javaMajor}.0.0`, javaVendor, javaHome, activeId);
+      }
+    } catch {}
+  }
+
+  get lastJavaLaunch() { return this._lastJavaLaunch; }
+  get lastJavaInfo() { return this._lastJavaInfo; }
 
   async start(): Promise<void> {
     if (this._state === ServerState.RUNNING || this._state === ServerState.STARTING || this._state === ServerState.STOPPING) {
@@ -633,37 +662,29 @@ class MinecraftServerManager extends EventEmitter {
     try {
       this.setState(ServerState.STARTING);
 
-      // ── Phase 1: Pre-flight validation ──
+      // Phase 1: Pre-flight validation
       this.appendStartupLog('Checking server jar...');
       const { config, jarFileName, jarPath } = await this.validatePreFlight();
       this.appendStartupLog(`Server jar OK: ${jarFileName}`);
 
-      // ── Phase 2: Java validation ──
-      this.appendStartupLog('Checking Java runtime...');
-      let { javaPath, javaMajor, classVersion } = await this.resolveJava(jarPath, config);
-      const required = classVersion !== null ? classVersion - 44 : 17;
+      // Determine version and source for Java requirement lookup
+      const jarBase = path.basename(jarPath).replace(/\.jar$/, '');
+      const versionStr = jarBase.replace(/^(paper|vanilla|fabric|forge|neoforge|quilt|purpur|spigot|folia|pufferfish)-/i, '');
+      const sourceMatch = jarBase.match(/^(paper|vanilla|fabric|forge|neoforge|quilt|purpur|spigot|folia|pufferfish)/i);
+      const sourceStr = sourceMatch ? sourceMatch[1].toLowerCase() : 'paper';
 
-      if (javaMajor < required) {
-        this.appendStartupLog(`Java ${javaMajor} is too old. Need Java ${required}+. Checking for auto-install...`);
-        const allJava = await JavaDetector.scan();
-        const viable = allJava.filter(j => j.majorVersion >= required);
-        if (viable.length === 0) {
-          this.appendStartupLog(`Downloading Java ${required} automatically...`);
-          const controlDir = path.resolve(this.serverDir, '..', '.minecontrol');
-          javaPath = await JavaDownloader.ensureJavaForMinecraft(
-            path.basename(jarPath).replace(/\.jar$/, ''),
-            config.jarFile?.includes('fabric') ? 'fabric' : 'paper',
-            controlDir,
-            (pct: number) => this.emit('server:output', `[MineControl] Downloading Java ${required}... ${pct}%\n`)
-          );
-          javaMajor = await JavaDownloader.checkJavaVersion(javaPath);
-          this.appendStartupLog(`Auto-installed Java ${javaMajor} at "${javaPath}"`);
-        }
-      }
+      // Phase 2: Java resolution
+      this.appendStartupLog('Resolving Java runtime...');
+      const javaResult = await this.resolveJava(jarPath, config, versionStr, sourceStr);
+      const { javaPath, javaMajor, javaVersion, javaVendor } = javaResult;
 
-      this.appendStartupLog(`Java OK: version ${javaMajor} at "${javaPath}"`);
+      this.appendStartupLog(`Java ${javaMajor} detected — ${javaVendor} ${javaVersion}`);
+      const required = await this.detectRequiredJava(jarPath);
+      const requiredMajor = required !== null ? required - 44 : JavaDetector.getRequiredJavaVersion(versionStr, sourceStr);
+      this.appendStartupLog(`Required: Java ${requiredMajor}`);
+      this.appendStartupLog('Launching...');
 
-      // ── Phase 3: Library checks ──
+      // Phase 3: Library checks
       if (config.jarFile?.toLowerCase().includes('fabric')) {
         this.appendStartupLog('Checking Fabric loader...');
         const loaderJar = path.join(this.serverDir, 'fabric-server-launch.jar');
@@ -671,7 +692,7 @@ class MinecraftServerManager extends EventEmitter {
           this.appendStartupLog('Fabric loader missing. Attempting repair...');
           try {
             const { downloadFabricVersion } = require('./download');
-            const jarVersion = path.basename(jarPath).replace(/\.jar$/, '').replace(/^fabric-/, '');
+            const jarVersion = versionStr;
             await downloadFabricVersion(jarVersion, loaderJar);
             this.appendStartupLog('Fabric loader downloaded');
           } catch (e: any) {
@@ -696,11 +717,11 @@ class MinecraftServerManager extends EventEmitter {
         }
       }
 
-      // ── Phase 4: Sync config ──
+      // Phase 4: Sync config
       this.appendStartupLog('Syncing server configuration...');
       this.syncServerProperties(config);
 
-      // ── Phase 5: Memory check ──
+      // Phase 5: Memory check
       const totalMem = Math.round(os.totalmem() / 1024 / 1024 / 1024);
       const maxRamNum = parseInt(config.maxRam || '8');
       if (maxRamNum > totalMem) {
@@ -710,8 +731,8 @@ class MinecraftServerManager extends EventEmitter {
       }
       this.appendStartupLog(`Memory: ${config.minRam} min / ${config.maxRam} max`);
 
-      // ── All checks passed — spawn ──
-      this.appendStartupLog(`Launching Java ${javaMajor}...`);
+      // All checks passed — spawn with absolute java executable
+      this.appendStartupLog(`Launching: "${javaPath}"`);
 
       const logFileName = `server-${new Date().toISOString().replace(/[:.]/g, '-')}.log`;
       const logPath = path.join(this.serverDir, 'logs', logFileName);
@@ -745,6 +766,20 @@ class MinecraftServerManager extends EventEmitter {
         '--port', `${config.port}`,
       ];
 
+      // Record launch info
+      this._lastJavaLaunch = {
+        executable: javaPath,
+        version: javaVersion,
+        majorVersion: javaMajor,
+        vendor: javaVendor,
+        javaHome: javaResult.javaHome,
+        args: javaArgs,
+        cwd: this.serverDir,
+        timestamp: Date.now(),
+      };
+
+      this.emit('server:output', `[MineControl] Launching: "${javaPath}" -Xms${config.minRam} -Xmx${config.maxRam} -jar "${jarPath}" --nogui --port ${config.port}\n`);
+
       const proc = spawn(javaPath, javaArgs, {
         cwd: this.serverDir,
         env: { ...process.env },
@@ -761,8 +796,8 @@ class MinecraftServerManager extends EventEmitter {
       if (spawnErr) {
         this.cleanup();
         this.setState(ServerState.FAILED);
-        this._lastError = spawnErr.message;
-        this.emit('server:error', spawnErr.message);
+        this._lastError = `Failed to launch Java executable at "${javaPath}": ${spawnErr.message}`;
+        this.emit('server:error', this._lastError);
         this.appendStartupLog(`FAILED: ${spawnErr.message}`);
         throw new Error(this._lastError!);
       }
@@ -784,41 +819,27 @@ class MinecraftServerManager extends EventEmitter {
         }
 
         const crashed = code !== 0 || !this.hasStartedSuccessfully;
-
         this._lastError = null;
-        if (crashed && code !== 0) {
-          const snippet = this.outputBuffer.slice(-20).join('\n');
-          const javaErr = this.outputBuffer.find(l => l.includes('UnsupportedClassVersionError') || l.includes('Unsupported major.minor version') || l.includes('Could not create the Java Virtual Machine') || l.includes('Error: LinkageError'));
-          if (javaErr) {
-            const jvm = javaErr.match(/(?:major\.minor version|class version|UnsupportedClassVersionError)\s+(\d+)/i);
-            const javaClassVersion = jvm ? parseInt(jvm[1], 10) : null;
-            const requiredJava = javaClassVersion ? javaClassVersion - 44 : '?';
-            this._lastError = `Java version mismatch: The server jar requires Java ${requiredJava}+, but Java ${javaMajor} is currently configured.\nSolution: Install Java ${requiredJava}+ and configure it in Settings > Server.\n\n${javaErr}`;
-          } else {
-            this._lastError = this.analyzeExit(code, snippet);
-          }
-        } else if (crashed && code === 0 && !this.hasStartedSuccessfully) {
+
+        if (crashed) {
           const snippet = this.outputBuffer.slice(-30).join('\n');
-          const analysis = this.analyzeStartupFailure(snippet);
-          this._lastError = analysis;
+          this._lastError = this.buildCrashReport(code, snippet, javaMajor, javaVendor, javaVersion, javaPath, this.serverDir, javaArgs);
         }
 
         this.setState(crashed ? ServerState.FAILED : ServerState.STOPPED);
         this.emit('server:stopped', code);
-        this.emit('server:output', `\n[MineControl] Server stopped with code ${code}\n`);
 
         if (this._lastError) {
           this.emit('server:error', this._lastError);
-          this.emit('server:output', `[MineControl] ERROR: ${this._lastError}\n`);
         }
       });
 
       proc.on('error', (err) => {
         this.process = null;
         this.cleanup();
-        this._lastError = err.message;
+        this._lastError = `Java runtime error: ${err.message}`;
         this.setState(ServerState.FAILED);
-        this.emit('server:error', err.message);
+        this.emit('server:error', this._lastError);
         this.appendStartupLog(`RUNTIME ERROR: ${err.message}`);
       });
 
@@ -828,9 +849,8 @@ class MinecraftServerManager extends EventEmitter {
       doneTimeout = setTimeout(() => {
         if (!this.hasStartedSuccessfully && (this._state === ServerState.STARTING)) {
           const snippet = this.outputBuffer.slice(-20).join('\n');
-          this._lastError = this.analyzeStartupFailure(snippet);
+          this._lastError = this.buildCrashReport(null, snippet, javaMajor, javaVendor, javaVersion, javaPath, this.serverDir, javaArgs);
           this.emit('server:error', this._lastError);
-          this.emit('server:output', `\n[MineControl] ERROR: ${this._lastError}\n`);
           if (this.process) {
             try { this.process.kill(); } catch {}
           }
@@ -849,69 +869,147 @@ class MinecraftServerManager extends EventEmitter {
     }
   }
 
-  private analyzeExit(code: number | null, snippet: string): string {
+  private buildCrashReport(
+    code: number | null, snippet: string,
+    javaMajor: number, javaVendor: string, javaVersion: string,
+    javaExecutable: string, cwd: string, javaArgs: string[]
+  ): string {
     const lower = snippet.toLowerCase();
-    if (lower.includes('could not create the java virtual machine')) {
+
+    // Java version mismatch (highest priority)
+    if (lower.includes('unsupportedclassversionerror') || lower.includes('unsupported major.minor version') || lower.includes('major.minor version')) {
+      const classMatch = snippet.match(/(?:major\.minor version|class version)\s+(\d+)/i) ||
+                         snippet.match(/UnsupportedClassVersionError.*?(\d+)/i);
+      const classVersion = classMatch ? parseInt(classMatch[1], 10) : null;
+      const requiredJava = classVersion ? classVersion - 44 : '?';
+      const classFileMatch = snippet.match(/(?:class file version|version)\s+(\d+)\.\d+/i);
+      const fileVersion = classFileMatch ? parseInt(classFileMatch[1], 10) - 44 : null;
+      return [
+        'Java Runtime Mismatch',
+        '',
+        `Detected: Java ${javaMajor} (${javaVendor} ${javaVersion})`,
+        `Required: Java ${fileVersion || requiredJava}`,
+        `Executable: ${javaExecutable}`,
+        '',
+        'This server requires a newer Java version.',
+        'Use the Java Manager to download and select the correct version.',
+        '',
+        snippet.split('\n').slice(-5).join('\n'),
+      ].join('\n');
+    }
+
+    // JVM creation failure
+    if (lower.includes('could not create the java virtual machine') || lower.includes('could not reserve enough space')) {
       const memMatch = snippet.match(/Xms|Xmx|initial heap size|requested array size/i);
-      return memMatch
-        ? 'Java Virtual Machine creation failed: The allocated RAM may be too large or too small for this system.\nSolution: Reduce Min/Max RAM in Settings > Server, or increase system memory.'
-        : 'Java Virtual Machine creation failed: Invalid JVM arguments.\nSolution: Check server settings or try reducing allocated RAM.';
+      return [
+        'Java Virtual Machine Creation Failed',
+        '',
+        `Java: ${javaVendor} ${javaVersion} (${javaExecutable})`,
+        memMatch ? 'Cause: The allocated RAM may be too large or too small for this system.' : 'Cause: Invalid JVM arguments.',
+        '',
+        'Solution: Reduce Min/Max RAM in Settings > Server.',
+      ].join('\n');
     }
-    if (lower.includes('unsupportedclassversionerror') || lower.includes('unsupported major.minor') || lower.includes('major.minor version')) {
-      return 'Java version too old for this server jar.\nSolution: Install a newer Java version (Java 17+ for modern Minecraft). Visit Settings > Manage Java.';
-    }
+
+    // Could not find / load main class
     if (lower.includes('could not find or load main class')) {
-      return 'Server jar is corrupted or invalid.\nSolution: Download a fresh server jar from the Software page.';
+      return [
+        'Server Jar Corrupted',
+        '',
+        `Java: ${javaVendor} ${javaVersion} (${javaExecutable})`,
+        'The server jar is corrupted or invalid.',
+        '',
+        'Solution: Download a fresh server jar from the Software page.',
+      ].join('\n');
     }
+
+    // Missing jar file
     if (lower.includes('unable to access jarfile') || lower.includes('error: could not open')) {
-      return 'Server jar file is missing or inaccessible.\nSolution: Check that the jar file exists in the server directory.';
+      return [
+        'Server Jar Missing',
+        '',
+        `Java: ${javaVendor} ${javaVersion} (${javaExecutable})`,
+        'The server jar file is missing or inaccessible.',
+        '',
+        'Solution: Check that the jar file exists in the server directory.',
+      ].join('\n');
     }
+
+    // Out of memory
     if (lower.includes('out of memory') || lower.includes('outofmemory') || lower.includes('java heap space')) {
-      return 'Server ran out of memory.\nSolution: Increase Max RAM in Settings > Server.';
+      return [
+        'Server Out of Memory',
+        '',
+        `Java: ${javaVendor} ${javaVersion} (${javaExecutable})`,
+        'The server ran out of memory during startup.',
+        '',
+        'Solution: Increase Max RAM in Settings > Server.',
+      ].join('\n');
     }
+
+    // Port in use
     if (lower.includes('address already in use') || lower.includes('bind failed')) {
-      return 'Port is already in use by another application.\nSolution: Change the server port in Settings > Server or stop the other application.';
+      return [
+        'Port Already in Use',
+        '',
+        `Java: ${javaVendor} ${javaVersion} (${javaExecutable})`,
+        'The server port is already in use by another application.',
+        '',
+        'Solution: Change the server port in Settings > Server or stop the other application.',
+      ].join('\n');
     }
+
+    // Permission denied
     if (lower.includes('permission denied') || lower.includes('access denied')) {
-      return 'Permission denied. MineControl OS does not have access to the server directory.\nSolution: Run MineControl OS as Administrator.';
+      return [
+        'Permission Denied',
+        '',
+        `Java: ${javaVendor} ${javaVersion} (${javaExecutable})`,
+        'MineControl does not have access to the server directory.',
+        '',
+        'Solution: Run MineControl as Administrator.',
+      ].join('\n');
     }
-    if (code === 1) {
-      const lastLines = snippet.split('\n').slice(-5).join('\n');
-      return `Server exited with code 1.\nPossible causes: Missing libraries, incompatible Java version, or corrupted server files.\n\nLast output:\n${lastLines}`;
+
+    // Fabric missing
+    if (lower.includes('fabric') && (lower.includes('not found') || lower.includes('missing'))) {
+      return [
+        'Fabric Loader Missing',
+        '',
+        `Java: ${javaVendor} ${javaVersion} (${javaExecutable})`,
+        'The Fabric loader library is missing or corrupted.',
+        '',
+        'Solution: Use Repair Fabric from the server dashboard.',
+      ].join('\n');
     }
-    if (code !== null) {
-      const lastLines = snippet.split('\n').slice(-5).join('\n');
-      return `Server exited with code ${code}.\n\nLast output:\n${lastLines}`;
+
+    // Forge missing
+    if (lower.includes('forge') && (lower.includes('not found') || lower.includes('missing'))) {
+      return [
+        'Forge Libraries Missing',
+        '',
+        `Java: ${javaVendor} ${javaVersion} (${javaExecutable})`,
+        'The Forge installer libraries are missing.',
+        '',
+        'Solution: Re-run the Forge installer from the Software page.',
+      ].join('\n');
     }
-    return 'Server stopped unexpectedly.';
+
+    // Generic with full debug info
+    return [
+      'Server Crashed',
+      '',
+      `Java: ${javaVendor} ${javaVersion}`,
+      `Executable: ${javaExecutable}`,
+      `Working Directory: ${cwd}`,
+      code !== null ? `Exit Code: ${code}` : 'Exit Code: unknown (timeout)',
+      '',
+      'Last output:',
+      snippet.split('\n').slice(-8).join('\n'),
+    ].join('\n');
   }
 
-  private analyzeStartupFailure(snippet: string): string {
-    const lower = snippet.toLowerCase();
-    if (lower.includes('unsupportedclassversionerror') || lower.includes('unsupported major.minor')) {
-      return 'Java version mismatch: The server jar was compiled for a newer Java version.\nSolution: Install Java 21+ from Settings > Manage Java.';
-    }
-    if (lower.includes('could not create the java virtual machine') || lower.includes('could not reserve enough space')) {
-      return 'Insufficient memory: Java could not allocate the requested RAM.\nSolution: Reduce Min/Max RAM in Settings > Server.';
-    }
-    if (lower.includes('fabric') && (lower.includes('not found') || lower.includes('missing'))) {
-      return 'Fabric loader is missing or corrupted.\nSolution: Run Repair Fabric from the server dashboard.';
-    }
-    if (lower.includes('forge') && (lower.includes('not found') || lower.includes('missing'))) {
-      return 'Forge libraries are missing or corrupted.\nSolution: Run Repair Forge from the server dashboard.';
-    }
-    if (lower.includes('quilt') && (lower.includes('not found') || lower.includes('missing'))) {
-      return 'Quilt loader is missing or corrupted.\nSolution: Run Repair Quilt from the server dashboard.';
-    }
-    if (lower.includes('mod') && (lower.includes('error') || lower.includes('crash'))) {
-      return 'A mod caused a crash during startup.\nSolution: Remove recently added mods from the mods folder and try again.';
-    }
-    if (lower.includes('datapack') && lower.includes('error')) {
-      return 'A datapack caused an error during startup.\nSolution: Remove or fix the problematic datapack in the world/datapacks folder.';
-    }
-    const lastLines = snippet.split('\n').slice(-5).join('\n');
-    return `Server did not finish starting. Possible causes: wrong Java version, missing libraries, corrupted jar, or insufficient RAM.\n\nLast output:\n${lastLines}`;
-  }
+
 
   private async verifyPortListening(port: number): Promise<boolean> {
     try {
@@ -1351,6 +1449,10 @@ class MinecraftServerManager extends EventEmitter {
         name: server.name || 'MineControl OS',
         serverIp,
         javaPath: server.javaPath || 'java',
+        javaExecutable: server.javaPath || 'java',
+        javaVersion: server.javaVersion || '',
+        javaVendor: server.javaVendor || '',
+        javaHome: server.javaHome || '',
         jarFile: server.jarFile || 'server.jar',
         minRam: server.minRam || '2G',
         maxRam: server.maxRam || '8G',
@@ -1377,6 +1479,10 @@ class MinecraftServerManager extends EventEmitter {
       name: config.name || 'MineControl OS',
       serverIp,
       javaPath: config.javaPath || 'java',
+      javaExecutable: config.javaPath || 'java',
+      javaVersion: config.javaVersion || '',
+      javaVendor: config.javaVendor || '',
+      javaHome: config.javaHome || '',
       jarFile: config.jarFile || 'server.jar',
       minRam: config.minRam || '2G',
       maxRam: config.maxRam || '8G',
@@ -1408,6 +1514,10 @@ class MinecraftServerManager extends EventEmitter {
       // Map common keys to server columns
       const columnMap: Record<string, string> = {
         javaPath: 'javaPath',
+        javaExecutable: 'javaPath',
+        javaVersion: 'javaVersion',
+        javaVendor: 'javaVendor',
+        javaHome: 'javaHome',
         jarFile: 'jarFile',
         minRam: 'minRam',
         maxRam: 'maxRam',
