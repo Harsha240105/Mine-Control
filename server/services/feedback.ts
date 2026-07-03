@@ -276,6 +276,28 @@ function collectRelevantLogs(issueType: string): Record<string, string[]> {
   return logs;
 }
 
+function getEffectiveGitHubConfig(serverId?: string): { repository: string; api_token: string } | null {
+  const db = getDatabase();
+
+  if (serverId) {
+    const config = db.prepare('SELECT * FROM issue_tracker_config WHERE server_id = ? AND enabled = 1').get(serverId) as any;
+    if (config && config.repository && config.api_token) {
+      return { repository: config.repository, api_token: config.api_token };
+    }
+  }
+
+  const ownerRow = db.prepare("SELECT value FROM server_config WHERE key = 'github_owner'").get() as any;
+  const repoRow = db.prepare("SELECT value FROM server_config WHERE key = 'github_repo'").get() as any;
+  const { getCredential } = require('./encryption');
+  const token = getCredential('github_token');
+
+  if (ownerRow?.value && repoRow?.value && token) {
+    return { repository: `${ownerRow.value}/${repoRow.value}`, api_token: token };
+  }
+
+  return null;
+}
+
 function checkConnectivity(): Promise<boolean> {
   return new Promise<boolean>((resolve) => {
     try {
@@ -598,14 +620,10 @@ export const feedbackService = {
 
         // Attempt to create GitHub issue if tracker is configured
         if (item.action === 'create' || item.action === 'sync') {
-          const config = ticket.server_id
-            ? db.prepare('SELECT * FROM issue_tracker_config WHERE server_id = ? AND enabled = 1').get(ticket.server_id) as any
-            : null;
+          const config = getEffectiveGitHubConfig(ticket.server_id || undefined);
 
-          if (config && config.provider === 'github' && config.api_token && config.repository) {
+          if (config) {
             await this._createGitHubIssue(ticket, config);
-          } else if (config && config.provider === 'github' && (!config.api_token || !config.repository)) {
-            throw new Error('GitHub tracker configured but missing api_token or repository');
           }
         }
 
@@ -910,10 +928,8 @@ export const feedbackService = {
       if (!ticket.issue_tracker_id) { reject(new Error('Ticket has no GitHub issue number')); return; }
       if (!ticket.github_url) { reject(new Error('Ticket has no GitHub URL')); return; }
 
-      const config = ticket.server_id
-        ? db.prepare('SELECT * FROM issue_tracker_config WHERE server_id = ? AND enabled = 1').get(ticket.server_id) as any
-        : null;
-      if (!config || config.provider !== 'github' || !config.api_token || !config.repository) {
+      const config = getEffectiveGitHubConfig(ticket.server_id || undefined);
+      if (!config) {
         reject(new Error('GitHub tracker not configured'));
         return;
       }
@@ -1048,10 +1064,8 @@ export const feedbackService = {
         return;
       }
 
-      const config = ticket.server_id
-        ? db.prepare('SELECT * FROM issue_tracker_config WHERE server_id = ? AND enabled = 1').get(ticket.server_id) as any
-        : null;
-      if (!config || config.provider !== 'github' || !config.api_token || !config.repository) {
+      const config = getEffectiveGitHubConfig(ticket.server_id || undefined);
+      if (!config) {
         reject(new Error('GitHub tracker not configured'));
         return;
       }

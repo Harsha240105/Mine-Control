@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Settings as SettingsIcon, Save, Key, Shield, Server, RefreshCw,
   Eye, EyeOff, Globe, Users, Wifi, Download, CheckCircle, AlertCircle,
-  ChevronDown, ChevronRight, Search, Cpu, Trash2, Loader2
+  ChevronDown, ChevronRight, Search, Cpu, Trash2, Loader2, Github
 } from 'lucide-react';
 import pkg from '../../package.json';
 import { api } from '../lib/api';
@@ -483,7 +483,26 @@ export default function Settings() {
         </div>
       )}
 
-      {/* Update Preferences */}
+        {/* GitHub Configuration Link */}
+        <div className="card">
+          <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
+            <Github size={16} className="text-minecraft-500" />
+            GitHub Integration
+          </h3>
+          <p className="text-xs text-gray-400 mb-4">
+            Configure your GitHub repository for Feedback issue synchronization. Connect to
+            automatically sync bug reports, feature requests, and other feedback to GitHub Issues.
+          </p>
+          <a
+            href="/settings/github"
+            className="inline-flex items-center gap-2 px-4 py-2 bg-minecraft-500/20 hover:bg-minecraft-500/30 text-minecraft-400 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Github size={16} />
+            Open GitHub Configuration
+          </a>
+        </div>
+
+        {/* Update Preferences */}
       <div className="card">
         <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
           <RefreshCw size={16} className="text-minecraft-500" />

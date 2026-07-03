@@ -454,6 +454,13 @@ export const api = {
     }),
   getGitHubIssues: () => request<any[]>('/github/issues'),
 
+  // GitHub Configuration
+  getGitHubConfig: () => request<any>('/github/config'),
+  saveGitHubConfig: (data: { owner: string; repo: string; token?: string }) =>
+    request<any>('/github/config', { method: 'PUT', body: JSON.stringify(data) }),
+  testGitHubConnection: (owner: string, repo: string, token?: string) =>
+    request<any>('/github/test-connection', { method: 'POST', body: JSON.stringify({ owner, repo, token }) }),
+
   // Import
   importAnalyze: (filePath: string) =>
     request<any>('/import/analyze', {

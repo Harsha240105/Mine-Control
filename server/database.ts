@@ -32,7 +32,10 @@ function initializeSchema() {
   db.exec(`CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL);`);
 
   const currentVersion = (db.prepare('SELECT MAX(version) as v FROM schema_version').get() as any)?.v || 0;
-  if (currentVersion >= 2) return;
+
+  // IMPORTANT: Do NOT return early here. v1-v2 blocks are idempotent (CREATE IF NOT EXISTS + PRAGMA checks),
+  // and v3+ migrations must always be reachable regardless of starting version.
+  // Previously had "if (currentVersion >= 2) return;" which BLOCKED all v3-v13 migrations.
 
   if (currentVersion < 1) {
     db.exec(`
