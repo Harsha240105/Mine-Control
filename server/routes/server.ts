@@ -19,6 +19,7 @@ import {
   cacheGet, cacheSet, httpsGet, downloadFile, isPaperAvailable,
   downloadPaperVersion, downloadFabricVersion, downloadPurpurVersion,
   downloadForgeVersion, downloadNeoForgeVersion, downloadVanillaVersion, downloadVersion,
+  downloadQuiltVersion, downloadSpigotVersion, downloadFoliaVersion,
   getPaperVersions, getNeoForgeVersions, getQuiltVersions, getSpigotVersions,
   getFoliaVersions, getPufferfishVersions, fetchWithCache,
   MojangVersion, PAPER_API, MOJANG_MANIFEST, FABRIC_API, FORGE_API, PURPUR_API, NEOFORGE_API, QUILT_API
