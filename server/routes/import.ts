@@ -7,6 +7,23 @@ import { getDatabase } from '../database';
 
 const router = Router();
 
+function handleImportError(res: any, error: any, stage: string) {
+  if (error instanceof Error && (error as any).stage) {
+    return res.status(400).json({ error: (error as any).toJSON() });
+  }
+  return res.status(400).json({
+    error: {
+      stage,
+      func: stage,
+      file: 'server/routes/import.ts',
+      message: error.message || 'An unexpected error occurred.',
+      cause: error.message || 'Unknown',
+      suggestedFix: 'Check the import source and try again. If the problem persists, check server logs.',
+      stack: error.stack,
+    },
+  });
+}
+
 // Get supported formats
 router.get('/supported-formats', authMiddleware, (_req: AuthRequest, res) => {
   res.json({
@@ -16,7 +33,7 @@ router.get('/supported-formats', authMiddleware, (_req: AuthRequest, res) => {
       { extension: '.7z', name: '7-Zip Archive', icon: 'FileArchive' },
     ],
     software: [
-      'Paper', 'Purpur', 'Fabric', 'Forge', 'NeoForge', 'Quilt',
+      'Paper', 'Purpur', 'Pufferfish', 'Fabric', 'Forge', 'NeoForge', 'Quilt',
       'Vanilla', 'Bukkit', 'Spigot', 'Velocity', 'Waterfall',
       'Folia', 'Mohist', 'Magma', 'Arclight',
     ],
@@ -34,7 +51,7 @@ router.post('/analyze', authMiddleware, async (req: AuthRequest, res) => {
     const result = await importService.analyze(filePath);
     res.json(result);
   } catch (error: any) {
-    res.status(400).json({ error: error.message || 'Failed to analyze the import source.' });
+    handleImportError(res, error, 'analyze');
   }
 });
 
@@ -49,7 +66,7 @@ router.post('/analyze-players', authMiddleware, async (req: AuthRequest, res) =>
     const players = importService.analyzePlayers(worldPath);
     res.json({ players });
   } catch (error: any) {
-    res.status(400).json({ error: error.message || 'Failed to analyze players.' });
+    handleImportError(res, error, 'analyze-players');
   }
 });
 
@@ -58,7 +75,7 @@ router.post('/validate', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { filePath } = req.body;
     if (!filePath || !fs.existsSync(filePath)) {
-      return res.status(400).json({ error: 'File or folder not found.' });
+      return res.status(400).json({ error: { stage: 'validate', func: 'validate', file: 'server/routes/import.ts', message: 'File or folder not found.', cause: 'The specified path does not exist.', suggestedFix: 'Verify the file path and try again.' } });
     }
 
     const summary = await importService.getImportSummary(filePath);
@@ -68,7 +85,7 @@ router.post('/validate', authMiddleware, async (req: AuthRequest, res) => {
       type: summary.type,
     });
   } catch (error: any) {
-    res.status(400).json({ error: error.message });
+    handleImportError(res, error, 'validate');
   }
 });
 
@@ -77,13 +94,13 @@ router.post('/summary', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { filePath } = req.body;
     if (!filePath || !fs.existsSync(filePath)) {
-      return res.status(400).json({ error: 'File or folder not found.' });
+      return res.status(400).json({ error: { stage: 'summary', func: 'getImportSummary', file: 'server/routes/import.ts', message: 'File or folder not found.', cause: 'The specified path does not exist.', suggestedFix: 'Verify the file path and try again.' } });
     }
 
     const summary = await importService.getImportSummary(filePath);
     res.json(summary);
   } catch (error: any) {
-    res.status(400).json({ error: error.message || 'Failed to generate import summary.' });
+    handleImportError(res, error, 'summary');
   }
 });
 
@@ -122,29 +139,29 @@ router.post('/execute', authMiddleware, requirePermission('server.start'), async
   try {
     const { filePath, config } = req.body;
     if (!filePath) {
-      return res.status(400).json({ error: 'Import source path is required.' });
+      return res.status(400).json({ error: { stage: 'execute-input', func: 'import', file: 'server/routes/import.ts', message: 'Import source path is required.', cause: 'No filePath provided in request body.', suggestedFix: 'Select a file or folder to import.' } });
     }
     if (!fs.existsSync(filePath)) {
-      return res.status(400).json({ error: 'Import source not found. The file may have been moved or deleted.' });
+      return res.status(400).json({ error: { stage: 'execute-input', func: 'import', file: 'server/routes/import.ts', message: 'Import source not found.', cause: `File does not exist: ${filePath}`, suggestedFix: 'Verify the file path still exists and try again.' } });
     }
     if (!config || !config.name) {
-      return res.status(400).json({ error: 'Server name is required for import.' });
+      return res.status(400).json({ error: { stage: 'execute-input', func: 'import', file: 'server/routes/import.ts', message: 'Server name is required for import.', cause: 'No name provided in import config.', suggestedFix: 'Enter a name for the imported server.' } });
     }
     if (!config.destinationType) {
-      return res.status(400).json({ error: 'Import destination type is required (new or existing).' });
+      return res.status(400).json({ error: { stage: 'execute-input', func: 'import', file: 'server/routes/import.ts', message: 'Import destination type is required.', cause: 'No destinationType provided.', suggestedFix: 'Select whether to create a new server or import to an existing one.' } });
     }
     if (config.destinationType === 'existing' && !config.destinationServerId) {
-      return res.status(400).json({ error: 'Destination server ID is required for existing server import.' });
+      return res.status(400).json({ error: { stage: 'execute-input', func: 'import', file: 'server/routes/import.ts', message: 'Destination server ID is required.', cause: 'No destinationServerId provided for existing server import.', suggestedFix: 'Select a destination server from the list.' } });
     }
 
     const result = await importService.import(filePath, config);
     if (!result.success) {
-      return res.status(400).json({ error: result.errors.join(', ') });
+      return res.status(400).json({ error: { stage: 'execute', func: 'import', file: 'server/services/importServer.ts', message: result.errors.join(', '), cause: result.errors.join(', '), suggestedFix: 'Check the import source data and try again.' } });
     }
 
     res.json(result);
   } catch (error: any) {
-    res.status(400).json({ error: error.message || 'Import failed. The original server has been preserved.' });
+    handleImportError(res, error, 'execute');
   }
 });
 

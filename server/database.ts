@@ -1232,6 +1232,30 @@ function initializeSchema() {
     db.prepare('INSERT INTO schema_version (version) VALUES (13)').run();
   }
 
+  if (currentVersion < 14) {
+    const worldCols14 = db.prepare("PRAGMA table_info('worlds')").all().map((r: any) => r.name);
+    if (!worldCols14.includes('world_uuid')) db.exec("ALTER TABLE worlds ADD COLUMN world_uuid TEXT DEFAULT ''");
+    if (!worldCols14.includes('last_import')) db.exec("ALTER TABLE worlds ADD COLUMN last_import TEXT");
+    if (!worldCols14.includes('created_from')) db.exec("ALTER TABLE worlds ADD COLUMN created_from TEXT DEFAULT 'import'");
+    if (!worldCols14.includes('icon')) db.exec("ALTER TABLE worlds ADD COLUMN icon TEXT DEFAULT ''");
+    if (!worldCols14.includes('game_rules')) db.exec("ALTER TABLE worlds ADD COLUMN game_rules TEXT DEFAULT '{}'");
+    if (!worldCols14.includes('spawn_x')) db.exec("ALTER TABLE worlds ADD COLUMN spawn_x INTEGER DEFAULT 0");
+    if (!worldCols14.includes('spawn_y')) db.exec("ALTER TABLE worlds ADD COLUMN spawn_y INTEGER DEFAULT 64");
+    if (!worldCols14.includes('spawn_z')) db.exec("ALTER TABLE worlds ADD COLUMN spawn_z INTEGER DEFAULT 0");
+    if (!worldCols14.includes('allow_commands')) db.exec("ALTER TABLE worlds ADD COLUMN allow_commands INTEGER DEFAULT 1");
+    if (!worldCols14.includes('save_version')) db.exec("ALTER TABLE worlds ADD COLUMN save_version INTEGER DEFAULT 0");
+
+    db.prepare('INSERT INTO schema_version (version) VALUES (14)').run();
+  }
+
+  if (currentVersion < 15) {
+    const serverCols15 = db.prepare("PRAGMA table_info('servers')").all().map((r: any) => r.name);
+    if (!serverCols15.includes('playit_enabled')) db.exec("ALTER TABLE servers ADD COLUMN playit_enabled INTEGER NOT NULL DEFAULT 0");
+    if (!serverCols15.includes('playit_address')) db.exec("ALTER TABLE servers ADD COLUMN playit_address TEXT DEFAULT ''");
+
+    db.prepare('INSERT INTO schema_version (version) VALUES (15)').run();
+  }
+
 }
 
 function migrateDefaultServer() {

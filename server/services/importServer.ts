@@ -17,6 +17,7 @@ interface ImportResult {
 
 interface WorldAnalysis {
   worldName: string;
+  worldUuid: string;
   minecraftVersion: string;
   serverSoftware: string;
   seed: string;
@@ -86,6 +87,7 @@ const SOFTWARE_PATTERNS: { pattern: string; name: string }[] = [
   { pattern: 'purpur.yml', name: 'Purpur' },
   { pattern: 'bukkit.yml', name: 'Bukkit' },
   { pattern: 'spigot.yml', name: 'Spigot' },
+  { pattern: 'pufferfish.yml', name: 'Pufferfish' },
   { pattern: 'fabric.mod.json', name: 'Fabric' },
   { pattern: 'fabric-server-launch.jar', name: 'Fabric' },
   { pattern: 'fabric-server-mc.versions', name: 'Fabric' },
@@ -97,7 +99,57 @@ const SOFTWARE_PATTERNS: { pattern: string; name: string }[] = [
   { pattern: 'mohist-config.yml', name: 'Mohist' },
   { pattern: 'magma.yml', name: 'Magma' },
   { pattern: 'libraries/net/minecraftforge/forge', name: 'Forge' },
+  { pattern: 'arclight.jar', name: 'Arclight' },
 ];
+
+class ImportError extends Error {
+  public stage: string;
+  public func: string;
+  public file: string;
+  public cause: string;
+  public suggestedFix: string;
+
+  constructor(opts: {
+    stage: string;
+    func: string;
+    file: string;
+    message: string;
+    cause?: string;
+    suggestedFix?: string;
+  }) {
+    super(opts.message);
+    this.stage = opts.stage;
+    this.func = opts.func;
+    this.file = opts.file;
+    this.cause = opts.cause || opts.message;
+    this.suggestedFix = opts.suggestedFix || 'Check the import source and try again.';
+  }
+
+  toJSON() {
+    return {
+      stage: this.stage,
+      func: this.func,
+      file: this.file,
+      message: this.message,
+      cause: this.cause,
+      suggestedFix: this.suggestedFix,
+      stack: this.stack,
+    };
+  }
+}
+
+const ImportLogger = {
+  step: (msg: string) => console.log(`[Import] ${msg}`),
+  warn: (msg: string) => console.warn(`[Import] ⚠ ${msg}`),
+  error: (msg: string) => console.error(`[Import] ✗ ${msg}`),
+  data: (label: string, data: any) => console.log(`[Import] ${label}:`, data),
+};
+
+function intArrayToUuid(arr: number[]): string {
+  if (!arr || arr.length < 4) return '';
+  const hex = arr.map(n => (n >>> 0).toString(16).padStart(8, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
 
 export class ImportService {
 
@@ -111,11 +163,14 @@ export class ImportService {
     const isDir = stats.isDirectory();
     let cleanupDir: string | null = null;
 
+    ImportLogger.step(`Analyzing import source: ${sourcePath}`);
+
     if (!isDir) {
       try {
         const extracted = await this.extractArchive(sourcePath);
         cleanupDir = extracted;
         sourcePath = extracted;
+        ImportLogger.step(`Extracted to: ${extracted}`);
       } catch (err: any) {
         return {
           type: 'invalid',
@@ -125,10 +180,8 @@ export class ImportService {
       }
     }
 
-    console.log(`[Import] Analyzing: ${sourcePath}`);
-
     const type = this.detectContentType(sourcePath);
-    console.log(`[Import] Detected type: ${type}`);
+    ImportLogger.step(`Detected type: ${type}`);
 
     let world: WorldAnalysis | null = null;
     let detection: any = {};
@@ -136,19 +189,19 @@ export class ImportService {
     if (type !== 'invalid') {
       const worldDir = this.findWorldDirectory(sourcePath);
       if (worldDir) {
-        console.log(`[Import] World root: ${worldDir}`);
+        ImportLogger.step(`World root: ${worldDir}`);
         world = await this.analyzeWorld(worldDir, type === 'full-server' ? sourcePath : undefined);
       } else if (type === 'full-server') {
         const worlds = this.findAllWorlds(sourcePath);
         if (worlds.length > 0) {
-          console.log(`[Import] Found world: ${worlds[0]}`);
+          ImportLogger.step(`Found world: ${worlds[0]}`);
           world = await this.analyzeWorld(worlds[0], sourcePath);
         }
       }
       if (!world) {
-        console.log(`[Import] WARNING: No world data found in source`);
+        ImportLogger.warn('No world data found in source');
       } else {
-        console.log(`[Import] World: ${world.worldName}, Software: ${world.serverSoftware}, Version: ${world.minecraftVersion}, Players: ${world.playerCount}, Seed: ${world.seed}`);
+        ImportLogger.data('World detected', { name: world.worldName, software: world.serverSoftware, version: world.minecraftVersion, players: world.playerCount, uuid: world.worldUuid });
       }
     }
 
@@ -325,6 +378,7 @@ export class ImportService {
 
     return {
       worldName: path.basename(worldPath),
+      worldUuid: lvl.worldUuid || '',
       minecraftVersion: lvl.version || info.version || 'Unknown',
       serverSoftware: software,
       seed: String(lvl.seed ?? ''),
@@ -490,7 +544,7 @@ export class ImportService {
       sourcePath = extracted;
     }
 
-    console.log(`[Import Summary] Analyzing: ${sourcePath}`);
+    ImportLogger.step(`Generating import summary for: ${sourcePath}`);
     const type = this.detectContentType(sourcePath);
     const result: ImportSummary = {
       type,
@@ -534,16 +588,23 @@ export class ImportService {
     const isZip = !stats.isDirectory();
     let extractDir = sourcePath;
 
+    ImportLogger.step(`Starting import: ${sourcePath}`);
+
     if (isZip) {
       try {
-        console.log(`[Import] Extracting archive: ${sourcePath}`);
+        ImportLogger.step(`Extracting archive: ${sourcePath}`);
         extractDir = await this.extractArchive(sourcePath);
+        ImportLogger.step(`Extracted to: ${extractDir}`);
       } catch (err: any) {
+        ImportLogger.error(`Extraction failed: ${err.message}`);
         return { success: false, warnings: [], errors: [`Failed to extract archive: ${err.message}`] };
       }
     }
 
+    ImportLogger.step(`Detecting content type`);
     const type = this.detectContentType(extractDir);
+    ImportLogger.step(`Detected type: ${type}`);
+
     if (type === 'invalid') {
       return { success: false, warnings: [], errors: ['Invalid import source: no Minecraft data detected.'] };
     }
@@ -553,9 +614,11 @@ export class ImportService {
       return { success: false, warnings: [], errors: ['No Minecraft world directory found in import source.'] };
     }
 
-    console.log(`[Import] World root: ${worldDir}`);
+    ImportLogger.step(`World root: ${worldDir}`);
 
     const validation = this.validateImport(worldDir);
+    ImportLogger.step(`Validation: ${validation.valid ? 'PASS' : 'FAIL'}${validation.reason ? ` - ${validation.reason}` : ''}`);
+
     if (!validation.valid) {
       return { success: false, warnings: [], errors: [validation.reason || 'Invalid world data.'] };
     }
@@ -569,11 +632,13 @@ export class ImportService {
     if (config.destinationType === 'existing' && config.destinationServerId) {
       const existing = db.prepare('SELECT * FROM servers WHERE id = ?').get(config.destinationServerId) as any;
       if (!existing) {
+        ImportLogger.error(`Destination server not found: ${config.destinationServerId}`);
         return { success: false, warnings: [], errors: ['Selected destination server not found.'] };
       }
       serverId = existing.id;
       serverDir = existing.directory;
       serverName = existing.name;
+      ImportLogger.step(`Importing to existing server: ${serverName} (${serverId})`);
     } else {
       serverName = config.name || path.basename(sourcePath).replace(/\.(zip|rar|7z)$/i, '') || 'Imported Server';
       let slug = generateSlug(serverName);
@@ -582,6 +647,8 @@ export class ImportService {
 
       serverId = uuidv4();
       serverDir = resolvePath('servers', slug);
+      ImportLogger.step(`Creating new server: ${serverName} -> ${serverDir}`);
+
       const version = config.version || (await this.detectVersionFromSource(extractDir, worldDir)) || '1.21.4';
       const software = config.software || this.detectServerSoftware(extractDir) || 'Paper';
       const jarFile = `${software.toLowerCase()}-${version}.jar`;
@@ -602,23 +669,29 @@ export class ImportService {
         software === 'Paper' ? 'PaperMC' : software === 'Vanilla' ? 'Mojang' : software,
         jarFile,
       );
+      ImportLogger.step(`Server created in database: ${slug}`);
     }
 
+    ImportLogger.step(`Analyzing world structure`);
     const worldInfo = await this.analyzeWorld(worldDir, type === 'full-server' ? extractDir : undefined);
+    ImportLogger.data('World analysis', { name: worldInfo.worldName, uuid: worldInfo.worldUuid, software: worldInfo.serverSoftware, version: worldInfo.minecraftVersion });
+
     const levelName = config.worldName || worldInfo.worldName || 'world';
     const targetWorldDir = path.join(serverDir, levelName);
 
     if (config.destinationType === 'existing') {
       const replaceMode = config.importMode === 'replace';
       if (replaceMode) {
+        ImportLogger.step(`Replacing existing world: ${targetWorldDir}`);
         if (fs.existsSync(targetWorldDir)) {
           fs.rmSync(targetWorldDir, { recursive: true, force: true });
         }
       } else {
         const altName = `${levelName}-imported-${Date.now()}`;
         const finalTarget = path.join(serverDir, altName);
+        ImportLogger.step(`Importing as additional world: ${altName}`);
         this.importWorldData(worldDir, finalTarget);
-        this.registerWorldInDb(finalTarget, altName, worldInfo, serverId);
+        this.registerWorldInDb(finalTarget, altName, worldInfo, serverId, type);
         warnings.push(`Imported as additional world: ${altName}`);
 
         if (isZip && extractDir !== sourcePath) {
@@ -627,13 +700,15 @@ export class ImportService {
 
         const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId) as any;
         emitToAll('server:updated', server);
-        console.log(`[Import] Success: ${altName} imported as additional world`);
+        ImportLogger.step(`Success: ${altName} imported as additional world`);
         return { success: true, server, warnings, errors: [], summary: undefined };
       }
     }
 
+    ImportLogger.step(`Copying world data to: ${targetWorldDir}`);
     this.importWorldData(worldDir, targetWorldDir);
 
+    ImportLogger.step(`Updating server.properties`);
     const propsPath = path.join(serverDir, 'server.properties');
     if (fs.existsSync(propsPath)) {
       let content = fs.readFileSync(propsPath, 'utf-8');
@@ -645,13 +720,16 @@ export class ImportService {
       fs.writeFileSync(propsPath, content, 'utf-8');
     }
 
+    ImportLogger.step(`Copying config files`);
     this.copyConfigFiles(extractDir, serverDir);
-    this.registerWorldInDb(targetWorldDir, levelName, worldInfo, serverId);
+    this.registerWorldInDb(targetWorldDir, levelName, worldInfo, serverId, type);
+    ImportLogger.step(`World registered in database`);
 
     if (config.destinationType !== 'existing') {
       db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('active_server_id', ?)").run(serverId);
       setMinecraftDir(serverDir);
       minecraftServer.loadServer(serverDir);
+      ImportLogger.step(`Server activated`);
     }
 
     if (isZip && extractDir !== sourcePath) {
@@ -662,7 +740,7 @@ export class ImportService {
     emitToAll('server:updated', server);
     emitToAll('world:created', { name: levelName, server_id: serverId });
 
-    console.log(`[Import] Complete: ${serverName}, World: ${levelName}, Software: ${worldInfo.serverSoftware}, Version: ${worldInfo.minecraftVersion}`);
+    ImportLogger.step(`Import complete: ${serverName}, World: ${levelName}, Software: ${worldInfo.serverSoftware}, Version: ${worldInfo.minecraftVersion}`);
     return { success: true, server, warnings, errors };
   }
 
@@ -731,7 +809,7 @@ export class ImportService {
     }
   }
 
-  private registerWorldInDb(worldPath: string, name: string, info: WorldAnalysis, serverId: string) {
+  private registerWorldInDb(worldPath: string, name: string, info: WorldAnalysis, serverId: string, sourceType?: string) {
     const db = getDatabase();
     const now = new Date().toISOString();
     const existing = db.prepare('SELECT name FROM worlds WHERE name = ?').get(name);
@@ -752,6 +830,9 @@ export class ImportService {
       software: info.serverSoftware || '',
       hardcore: info.hardcore ? 1 : 0,
       player_count: info.playerCount || 0,
+      world_uuid: info.worldUuid || '',
+      last_import: now,
+      created_from: sourceType || 'import',
     };
 
     const cols = Object.keys(world);
@@ -791,6 +872,7 @@ export class ImportService {
       if (jar.includes('fabric')) return 'Fabric';
       if (jar.includes('paper')) return 'Paper';
       if (jar.includes('purpur')) return 'Purpur';
+      if (jar.includes('pufferfish')) return 'Pufferfish';
       if (jar.includes('forge')) return 'Forge';
       if (jar.includes('neoforge')) return 'NeoForge';
       if (jar.includes('spigot')) return 'Spigot';
@@ -838,13 +920,19 @@ export class ImportService {
 
       const result: any = {};
 
+      // World UUID - stored as int[4] in level.dat
+      if (Array.isArray(d.UUID) && d.UUID.length === 4) {
+        result.worldUuid = intArrayToUuid(d.UUID);
+      } else if (d.WorldGenSettings?.uuid) {
+        result.worldUuid = String(d.WorldGenSettings.uuid);
+      }
+
       if (d.RandomSeed !== undefined) result.seed = String(d.RandomSeed);
       else if (d.WorldGenSettings?.seed !== undefined) result.seed = String(d.WorldGenSettings.seed);
 
       if (d.Version?.Name !== undefined) {
         result.version = String(d.Version.Name);
       } else if (d.DataVersion !== undefined) {
-        // Map known DataVersion numbers to version strings as fallback
         result.saveVersion = d.DataVersion;
       }
 
@@ -853,7 +941,7 @@ export class ImportService {
       if (d.hardcore !== undefined) result.hardcore = d.hardcore ? 1 : 0;
       if (d.LastPlayed !== undefined) result.lastPlayed = new Date(Number(d.LastPlayed)).toISOString();
 
-      console.log(`[Import] level.dat parsed: seed=${result.seed}, version=${result.version}, gamemode=${result.gamemode}, difficulty=${result.difficulty}, hardcore=${result.hardcore}`);
+      ImportLogger.data('level.dat parsed', { seed: result.seed, version: result.version, gamemode: result.gamemode, difficulty: result.difficulty, hardcore: result.hardcore, uuid: result.worldUuid });
       return result;
     } catch (err) {
       console.log(`[Import] Failed to parse level.dat with prismarine-nbt, falling back to binary scan`);
