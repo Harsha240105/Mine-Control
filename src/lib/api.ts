@@ -198,6 +198,8 @@ export const api = {
   getJavaScan: () => request<any>('/server/java/scan'),
   installJava: (version: string, source?: string) =>
     request<any>('/server/java/install', { method: 'POST', body: JSON.stringify({ version, source }) }),
+  removeJava: (javaPath: string) =>
+    request<any>('/server/java/remove', { method: 'POST', body: JSON.stringify({ javaPath }) }),
   resolveBestJava: (version: string, source: string) =>
     request<any>('/server/java/resolve', { method: 'POST', body: JSON.stringify({ version, source }) }),
 

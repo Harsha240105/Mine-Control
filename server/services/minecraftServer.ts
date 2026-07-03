@@ -339,6 +339,18 @@ class MinecraftServerManager extends EventEmitter {
     return { valid: allPassed, checks, config, jarPath, javaPath, javaMajor };
   }
 
+  private getVersionFromConfig(config: any): string {
+    const jf = config.jarFile || 'server.jar';
+    const m = jf.match(/(?:paper|vanilla|fabric|forge|neoforge|quilt|purpur|spigot|folia|pufferfish)-(.+)\.jar$/i);
+    return m ? m[1] : '1.21';
+  }
+
+  private getSourceFromConfig(config: any): string {
+    const jf = config.jarFile || 'server.jar';
+    const m = jf.match(/^(paper|vanilla|fabric|forge|neoforge|quilt|purpur|spigot|folia|pufferfish)/i);
+    return m ? m[1].toLowerCase() : 'paper';
+  }
+
   private async validateJavaInternal(config: any, jarPath: string): Promise<{
     javaPath: string;
     javaMajor: number;
@@ -348,8 +360,9 @@ class MinecraftServerManager extends EventEmitter {
     const add = (name: string, passed: boolean, message: string, actionable = false, action?: string) =>
       checks.push({ name, passed, message, actionable, action });
 
-    const classVersion = await this.detectRequiredJava(jarPath);
-    const required = classVersion !== null ? classVersion - 44 : 17;
+    const jarVersion = this.getVersionFromConfig(config);
+    const jarSource = this.getSourceFromConfig(config);
+    const required = JavaDetector.getRequiredJavaVersion(jarVersion, jarSource);
 
     let javaPath = config.javaPath || 'java';
     let javaMajor = 0;
@@ -580,9 +593,8 @@ class MinecraftServerManager extends EventEmitter {
 
   private async resolveJava(
     jarPath: string, config: any, version: string, source: string
-  ): Promise<{ javaPath: string; javaMajor: number; classVersion: number | null; javaVersion: string; javaVendor: string; javaHome: string }> {
-    const classVersion = await this.detectRequiredJava(jarPath);
-    const required = classVersion !== null ? classVersion - 44 : JavaDetector.getRequiredJavaVersion(version, source);
+  ): Promise<{ javaPath: string; javaMajor: number; javaVersion: string; javaVendor: string; javaHome: string }> {
+    const required = JavaDetector.getRequiredJavaVersion(version, source);
 
     // 1. Try per-server configured path (may be empty string for new servers)
     let configured = config.javaExecutable || config.javaPath || '';
@@ -590,7 +602,7 @@ class MinecraftServerManager extends EventEmitter {
       const maj = await this.checkJavaVersion(configured);
       if (maj >= required) {
         const info = await JavaDownloader.getVersionInfo(configured);
-        return { javaPath: configured, javaMajor: maj, classVersion, javaVersion: info.version, javaVendor: info.vendor, javaHome: config.javaHome || '' };
+        return { javaPath: configured, javaMajor: maj, javaVersion: info.version, javaVendor: info.vendor, javaHome: config.javaHome || '' };
       }
     }
 
@@ -602,7 +614,7 @@ class MinecraftServerManager extends EventEmitter {
       const best = viable[0];
       this.saveJavaConfig(best.path, best.version, best.majorVersion, best.vendor, best.javaHome);
       return {
-        javaPath: best.path, javaMajor: best.majorVersion, classVersion,
+        javaPath: best.path, javaMajor: best.majorVersion,
         javaVersion: best.version, javaVendor: best.vendor, javaHome: best.javaHome,
       };
     }
@@ -618,7 +630,7 @@ class MinecraftServerManager extends EventEmitter {
     const info = await JavaDownloader.getVersionInfo(exePath);
     this.saveJavaConfig(exePath, info.version, maj, info.vendor, jreExe);
     return {
-      javaPath: exePath, javaMajor: maj, classVersion,
+      javaPath: exePath, javaMajor: maj,
       javaVersion: info.version, javaVendor: info.vendor, javaHome: jreExe,
     };
   }
@@ -673,15 +685,20 @@ class MinecraftServerManager extends EventEmitter {
       const sourceMatch = jarBase.match(/^(paper|vanilla|fabric|forge|neoforge|quilt|purpur|spigot|folia|pufferfish)/i);
       const sourceStr = sourceMatch ? sourceMatch[1].toLowerCase() : 'paper';
 
-      // Phase 2: Java resolution
+      // Phase 2: Java resolution — use version-based requirement as authoritative
       this.appendStartupLog('Resolving Java runtime...');
+      const requiredMajor = JavaDetector.getRequiredJavaVersion(versionStr, sourceStr);
+      this.appendStartupLog(`Required: Java ${requiredMajor}`);
+
       const javaResult = await this.resolveJava(jarPath, config, versionStr, sourceStr);
       const { javaPath, javaMajor, javaVersion, javaVendor } = javaResult;
 
       this.appendStartupLog(`Java ${javaMajor} detected — ${javaVendor} ${javaVersion}`);
-      const required = await this.detectRequiredJava(jarPath);
-      const requiredMajor = required !== null ? required - 44 : JavaDetector.getRequiredJavaVersion(versionStr, sourceStr);
-      this.appendStartupLog(`Required: Java ${requiredMajor}`);
+
+      if (javaMajor < requiredMajor) {
+        throw new Error(`Java ${javaMajor} detected — ${javaVendor} ${javaVersion}\nMinecraft ${versionStr} requires Java ${requiredMajor}+\n\nUse Java Manager to install Java ${requiredMajor}.\n\nIf Java ${requiredMajor} is already installed, select it as the default in Java Manager.`);
+      }
+
       this.appendStartupLog('Launching...');
 
       // Phase 3: Library checks
@@ -995,14 +1012,25 @@ class MinecraftServerManager extends EventEmitter {
       ].join('\n');
     }
 
-    // Generic with full debug info
+    // Generic — never show raw exit code; always translate to meaningful description
+    const exitReason = code === null ? 'Server timed out during startup' :
+      code === 1 ? 'Java process exited unexpectedly (check Java version, server jar, or memory settings)' :
+      code === 2 ? 'Java executable not found or invalid configuration' :
+      code === -1073741510 ? 'Java executable not found (check Java Manager for available installations)' :
+      code === -1073740791 ? 'Java ran out of memory during startup (increase Max RAM in Settings)' :
+      code === 13 ? 'Mismatch between Java version and server jar requirements' :
+      `Server process exited (code ${code}) — check Java Manager for runtime configuration`;
+
     return [
-      'Server Crashed',
+      'Server Stopped Unexpectedly',
       '',
-      `Java: ${javaVendor} ${javaVersion}`,
+      `Detected: ${javaVendor} Java ${javaVersion}`,
       `Executable: ${javaExecutable}`,
       `Working Directory: ${cwd}`,
-      code !== null ? `Exit Code: ${code}` : 'Exit Code: unknown (timeout)',
+      `Reason: ${exitReason}`,
+      '',
+      'Use Java Manager to install, verify, or switch Java runtimes.',
+      'If the issue persists, check the server console for detailed error output.',
       '',
       'Last output:',
       snippet.split('\n').slice(-8).join('\n'),

@@ -618,12 +618,30 @@ export const feedbackService = {
           continue;
         }
 
-        // Attempt to create GitHub issue if tracker is configured
+        // Create GitHub issue using app's own repo (auto-configured)
         if (item.action === 'create' || item.action === 'sync') {
           const config = getEffectiveGitHubConfig(ticket.server_id || undefined);
 
           if (config) {
             await this._createGitHubIssue(ticket, config);
+          } else {
+            // Auto-configure from app package for MineControl repo
+            const pkg = getAppVersion();
+            const autoConfig = { repository: 'Harsha240105/Mine-Control', api_token: '' };
+            const { getCredential } = require('./encryption');
+            const token = getCredential('github_token');
+            if (token) {
+              autoConfig.api_token = token;
+              await this._createGitHubIssue(ticket, autoConfig);
+            } else {
+              // No token available — mark as failed with clear message
+              const msg = 'GitHub token not configured. Set up a token in Settings → GitHub to sync feedback.';
+              db.prepare("UPDATE sync_queue SET status = 'failed', error = ? WHERE id = ?").run(msg, item.id);
+              db.prepare("UPDATE feedback_tickets SET sync_status = 'failed', sync_error = ?, sync_retries = sync_retries + 1, updated_at = ? WHERE id = ?").run(msg, new Date().toISOString(), item.ticket_id);
+              failed++;
+              errors.push(msg);
+              continue;
+            }
           }
         }
 

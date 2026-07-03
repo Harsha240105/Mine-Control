@@ -19,15 +19,21 @@ export interface JavaVersion {
   source: JavaSource;
 }
 
-const MC_JAVA_REQUIREMENTS: Record<string, number> = {
-  '1.0': 6, '1.1': 6, '1.2': 6, '1.3': 6, '1.4': 6, '1.5': 6, '1.6': 6, '1.7': 6,
-  '1.8': 8, '1.9': 8, '1.10': 8, '1.11': 8, '1.12': 8, '1.13': 8, '1.14': 8, '1.15': 8, '1.16': 8,
-  '1.17': 16, '1.18': 17, '1.19': 17, '1.20': 17, '1.21': 21,
-};
+// Minecraft version → required Java version (semver-aware)
+// Mojang official requirements:
+//   ≤1.16.5 → Java 8
+//   1.17    → Java 16
+//   1.18–1.20.4 → Java 17
+//   1.20.5+ → Java 21
+const MC_JAVA_REQUIREMENTS: Array<{ min: string; max: string; java: number }> = [
+  { min: '0.0', max: '1.16.5', java: 8 },
+  { min: '1.17', max: '1.17.1', java: 16 },
+  { min: '1.18', max: '1.20.4', java: 17 },
+  { min: '1.20.5', max: '99.99', java: 21 },
+];
 
 const SOFTWARE_JAVA_REQUIREMENTS: Record<string, number> = {
-  paper: 17, purpur: 17, fabric: 17, forge: 17, neoforge: 17,
-  quilt: 17, spigot: 8, folia: 17, pufferfish: 17, vanilla: 8,
+  spigot: 8, vanilla: 8,
 };
 
 const ADOPTIUM_API = 'https://api.adoptium.net/v3';
@@ -373,20 +379,45 @@ export class JavaDetector {
     };
   }
 
-  static getRequiredJavaVersion(version: string, source: string): number {
-    const sourceLower = source.toLowerCase();
-    if (sourceLower in SOFTWARE_JAVA_REQUIREMENTS) {
-      return SOFTWARE_JAVA_REQUIREMENTS[sourceLower];
+  static getRequiredJavaVersion(version: string, source?: string): number {
+    // Software-only fallbacks (loaders that work across older Java)
+    if (source) {
+      const s = source.toLowerCase();
+      if (s === 'spigot' || s === 'vanilla') return 8;
     }
-    const majorMatch = version.match(/^(\d+\.\d+)/);
-    if (majorMatch) {
-      const mcVer = majorMatch[1];
-      const sorted = Object.entries(MC_JAVA_REQUIREMENTS).sort((a, b) => b[0].localeCompare(a[0]));
-      for (const [range, javaVer] of sorted) {
-        if (mcVer >= range) return javaVer;
+
+    // Use authoritative Minecraft version mapping
+    const mcVer = version;
+    for (const req of MC_JAVA_REQUIREMENTS) {
+      if (JavaDetector.semverGte(mcVer, req.min) && JavaDetector.semverLte(mcVer, req.max)) {
+        return req.java;
       }
     }
-    return 17;
+    return 21;
+  }
+
+  private static semverGte(a: string, b: string): boolean {
+    const pa = a.split('.').map(Number);
+    const pb = b.split('.').map(Number);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const na = pa[i] ?? 0;
+      const nb = pb[i] ?? 0;
+      if (na > nb) return true;
+      if (na < nb) return false;
+    }
+    return true;
+  }
+
+  private static semverLte(a: string, b: string): boolean {
+    const pa = a.split('.').map(Number);
+    const pb = b.split('.').map(Number);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+      const na = pa[i] ?? 0;
+      const nb = pb[i] ?? 0;
+      if (na < nb) return true;
+      if (na > nb) return false;
+    }
+    return true;
   }
 }
 

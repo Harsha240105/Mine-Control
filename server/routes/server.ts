@@ -60,6 +60,35 @@ router.get('/validate', authMiddleware, async (_req: AuthRequest, res) => {
   }
 });
 
+router.get('/java/resolve-required', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const version = req.query.version as string;
+    const source = req.query.source as string;
+    const required = JavaDetector.getRequiredJavaVersion(version || '1.21', source || 'paper');
+    res.json({ required, version, source });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/java/remove', authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { javaPath } = req.body;
+    if (!javaPath) return res.status(400).json({ error: 'Java path required' });
+    // Only allow removing managed JREs
+    if (!javaPath.includes('.minecontrol')) {
+      return res.status(400).json({ error: 'Can only remove MineControl-managed Java installations' });
+    }
+    const dir = path.dirname(path.dirname(javaPath));
+    if (fs.existsSync(dir)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+    res.json({ success: true, message: `Removed Java at ${javaPath}` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/java/resolve', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { version, source } = req.body;
