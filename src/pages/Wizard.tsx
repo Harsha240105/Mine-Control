@@ -52,6 +52,21 @@ const SERVER_SOFTWARE = [
     color: 'from-amber-500/20 to-amber-600/10', icon: '🟤',
   },
   {
+    id: 'quilt', name: 'Quilt', desc: 'Modern mod loader, Fabric-compatible',
+    best: 'Mods & Modern', badge: '',
+    color: 'from-pink-500/20 to-pink-600/10', icon: '🩷',
+  },
+  {
+    id: 'folia', name: 'Folia', desc: 'Paper fork with regionized threading',
+    best: 'Large Servers & Performance', badge: '',
+    color: 'from-emerald-500/20 to-emerald-600/10', icon: '🟢',
+  },
+  {
+    id: 'pufferfish', name: 'Pufferfish', desc: 'Paper fork with further optimizations',
+    best: 'Performance & Low Lag', badge: '',
+    color: 'from-indigo-500/20 to-indigo-600/10', icon: '🔮',
+  },
+  {
     id: 'bukkit', name: 'Bukkit', desc: 'Original plugin API',
     best: 'Plugin Development', badge: '',
     color: 'from-red-500/20 to-red-600/10', icon: '🔴',
@@ -614,8 +629,11 @@ function StepVersion({ data, update, versions, loading, search, setSearch }: {
     fabric: 'Fabric',
     forge: 'Forge',
     neoforge: 'NeoForge',
+    quilt: 'Quilt',
+    spigot: 'Spigot',
+    folia: 'Folia',
+    pufferfish: 'Pufferfish',
     vanilla: 'Mojang',
-    spigot: 'PaperMC',
     bukkit: 'PaperMC',
   };
 

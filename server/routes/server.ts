@@ -19,7 +19,9 @@ import {
   cacheGet, cacheSet, httpsGet, downloadFile, isPaperAvailable,
   downloadPaperVersion, downloadFabricVersion, downloadPurpurVersion,
   downloadForgeVersion, downloadNeoForgeVersion, downloadVanillaVersion, downloadVersion,
-  MojangVersion, PAPER_API, MOJANG_MANIFEST, FABRIC_API, FORGE_API, PURPUR_API
+  getPaperVersions, getNeoForgeVersions, getQuiltVersions, getSpigotVersions,
+  getFoliaVersions, getPufferfishVersions, fetchWithCache,
+  MojangVersion, PAPER_API, MOJANG_MANIFEST, FABRIC_API, FORGE_API, PURPUR_API, NEOFORGE_API, QUILT_API
 } from '../services/download';
 import { emitToAll } from '../socketManager';
 
@@ -962,14 +964,13 @@ router.post('/health-check', authMiddleware, async (_req: AuthRequest, res) => {
   });
 });
 
-// Version Management - All Minecraft versions
+// Version Management - All Minecraft versions per software provider
 router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
-  try {
-    const mcDir = resolveMinecraftDir();
-    const config = minecraftServer.getConfig();
-
-  // Read version from servers table (more reliable than parsing jar filename)
+  const mcDir = resolveMinecraftDir();
+  const config = minecraftServer.getConfig();
   const db = getDatabase();
+
+  // Read current version
   const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
   let currentVersion = 'unknown';
   let currentSource = 'unknown';
@@ -979,7 +980,6 @@ router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
       currentVersion = server.version;
       currentSource = server.version_source || 'unknown';
     } else {
-      // Fallback: parse jar filename
       const jarFile = server?.jarFile || config.jarFile || 'server.jar';
       currentVersion = jarFile.replace('paper-', '').replace('vanilla-', '').replace('.jar', '');
       if (jarFile.startsWith('paper-')) currentSource = 'PaperMC';
@@ -994,180 +994,233 @@ router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
     downloadedJars = files.map(f => f.replace('.jar', ''));
   } catch {}
 
-  // Fetch PaperMC versions (for fast lookup)
-  let paperVersions: string[] = [];
-  const cachedPaper = cacheGet<string[]>('paperVersions');
-  if (cachedPaper) {
-    paperVersions = cachedPaper;
-  } else {
+  const errors: Record<string, string> = {};
+  const providers: Record<string, any> = {};
+
+  // Helper to safely fetch versions for a provider
+  async function fetchProviderVersions(name: string, fetcher: () => Promise<any[]>, versionKey: string = 'version'): Promise<any[]> {
     try {
-      const data = await httpsGet(PAPER_API);
-      const parsed = JSON.parse(data);
-      paperVersions = parsed.versions || [];
-      cacheSet('paperVersions', paperVersions);
-    } catch {}
+      const data = await fetchWithCache(`${name}Versions`, fetcher);
+      return Array.isArray(data) ? data : [];
+    } catch (err: any) {
+      errors[name] = err.message || `Failed to fetch ${name} versions`;
+      return [];
+    }
   }
 
-  // Fetch Mojang manifest for ALL Minecraft versions
-  let mojangVersions: MojangVersion[] = [];
-  const cachedMojang = cacheGet<MojangVersion[]>('mojangVersions');
-  if (cachedMojang) {
-    mojangVersions = cachedMojang;
-  } else {
-    try {
-      const data = await httpsGet(MOJANG_MANIFEST);
-      const parsed = JSON.parse(data);
-      mojangVersions = parsed.versions || [];
-      cacheSet('mojangVersions', mojangVersions);
-    } catch {}
-  }
+  // 1. Mojang (Vanilla)
+  const mojangVersions: MojangVersion[] = await fetchProviderVersions('mojang', async () => {
+    const data = await httpsGet(MOJANG_MANIFEST);
+    const parsed = JSON.parse(data);
+    return parsed.versions || [];
+  });
+  providers['Mojang'] = { source: 'Mojang', displayName: 'Vanilla', versions: [] };
 
-  // Fetch Fabric versions
-  let fabricVersions: any[] = [];
-  const cachedFabric = cacheGet<any[]>('fabricVersions');
-  if (cachedFabric) {
-    fabricVersions = cachedFabric;
-  } else {
-    try {
-      const data = await httpsGet(`${FABRIC_API}/versions/game`);
-      fabricVersions = JSON.parse(data) || [];
-      cacheSet('fabricVersions', fabricVersions);
-    } catch {}
-  }
+  // 2. PaperMC
+  const paperVersions: string[] = await fetchProviderVersions('paper', () => getPaperVersions());
+  providers['PaperMC'] = { source: 'PaperMC', displayName: 'Paper', versions: [] };
 
-  // Fetch Forge versions
-  let forgeVersions: string[] = [];
-  const cachedForge = cacheGet<string[]>('forgeVersions');
-  if (cachedForge) {
-    forgeVersions = cachedForge;
-  } else {
-    try {
-      const data = await httpsGet(FORGE_API);
-      const parsed = JSON.parse(data);
-      const promos = parsed.promos || {};
-      const uniqueVersions = new Set<string>();
-      for (const key of Object.keys(promos)) {
-        if (key.endsWith('-latest') || key.endsWith('-recommended')) {
-          uniqueVersions.add(key.split('-')[0]);
-        }
+  // 3. Purpur
+  const purpurVersions: string[] = await fetchProviderVersions('purpur', async () => {
+    const data = await httpsGet(PURPUR_API);
+    const parsed = JSON.parse(data);
+    return (parsed.versions || []).sort((a: string, b: string) => b.localeCompare(a, undefined, { numeric: true }));
+  });
+  providers['Purpur'] = { source: 'Purpur', displayName: 'Purpur', versions: [] };
+
+  // 4. Fabric
+  const fabricVersions: any[] = await fetchProviderVersions('fabric', async () => {
+    const data = await httpsGet(`${FABRIC_API}/versions/game`);
+    return JSON.parse(data) || [];
+  });
+  providers['Fabric'] = { source: 'Fabric', displayName: 'Fabric', versions: [] };
+
+  // 5. Forge
+  const forgeVersions: string[] = await fetchProviderVersions('forge', async () => {
+    const data = await httpsGet(FORGE_API);
+    const parsed = JSON.parse(data);
+    const promos = parsed.promos || {};
+    const unique = new Set<string>();
+    for (const key of Object.keys(promos)) {
+      if (key.endsWith('-latest') || key.endsWith('-recommended')) {
+        unique.add(key.split('-')[0]);
       }
-      forgeVersions = Array.from(uniqueVersions).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-      cacheSet('forgeVersions', forgeVersions);
-    } catch {}
-  }
+    }
+    return Array.from(unique).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
+  });
+  providers['Forge'] = { source: 'Forge', displayName: 'Forge', versions: [] };
 
-  // Fetch Purpur versions
-  let purpurVersions: string[] = [];
-  const cachedPurpur = cacheGet<string[]>('purpurVersions');
-  if (cachedPurpur) {
-    purpurVersions = cachedPurpur;
-  } else {
-    try {
-      const data = await httpsGet(PURPUR_API);
-      const parsed = JSON.parse(data);
-      purpurVersions = parsed.versions || [];
-      purpurVersions = purpurVersions.sort((a, b) => b.localeCompare(a, undefined, { numeric: true }));
-      cacheSet('purpurVersions', purpurVersions);
-    } catch {}
-  }
+  // 6. NeoForge
+  const neoForgeVersions: string[] = await fetchProviderVersions('neoforge', () => getNeoForgeVersions());
+  providers['NeoForge'] = { source: 'NeoForge', displayName: 'NeoForge', versions: [] };
 
-  // Build combined version list
+  // 7. Quilt
+  const quiltVersions: string[] = await fetchProviderVersions('quilt', () => getQuiltVersions());
+  providers['Quilt'] = { source: 'Quilt', displayName: 'Quilt', versions: [] };
+
+  // 8. Spigot (static list)
+  providers['Spigot'] = { source: 'Spigot', displayName: 'Spigot', versions: [] };
+  const spigotVersions = getSpigotVersions();
+
+  // 9. Folia
+  const foliaVersions: string[] = await fetchProviderVersions('folia', () => getFoliaVersions());
+  providers['Folia'] = { source: 'Folia', displayName: 'Folia', versions: [] };
+
+  // 10. Pufferfish
+  const pufferfishVersions: string[] = await fetchProviderVersions('pufferfish', () => getPufferfishVersions());
+  providers['Pufferfish'] = { source: 'Pufferfish', displayName: 'Pufferfish', versions: [] };
+
+  // Build combined version list and per-provider version lists
+  const typeOrder: Record<string, number> = {
+    'release': 0, 'snapshot': 1, 'old_beta': 2, 'beta': 2, 'old_alpha': 3, 'alpha': 3,
+  };
+  const typeLabels: Record<string, string> = {
+    'release': 'Release', 'snapshot': 'Snapshot', 'old_beta': 'Beta', 'beta': 'Beta',
+    'old_alpha': 'Alpha', 'alpha': 'Alpha',
+  };
+
   const versionSet = new Set<string>();
   const combined: any[] = [];
+  const software: Record<string, any[]> = {};
 
-  // Add PaperMC versions first (preferred)
-  for (const v of paperVersions) {
-    if (versionSet.has(v)) continue;
-    versionSet.add(v);
+  // Process PaperMC
+  software['PaperMC'] = paperVersions.map(v => {
     const jarPrefix = `paper-${v}`;
-    combined.push({
-      version: v,
-      type: 'release',
-      source: 'PaperMC',
+    const entry = {
+      version: v, type: 'Release', source: 'PaperMC',
       downloaded: downloadedJars.some(d => d === jarPrefix),
       current: currentVersion === v && currentSource === 'PaperMC',
-    });
-  }
+    };
+    if (!versionSet.has(v)) { versionSet.add(v); combined.push({ ...entry, type: 'release', typeRaw: 'release' }); }
+    return entry;
+  });
 
-  // Add Purpur versions
-  for (const v of purpurVersions) {
+  // Process Purpur
+  software['Purpur'] = purpurVersions.map(v => {
     const jarPrefix = `purpur-${v}`;
-    combined.push({
-      version: v,
-      type: 'release',
-      source: 'Purpur',
+    const entry = {
+      version: v, type: 'Release', source: 'Purpur',
       downloaded: downloadedJars.some(d => d === jarPrefix),
       current: currentVersion === v && currentSource === 'Purpur',
-    });
-  }
+    };
+    combined.push({ ...entry, type: 'release', typeRaw: 'release' });
+    return entry;
+  });
 
-  // Add Fabric versions (only Minecraft game versions, skip loader-only entries)
-  for (const v of fabricVersions) {
-    const ver = v.version;
-    if (!/^\d+\.\d+/.test(ver)) continue;
-    const jarPrefix = `fabric-${ver}`;
-    combined.push({
-      version: ver,
-      type: v.stable ? 'release' : 'snapshot',
-      source: 'Fabric',
+  // Process Fabric
+  software['Fabric'] = fabricVersions
+    .filter((v: any) => /^\d+\.\d+/.test(v.version))
+    .map((v: any) => {
+      const jarPrefix = `fabric-${v.version}`;
+      const releaseType = v.stable ? 'Release' : 'Snapshot';
+      return {
+        version: v.version, type: releaseType, source: 'Fabric',
+        stable: v.stable,
+        downloaded: downloadedJars.some(d => d === jarPrefix),
+        current: currentVersion === v.version && currentSource === 'Fabric',
+      };
+    });
+  software['Fabric'].forEach((entry: any) => {
+    const typeRaw = entry.stable ? 'release' : 'snapshot';
+    combined.push({ ...entry, type: typeRaw, typeRaw });
+  });
+
+  // Process Forge
+  software['Forge'] = forgeVersions.map(v => {
+    const jarPrefix = `forge-${v}`;
+    const entry = {
+      version: v, type: 'Release', source: 'Forge',
       downloaded: downloadedJars.some(d => d === jarPrefix),
-      current: currentVersion === ver && currentSource === 'Fabric',
-    });
-  }
+      current: currentVersion === v && currentSource === 'Forge',
+    };
+    combined.push({ ...entry, type: 'release', typeRaw: 'release' });
+    return entry;
+  });
 
-  // Add Forge versions
-  for (const ver of forgeVersions) {
-    const jarPrefix = `forge-${ver}`;
-    combined.push({
-      version: ver,
-      type: 'release',
-      source: 'Forge',
+  // Process NeoForge
+  software['NeoForge'] = neoForgeVersions.map(v => {
+    const jarPrefix = `neoforge-${v}`;
+    const entry = {
+      version: v, type: 'Release', source: 'NeoForge',
       downloaded: downloadedJars.some(d => d === jarPrefix),
-      current: currentVersion === ver && currentSource === 'Forge',
-    });
-  }
+      current: currentVersion === v && currentSource === 'NeoForge',
+    };
+    combined.push({ ...entry, type: 'release', typeRaw: 'release' });
+    return entry;
+  });
 
-  // Add all versions from Mojang manifest (including old/beta/alpha)
-  const typeOrder: Record<string, number> = {
-    'release': 0,
-    'snapshot': 1,
-    'old_beta': 2,
-    'beta': 2,
-    'old_alpha': 3,
-    'alpha': 3,
-  };
+  // Process Quilt
+  software['Quilt'] = quiltVersions.map(v => {
+    const jarPrefix = `quilt-${v}`;
+    const entry = {
+      version: v, type: 'Release', source: 'Quilt',
+      downloaded: downloadedJars.some(d => d === jarPrefix),
+      current: currentVersion === v && currentSource === 'Quilt',
+    };
+    combined.push({ ...entry, type: 'release', typeRaw: 'release' });
+    return entry;
+  });
 
-  const typeLabels: Record<string, string> = {
-    'release': 'Release',
-    'snapshot': 'Snapshot',
-    'old_beta': 'Beta',
-    'beta': 'Beta',
-    'old_alpha': 'Alpha',
-    'alpha': 'Alpha',
-  };
+  // Process Spigot
+  software['Spigot'] = spigotVersions.map(v => {
+    const jarPrefix = `spigot-${v}`;
+    const entry = {
+      version: v, type: 'Release', source: 'Spigot',
+      downloaded: downloadedJars.some(d => d === jarPrefix),
+      current: currentVersion === v && currentSource === 'Spigot',
+    };
+    combined.push({ ...entry, type: 'release', typeRaw: 'release' });
+    return entry;
+  });
 
-  const releaseTimeMap = new Map<string, string>();
-  for (const mv of mojangVersions) {
-    releaseTimeMap.set(mv.id, mv.releaseTime);
-  }
+  // Process Folia
+  software['Folia'] = foliaVersions.map(v => {
+    const jarPrefix = `folia-${v}`;
+    const entry = {
+      version: v, type: 'Release', source: 'Folia',
+      downloaded: downloadedJars.some(d => d === jarPrefix),
+      current: currentVersion === v && currentSource === 'Folia',
+    };
+    combined.push({ ...entry, type: 'release', typeRaw: 'release' });
+    return entry;
+  });
 
-  for (const mv of mojangVersions) {
-    if (versionSet.has(mv.id)) continue;
-    const displayType = typeLabels[mv.type] || mv.type;
-    versionSet.add(mv.id);
+  // Process Pufferfish
+  software['Pufferfish'] = pufferfishVersions.map(v => {
+    const jarPrefix = `pufferfish-${v}`;
+    const entry = {
+      version: v, type: 'Release', source: 'Pufferfish',
+      downloaded: downloadedJars.some(d => d === jarPrefix),
+      current: currentVersion === v && currentSource === 'Pufferfish',
+    };
+    combined.push({ ...entry, type: 'release', typeRaw: 'release' });
+    return entry;
+  });
+
+  // Process Mojang (Vanilla) - includes all types
+  software['Mojang'] = mojangVersions.map(mv => {
     const jarPrefix = `vanilla-${mv.id}`;
-    combined.push({
-      version: mv.id,
-      type: displayType,
-      typeRaw: mv.type,
-      source: 'Mojang',
+    return {
+      version: mv.id, type: typeLabels[mv.type] || mv.type, source: 'Mojang',
+      releaseTime: mv.releaseTime,
       downloaded: downloadedJars.some(d => d === jarPrefix),
       current: currentVersion === mv.id && currentSource === 'Mojang',
-      releaseTime: mv.releaseTime,
-    });
+    };
+  });
+  for (const mv of mojangVersions) {
+    const entry = {
+      version: mv.id, type: typeLabels[mv.type] || mv.type, typeRaw: mv.type,
+      source: 'Mojang', releaseTime: mv.releaseTime,
+      downloaded: downloadedJars.some(d => d === `vanilla-${mv.id}`),
+      current: currentVersion === mv.id && currentSource === 'Mojang',
+    };
+    if (!versionSet.has(mv.id)) {
+      versionSet.add(mv.id);
+      combined.push(entry);
+    }
   }
 
-  // Sort: release first (by version descending), then other types
+  // Sort combined: releases first, then by releaseTime
   combined.sort((a, b) => {
     const orderA = typeOrder[a.typeRaw] ?? 99;
     const orderB = typeOrder[b.typeRaw] ?? 99;
@@ -1181,18 +1234,10 @@ router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
     currentVersion: currentVersion || 'unknown',
     currentSource: currentSource || 'unknown',
     availableVersions: combined,
+    software, // per-provider version lists
     downloadedJars,
+    errors: Object.keys(errors).length > 0 ? errors : undefined,
   });
-  } catch (err) {
-    console.error('Error fetching versions:', err);
-    res.json({
-      currentVersion: 'unknown',
-      currentSource: 'unknown',
-      availableVersions: [],
-      downloadedJars: [],
-      error: 'Failed to load server versions',
-    });
-  }
 });
 
 router.post('/version', authMiddleware, requirePermission('server.start'), async (req: AuthRequest, res) => {
@@ -1216,13 +1261,21 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
     const usePurpur = sourceLower === 'purpur';
     const useForge = sourceLower === 'forge';
     const useNeoForge = sourceLower === 'neoforge';
-    const useVanilla = sourceLower === 'vanilla' || sourceLower === 'mojang';
+    const useQuilt = sourceLower === 'quilt';
+    const useSpigot = sourceLower === 'spigot';
+    const useFolia = sourceLower === 'folia';
+    const usePufferfish = sourceLower === 'pufferfish';
+    const useVanilla = sourceLower === 'vanilla' || sourceLower === 'mojang' || sourceLower === 'Mojang';
     let jarPrefix = 'vanilla';
     if (usePaper) jarPrefix = 'paper';
     else if (useFabric) jarPrefix = 'fabric';
     else if (usePurpur) jarPrefix = 'purpur';
     else if (useForge) jarPrefix = 'forge';
     else if (useNeoForge) jarPrefix = 'neoforge';
+    else if (useQuilt) jarPrefix = 'quilt';
+    else if (useSpigot) jarPrefix = 'spigot';
+    else if (useFolia) jarPrefix = 'folia';
+    else if (usePufferfish) jarPrefix = 'pufferfish';
     const jarFile = `${jarPrefix}-${version}.jar`;
     const jarPath = path.join(mcDir, jarFile);
 
@@ -1235,6 +1288,14 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
         await downloadForgeVersion(version, jarPath);
       } else if (useNeoForge) {
         await downloadNeoForgeVersion(version, jarPath);
+      } else if (useQuilt) {
+        await downloadQuiltVersion(version, jarPath);
+      } else if (useSpigot) {
+        await downloadSpigotVersion(version, jarPath);
+      } else if (useFolia) {
+        await downloadFoliaVersion(version, jarPath);
+      } else if (usePufferfish) {
+        await downloadPaperVersion(version, jarPath);
       } else if (usePaper) {
         await downloadPaperVersion(version, jarPath);
       } else {
@@ -1247,14 +1308,12 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
 
     minecraftServer.updateConfig('jarFile', jarFile);
     
-    // Delete old jar if it exists and is different from the new one
     if (oldJarPath && oldJarFile !== jarFile && fs.existsSync(oldJarPath)) {
       try {
         fs.unlinkSync(oldJarPath);
       } catch (e) {}
     }
 
-    // Also save version info to servers table
     const db = getDatabase();
     const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
     if (activeId) {
@@ -1264,6 +1323,10 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
       else if (usePurpur) sourceName = 'Purpur';
       else if (useForge) sourceName = 'Forge';
       else if (useNeoForge) sourceName = 'NeoForge';
+      else if (useQuilt) sourceName = 'Quilt';
+      else if (useSpigot) sourceName = 'Spigot';
+      else if (useFolia) sourceName = 'Folia';
+      else if (usePufferfish) sourceName = 'Pufferfish';
       db.prepare("UPDATE servers SET version = ?, version_source = ?, updated_at = datetime('now') WHERE id = ?").run(version, sourceName, activeId);
     }
     let displaySource = 'Vanilla';
@@ -1272,6 +1335,10 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
     else if (usePurpur) displaySource = 'Purpur';
     else if (useForge) displaySource = 'Forge';
     else if (useNeoForge) displaySource = 'NeoForge';
+    else if (useQuilt) displaySource = 'Quilt';
+    else if (useSpigot) displaySource = 'Spigot';
+    else if (useFolia) displaySource = 'Folia';
+    else if (usePufferfish) displaySource = 'Pufferfish';
     emitToAll('server:version-changed', { version, source: displaySource });
     res.json({ success: true, message: `Switched to ${displaySource} ${version}. Start the server to apply.` });
   } catch (error: any) {

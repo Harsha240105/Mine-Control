@@ -65,6 +65,10 @@ const SOFTWARE_OPTIONS = [
   { value: 'fabric', label: 'Fabric', color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
   { value: 'forge', label: 'Forge', color: 'text-orange-400', bg: 'bg-orange-500/10', border: 'border-orange-500/20' },
   { value: 'neoforge', label: 'NeoForge', color: 'text-cyan-400', bg: 'bg-cyan-500/10', border: 'border-cyan-500/20' },
+  { value: 'quilt', label: 'Quilt', color: 'text-pink-400', bg: 'bg-pink-500/10', border: 'border-pink-500/20' },
+  { value: 'spigot', label: 'Spigot', color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
+  { value: 'folia', label: 'Folia', color: 'text-emerald-400', bg: 'bg-emerald-500/10', border: 'border-emerald-500/20' },
+  { value: 'pufferfish', label: 'Pufferfish', color: 'text-indigo-400', bg: 'bg-indigo-500/10', border: 'border-indigo-500/20' },
   { value: 'vanilla', label: 'Vanilla', color: 'text-green-400', bg: 'bg-green-500/10', border: 'border-green-500/20' },
 ];
 
@@ -135,7 +139,7 @@ export default function Servers() {
         const resp = await api.getAvailableVersions();
         const vList = resp?.availableVersions || (Array.isArray(resp) ? resp : []);
         if (Array.isArray(vList)) {
-          const sourceMap: Record<string, string> = { paper: 'PaperMC', purpur: 'Purpur', fabric: 'Fabric', forge: 'Forge', vanilla: 'Mojang', neoforge: 'NeoForge' };
+          const sourceMap: Record<string, string> = { paper: 'PaperMC', purpur: 'Purpur', fabric: 'Fabric', forge: 'Forge', neoforge: 'NeoForge', quilt: 'Quilt', spigot: 'Spigot', folia: 'Folia', pufferfish: 'Pufferfish', vanilla: 'Mojang' };
           const src = sourceMap[formData.software?.toLowerCase()] || '';
           const filtered = src ? vList.filter((v: any) => v.source === src) : vList;
           setAvailableVersions(filtered);

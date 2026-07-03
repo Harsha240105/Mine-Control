@@ -123,11 +123,15 @@ router.post('/', authMiddleware, requirePermission('server.start'), async (req: 
   // Map software to download source
   const softwareLower = (software || '').toLowerCase();
   let downloadSource = '';
-  if (softwareLower === 'paper' || softwareLower === 'spigot') downloadSource = 'paper';
+  if (softwareLower === 'paper' || softwareLower === 'papermc') downloadSource = 'paper';
   else if (softwareLower === 'purpur') downloadSource = 'purpur';
   else if (softwareLower === 'fabric') downloadSource = 'fabric';
   else if (softwareLower === 'forge') downloadSource = 'forge';
   else if (softwareLower === 'neoforge') downloadSource = 'neoforge';
+  else if (softwareLower === 'quilt') downloadSource = 'quilt';
+  else if (softwareLower === 'spigot') downloadSource = 'spigot';
+  else if (softwareLower === 'folia') downloadSource = 'folia';
+  else if (softwareLower === 'pufferfish') downloadSource = 'pufferfish';
   else downloadSource = 'vanilla';
 
   let jarFileName = 'server.jar';
