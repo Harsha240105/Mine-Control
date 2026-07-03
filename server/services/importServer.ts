@@ -3,7 +3,7 @@ import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { execSync } from 'child_process';
 import { getDatabase, generateSlug } from '../database';
-import { setMinecraftDir, resolvePath, getMinecraftDir } from '../paths';
+import { setMinecraftDir, resolvePath } from '../paths';
 import { minecraftServer } from './minecraftServer';
 import { emitToAll } from '../socketManager';
 
@@ -86,6 +86,8 @@ const SOFTWARE_PATTERNS: { pattern: string; name: string }[] = [
   { pattern: 'purpur.yml', name: 'Purpur' },
   { pattern: 'bukkit.yml', name: 'Bukkit' },
   { pattern: 'spigot.yml', name: 'Spigot' },
+  { pattern: 'fabric.mod.json', name: 'Fabric' },
+  { pattern: 'fabric-server-launch.jar', name: 'Fabric' },
   { pattern: 'fabric-server-mc.versions', name: 'Fabric' },
   { pattern: 'neoforge.jar', name: 'NeoForge' },
   { pattern: 'quilt-server-launch.launch', name: 'Quilt' },
@@ -123,19 +125,30 @@ export class ImportService {
       }
     }
 
+    console.log(`[Import] Analyzing: ${sourcePath}`);
+
     const type = this.detectContentType(sourcePath);
+    console.log(`[Import] Detected type: ${type}`);
+
     let world: WorldAnalysis | null = null;
     let detection: any = {};
 
     if (type !== 'invalid') {
       const worldDir = this.findWorldDirectory(sourcePath);
       if (worldDir) {
-        world = this.analyzeWorld(worldDir, sourcePath);
+        console.log(`[Import] World root: ${worldDir}`);
+        world = await this.analyzeWorld(worldDir, type === 'full-server' ? sourcePath : undefined);
       } else if (type === 'full-server') {
         const worlds = this.findAllWorlds(sourcePath);
         if (worlds.length > 0) {
-          world = this.analyzeWorld(worlds[0], sourcePath);
+          console.log(`[Import] Found world: ${worlds[0]}`);
+          world = await this.analyzeWorld(worlds[0], sourcePath);
         }
+      }
+      if (!world) {
+        console.log(`[Import] WARNING: No world data found in source`);
+      } else {
+        console.log(`[Import] World: ${world.worldName}, Software: ${world.serverSoftware}, Version: ${world.minecraftVersion}, Players: ${world.playerCount}, Seed: ${world.seed}`);
       }
     }
 
@@ -160,40 +173,51 @@ export class ImportService {
     return { type, world, detection };
   }
 
+  // ── Content type detection ──
   private detectContentType(sourcePath: string): 'full-server' | 'world' | 'mc-backup' | 'invalid' {
-    // Check for MineControl OS backup marker
     const backupMeta = path.join(sourcePath, '.mcbackup.json');
     if (fs.existsSync(backupMeta)) return 'mc-backup';
 
-    // Check for level.dat (world root)
     const levelDat = this.findFileRecursive(sourcePath, 'level.dat');
-    if (!levelDat) return 'invalid';
+    if (!levelDat) {
+      console.log(`[Import] No level.dat found anywhere in source`);
+      return 'invalid';
+    }
+    console.log(`[Import] level.dat found at: ${levelDat}`);
 
-    // Check for server indicators
     const hasServerProps = this.findFileRecursive(sourcePath, 'server.properties');
-    const hasServerJar = fs.readdirSync(sourcePath).some(f => f.endsWith('.jar'));
+    const hasServerJar = fs.existsSync(path.join(sourcePath, 'server.jar')) ||
+      fs.existsSync(path.join(sourcePath, 'fabric-server-launch.jar'));
+    const hasGenericJar = fs.readdirSync(sourcePath).some(f => f.endsWith('.jar') && !f.startsWith('.'));
     const hasPlugins = fs.existsSync(path.join(sourcePath, 'plugins'));
     const hasMods = fs.existsSync(path.join(sourcePath, 'mods'));
     const hasEula = this.findFileRecursive(sourcePath, 'eula.txt');
 
-    if (hasServerProps && (hasServerJar || hasPlugins || hasMods || hasEula)) {
+    if (hasServerProps && (hasServerJar || hasGenericJar || hasPlugins || hasMods || hasEula)) {
+      console.log(`[Import] Detected as full server: server.props=${!!hasServerProps}, jars=${hasServerJar || hasGenericJar}, plugins=${hasPlugins}, mods=${hasMods}`);
       return 'full-server';
     }
 
-    // Check if it's a world directory
     const worldDir = this.findWorldDirectory(sourcePath);
-    if (worldDir) return 'world';
+    if (worldDir) {
+      console.log(`[Import] Detected as world: ${worldDir}`);
+      return 'world';
+    }
 
-    // Check if level.dat exists anywhere (world folder directly)
-    if (levelDat && fs.existsSync(path.join(path.dirname(levelDat), 'region'))) return 'world';
+    const levelDatDir = path.dirname(levelDat);
+    if (this.hasChunkStorage(levelDatDir)) {
+      console.log(`[Import] Detected as world (by chunk storage): ${levelDatDir}`);
+      return 'world';
+    }
 
+    console.log(`[Import] Invalid: level.dat found but no chunk storage or server markers`);
     return 'invalid';
   }
 
-  // ── STEP 2: World Analysis ──
-  analyzeWorld(worldPath: string, serverPath?: string): WorldAnalysis {
+  // ── STEP 2: World Analysis (async for NBT parsing) ──
+  async analyzeWorld(worldPath: string, serverPath?: string): Promise<WorldAnalysis> {
     const info = this.getWorldInfo(worldPath);
-    const lvl = this.readLevelDat(worldPath);
+    const lvl = await this.readLevelDatAsync(worldPath);
     const dims = this.scanDimensions(worldPath);
 
     let software = 'Vanilla';
@@ -216,6 +240,15 @@ export class ImportService {
           .filter(f => f.endsWith('.jar') || f.endsWith('.jar.disabled'))
           .map(f => f.replace(/\.(jar|jar\.disabled)$/, ''));
       }
+    } else {
+      // Even without serverPath, check world dir for software markers
+      if (fs.existsSync(path.join(worldPath, 'serverconfig'))) {
+        software = 'Fabric';
+      }
+      if (fs.existsSync(path.join(worldPath, 'defaultconfigs'))) {
+        if (software === 'Vanilla') software = 'Forge';
+        else software = 'Forge/NeoForge';
+      }
     }
 
     const datapacksDir = path.join(worldPath, 'datapacks');
@@ -224,18 +257,61 @@ export class ImportService {
       datapacks = fs.readdirSync(datapacksDir).filter(f => fs.statSync(path.join(datapacksDir, f)).isDirectory());
     }
 
-    const playerDataDir = path.join(worldPath, 'playerdata');
+    // Scan players from both playerdata/ and players/ directories
     let playerNames: string[] = [];
     let playerCount = 0;
+
+    const playerDataDir = path.join(worldPath, 'playerdata');
     if (fs.existsSync(playerDataDir)) {
       const files = fs.readdirSync(playerDataDir).filter(f => f.endsWith('.dat'));
-      playerCount = files.length;
-      playerNames = files.map(f => f.replace('.dat', ''));
+      playerCount += files.length;
+      playerNames.push(...files.map(f => f.replace('.dat', '')));
     }
 
-    const hasOverworld = fs.existsSync(path.join(worldPath, 'region'));
-    const hasNether = fs.existsSync(path.join(worldPath, 'DIM-1', 'region'));
-    const hasEnd = fs.existsSync(path.join(worldPath, 'DIM1', 'region'));
+    const playersDir = path.join(worldPath, 'players');
+    if (fs.existsSync(playersDir)) {
+      try {
+        const entries = fs.readdirSync(playersDir);
+        for (const entry of entries) {
+          const full = path.join(playersDir, entry);
+          if (fs.statSync(full).isFile() && (entry.endsWith('.dat') || entry.endsWith('.json'))) {
+            const uuid = entry.replace(/\.(dat|json)$/, '');
+            if (uuid.includes('-') && !playerNames.includes(uuid)) {
+              playerCount++;
+              playerNames.push(uuid);
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // Resolve UUIDs to names from usercache / whitelist / ops
+    const nameMap = new Map<string, string>();
+    if (serverPath) {
+      const usercache = this.readJsonFile(path.join(serverPath, 'usercache.json'));
+      if (Array.isArray(usercache)) {
+        for (const entry of usercache) {
+          if (entry.name && entry.uuid) nameMap.set(entry.uuid, entry.name);
+        }
+      }
+      const whitelist = this.readJsonFile(path.join(serverPath, 'whitelist.json'));
+      if (Array.isArray(whitelist)) {
+        for (const entry of whitelist) {
+          if (entry.name && entry.uuid) nameMap.set(entry.uuid, entry.name);
+        }
+      }
+      const ops = this.readJsonFile(path.join(serverPath, 'ops.json'));
+      if (Array.isArray(ops)) {
+        for (const entry of ops) {
+          if (entry.name && entry.uuid) nameMap.set(entry.uuid, entry.name);
+        }
+      }
+    }
+
+    const resolvedNames = playerNames.map(u => nameMap.get(u) || u);
+
+    // Detect dimensions using multiple layout patterns
+    const dimInfo = this.detectDimensions(worldPath);
 
     let onlineMode = false;
     if (serverPath) {
@@ -256,12 +332,12 @@ export class ImportService {
       worldSizeFormatted: this.formatBytes(info.totalSize),
       regionCount: info.totalRegions,
       loadedChunks: info.totalChunks,
-      dimensionCount: dims.length,
-      hasOverworld,
-      hasNether,
-      hasEnd,
-      playerCount,
-      playerNames,
+      dimensionCount: dimInfo.count,
+      hasOverworld: dimInfo.hasOverworld,
+      hasNether: dimInfo.hasNether,
+      hasEnd: dimInfo.hasEnd,
+      playerCount: playerCount,
+      playerNames: resolvedNames,
       lastPlayed: lvl.lastPlayed || info.lastPlayed || null,
       gameMode: lvl.gamemode !== undefined ? ['Survival', 'Creative', 'Adventure', 'Spectator'][lvl.gamemode] || 'Survival' : 'Survival',
       difficulty: lvl.difficulty !== undefined ? ['Peaceful', 'Easy', 'Normal', 'Hard'][lvl.difficulty] || 'Normal' : 'Normal',
@@ -276,41 +352,74 @@ export class ImportService {
   // ── STEP 3: Player Analysis ──
   analyzePlayers(worldPath: string): PlayerAnalysis[] {
     const players: PlayerAnalysis[] = [];
-    const playerDataDir = path.join(worldPath, 'playerdata');
-    const advancementsDir = path.join(worldPath, 'advancements');
-    const statsDir = path.join(worldPath, 'stats');
+    const seen = new Set<string>();
 
-    if (!fs.existsSync(playerDataDir)) return players;
-
-    const datFiles = fs.readdirSync(playerDataDir).filter(f => f.endsWith('.dat'));
-    for (const file of datFiles) {
-      const uuid = file.replace('.dat', '');
-      const filePath = path.join(playerDataDir, file);
+    const scanDir = (dir: string) => {
+      if (!fs.existsSync(dir)) return;
       try {
-        const data = this.readPlayerDat(filePath);
-        const advancements = this.readJsonFile(path.join(advancementsDir, `${uuid}.json`));
-        const statistics = this.readJsonFile(path.join(statsDir, `${uuid}.json`));
-        players.push({
-          username: data.username || uuid,
-          uuid,
-          inventory: data.Inventory || [],
-          xpLevel: data.XpLevel ?? 0,
-          health: data.Health ?? 20,
-          food: data.foodLevel ?? 20,
-          coordinates: {
-            x: data.Pos?.[0] ?? data.posX ?? 0,
-            y: data.Pos?.[1] ?? data.posY ?? 64,
-            z: data.Pos?.[2] ?? data.posZ ?? 0,
-          },
-          dimension: data.Dimension ?? data.dimension ?? 'minecraft:overworld',
-          lastSeen: data.LastSeen ? new Date(Number(data.LastSeen)).toISOString() : null,
-          playTime: data.PlayTime ?? 0,
-          deaths: data.DeathCount ?? 0,
-          advancements: advancements || {},
-          statistics: statistics || {},
-        });
+        const files = fs.readdirSync(dir);
+        for (const file of files) {
+          if (!file.endsWith('.dat')) continue;
+          const uuid = file.replace('.dat', '');
+          if (seen.has(uuid)) continue;
+          seen.add(uuid);
+
+          const filePath = path.join(dir, file);
+          try {
+            const buf = fs.readFileSync(filePath);
+            const str = buf.toString('latin1');
+            const data: any = {};
+
+            const xpMatch = str.match(/XpLevel[^\d]*(\d+)/);
+            if (xpMatch) data.XpLevel = parseInt(xpMatch[1]);
+
+            const healthMatch = str.match(/Health[^\d]*([\d.]+)/);
+            if (healthMatch) data.Health = parseFloat(healthMatch[1]);
+
+            const foodMatch = str.match(/foodLevel[^\d]*(\d+)/);
+            if (foodMatch) data.foodLevel = parseInt(foodMatch[1]);
+
+            const deathMatch = str.match(/DeathCount[^\d]*(\d+)/);
+            if (deathMatch) data.DeathCount = parseInt(deathMatch[1]);
+
+            const timeMatch = str.match(/PlayTime[^\d]*(\d+)/);
+            if (timeMatch) data.PlayTime = parseInt(timeMatch[1]);
+
+            const dimMatch = str.match(/Dimension[^\d]*(-?\d+)/);
+            if (dimMatch) {
+              const dim = parseInt(dimMatch[1]);
+              data.Dimension = dim === -1 ? 'minecraft:nether' : dim === 1 ? 'minecraft:end' : 'minecraft:overworld';
+            }
+
+            const posMatch = str.match(/Pos[^]]*\[([\d.-]+),\s*([\d.-]+),\s*([\d.-]+)\]/);
+            if (posMatch) data.Pos = [parseFloat(posMatch[1]), parseFloat(posMatch[2]), parseFloat(posMatch[3])];
+
+            players.push({
+              username: uuid,
+              uuid,
+              inventory: [],
+              xpLevel: data.XpLevel ?? 0,
+              health: data.Health ?? 20,
+              food: data.foodLevel ?? 20,
+              coordinates: {
+                x: data.Pos?.[0] ?? 0,
+                y: data.Pos?.[1] ?? 64,
+                z: data.Pos?.[2] ?? 0,
+              },
+              dimension: data.Dimension ?? 'minecraft:overworld',
+              lastSeen: null,
+              playTime: data.PlayTime ?? 0,
+              deaths: data.DeathCount ?? 0,
+              advancements: {},
+              statistics: {},
+            });
+          } catch {}
+        }
       } catch {}
-    }
+    };
+
+    scanDir(path.join(worldPath, 'playerdata'));
+    scanDir(path.join(worldPath, 'players'));
 
     return players;
   }
@@ -321,11 +430,52 @@ export class ImportService {
     if (!fs.existsSync(levelDat)) {
       return { valid: false, reason: 'Missing level.dat - this is not a valid Minecraft world.' };
     }
-    const hasRegion = fs.existsSync(path.join(worldPath, 'region'));
-    if (!hasRegion) {
-      return { valid: false, reason: 'Missing region/ directory - no world data found.' };
+
+    // Check for chunk storage in ANY known layout pattern
+    if (!this.hasChunkStorage(worldPath)) {
+      return { valid: false, reason: 'No world data found (region files) - this world appears empty or corrupt.' };
     }
+
     return { valid: true };
+  }
+
+  // ── Check for chunk storage in any layout ──
+  private hasChunkStorage(worldPath: string): boolean {
+    // Vanilla layout
+    if (this.hasRegionFiles(path.join(worldPath, 'region'))) return true;
+    if (this.hasRegionFiles(path.join(worldPath, 'DIM-1', 'region'))) return true;
+    if (this.hasRegionFiles(path.join(worldPath, 'DIM1', 'region'))) return true;
+
+    // Fabric/Aternos layout: dimensions/<namespace>/<dimension>/region/
+    const dimensionsDir = path.join(worldPath, 'dimensions');
+    if (fs.existsSync(dimensionsDir)) {
+      try {
+        const namespaces = fs.readdirSync(dimensionsDir);
+        for (const ns of namespaces) {
+          const nsPath = path.join(dimensionsDir, ns);
+          if (!fs.statSync(nsPath).isDirectory()) continue;
+          const dims = fs.readdirSync(nsPath);
+          for (const dim of dims) {
+            const regionDir = path.join(nsPath, dim, 'region');
+            if (this.hasRegionFiles(regionDir)) return true;
+          }
+        }
+      } catch {}
+    }
+
+    // Check world root for region files directly (some exports)
+    if (this.hasRegionFiles(worldPath)) return true;
+
+    return false;
+  }
+
+  private hasRegionFiles(dir: string): boolean {
+    try {
+      if (!fs.existsSync(dir)) return false;
+      return fs.readdirSync(dir).some(f => f.endsWith('.mca'));
+    } catch {
+      return false;
+    }
   }
 
   // ── STEP 9: Import Summary ──
@@ -340,6 +490,7 @@ export class ImportService {
       sourcePath = extracted;
     }
 
+    console.log(`[Import Summary] Analyzing: ${sourcePath}`);
     const type = this.detectContentType(sourcePath);
     const result: ImportSummary = {
       type,
@@ -357,13 +508,15 @@ export class ImportService {
       if (worldDir) {
         result.validation = this.validateImport(worldDir);
         if (result.validation.valid) {
-          result.world = this.analyzeWorld(worldDir, type === 'full-server' ? sourcePath : undefined);
+          result.world = await this.analyzeWorld(worldDir, type === 'full-server' ? sourcePath : undefined);
           result.players = this.analyzePlayers(worldDir);
           result.software = result.world?.serverSoftware || 'Unknown';
           result.version = result.world?.minecraftVersion || 'Unknown';
         }
       }
     }
+
+    console.log(`[Import Summary] Type=${type}, Valid=${result.validation.valid}, Software=${result.software}, Version=${result.version}`);
 
     if (cleanupDir && fs.existsSync(cleanupDir)) {
       try { fs.rmSync(cleanupDir, { recursive: true, force: true }); } catch {}
@@ -383,6 +536,7 @@ export class ImportService {
 
     if (isZip) {
       try {
+        console.log(`[Import] Extracting archive: ${sourcePath}`);
         extractDir = await this.extractArchive(sourcePath);
       } catch (err: any) {
         return { success: false, warnings: [], errors: [`Failed to extract archive: ${err.message}`] };
@@ -399,6 +553,8 @@ export class ImportService {
       return { success: false, warnings: [], errors: ['No Minecraft world directory found in import source.'] };
     }
 
+    console.log(`[Import] World root: ${worldDir}`);
+
     const validation = this.validateImport(worldDir);
     if (!validation.valid) {
       return { success: false, warnings: [], errors: [validation.reason || 'Invalid world data.'] };
@@ -406,7 +562,6 @@ export class ImportService {
 
     const db = getDatabase();
 
-    // ── Get or create destination server ──
     let serverId: string;
     let serverDir: string;
     let serverName: string;
@@ -427,7 +582,7 @@ export class ImportService {
 
       serverId = uuidv4();
       serverDir = resolvePath('servers', slug);
-      const version = config.version || this.detectVersionFromSource(extractDir, worldDir) || '1.21.4';
+      const version = config.version || (await this.detectVersionFromSource(extractDir, worldDir)) || '1.21.4';
       const software = config.software || this.detectServerSoftware(extractDir) || 'Paper';
       const jarFile = `${software.toLowerCase()}-${version}.jar`;
 
@@ -449,8 +604,7 @@ export class ImportService {
       );
     }
 
-    // ── Determine world destination ──
-    const worldInfo = this.analyzeWorld(worldDir, type === 'full-server' ? extractDir : undefined);
+    const worldInfo = await this.analyzeWorld(worldDir, type === 'full-server' ? extractDir : undefined);
     const levelName = config.worldName || worldInfo.worldName || 'world';
     const targetWorldDir = path.join(serverDir, levelName);
 
@@ -463,7 +617,7 @@ export class ImportService {
       } else {
         const altName = `${levelName}-imported-${Date.now()}`;
         const finalTarget = path.join(serverDir, altName);
-        this.importWorldData(worldDir, finalTarget, type === 'full-server' ? extractDir : undefined);
+        this.importWorldData(worldDir, finalTarget);
         this.registerWorldInDb(finalTarget, altName, worldInfo, serverId);
         warnings.push(`Imported as additional world: ${altName}`);
 
@@ -473,14 +627,13 @@ export class ImportService {
 
         const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId) as any;
         emitToAll('server:updated', server);
+        console.log(`[Import] Success: ${altName} imported as additional world`);
         return { success: true, server, warnings, errors: [], summary: undefined };
       }
     }
 
-    // ── STEP 7: Preserve everything — copy world with full preservation ──
-    this.importWorldData(worldDir, targetWorldDir, type === 'full-server' ? extractDir : undefined);
+    this.importWorldData(worldDir, targetWorldDir);
 
-    // Update server.properties with level-name
     const propsPath = path.join(serverDir, 'server.properties');
     if (fs.existsSync(propsPath)) {
       let content = fs.readFileSync(propsPath, 'utf-8');
@@ -492,20 +645,15 @@ export class ImportService {
       fs.writeFileSync(propsPath, content, 'utf-8');
     }
 
-    // Copy server-wide configs
     this.copyConfigFiles(extractDir, serverDir);
-
-    // ── Register world in database ──
     this.registerWorldInDb(targetWorldDir, levelName, worldInfo, serverId);
 
-    // ── Set as active server if new ──
     if (config.destinationType !== 'existing') {
       db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('active_server_id', ?)").run(serverId);
       setMinecraftDir(serverDir);
       minecraftServer.loadServer(serverDir);
     }
 
-    // Clean up extracted files
     if (isZip && extractDir !== sourcePath) {
       try { fs.rmSync(extractDir, { recursive: true, force: true }); } catch {}
     }
@@ -514,16 +662,25 @@ export class ImportService {
     emitToAll('server:updated', server);
     emitToAll('world:created', { name: levelName, server_id: serverId });
 
+    console.log(`[Import] Complete: ${serverName}, World: ${levelName}, Software: ${worldInfo.serverSoftware}, Version: ${worldInfo.minecraftVersion}`);
     return { success: true, server, warnings, errors };
   }
 
   // ── Private Helpers ──
 
-  private importWorldData(worldDir: string, targetWorldDir: string, serverPath?: string) {
+  private importWorldData(worldDir: string, targetWorldDir: string) {
     if (!fs.existsSync(targetWorldDir)) fs.mkdirSync(targetWorldDir, { recursive: true });
 
-    // Copy world preserving everything
-    const preserveDirs = ['region', 'DIM-1', 'DIM1', 'playerdata', 'players', 'stats', 'advancements', 'poi', 'entities', 'data', 'datapacks'];
+    // Copy all world content preserving everything — support all layout patterns
+    const preserveDirs = [
+      'region', 'DIM-1', 'DIM1',
+      'playerdata', 'players',
+      'stats', 'advancements',
+      'poi', 'entities', 'data',
+      'datapacks', 'dimensions',
+      'serverconfig', 'defaultconfigs',
+    ];
+
     for (const dir of preserveDirs) {
       const src = path.join(worldDir, dir);
       if (fs.existsSync(src)) {
@@ -531,17 +688,34 @@ export class ImportService {
       }
     }
 
-    // Copy level.dat
+    // Copy level.dat (always)
     const srcLevel = path.join(worldDir, 'level.dat');
     if (fs.existsSync(srcLevel)) {
       fs.copyFileSync(srcLevel, path.join(targetWorldDir, 'level.dat'));
     }
 
-    // Copy session.lock if present
     const srcSession = path.join(worldDir, 'session.lock');
     if (fs.existsSync(srcSession)) {
       try { fs.copyFileSync(srcSession, path.join(targetWorldDir, 'session.lock')); } catch {}
     }
+
+    // Copy any remaining top-level files/folders not already handled
+    try {
+      const entries = fs.readdirSync(worldDir);
+      for (const entry of entries) {
+        const src = path.join(worldDir, entry);
+        const dest = path.join(targetWorldDir, entry);
+        if (!fs.existsSync(dest)) {
+          try {
+            if (fs.statSync(src).isFile()) {
+              fs.copyFileSync(src, dest);
+            } else if (fs.statSync(src).isDirectory()) {
+              this.copyRecursive(src, dest);
+            }
+          } catch {}
+        }
+      }
+    } catch {}
   }
 
   private copyConfigFiles(extractDir: string, serverDir: string) {
@@ -552,9 +726,7 @@ export class ImportService {
     for (const file of configFiles) {
       const src = path.join(extractDir, file);
       if (fs.existsSync(src)) {
-        try {
-          fs.copyFileSync(src, path.join(serverDir, file));
-        } catch {}
+        try { fs.copyFileSync(src, path.join(serverDir, file)); } catch {}
       }
     }
   }
@@ -594,9 +766,15 @@ export class ImportService {
     }
   }
 
+  // ── Server software detection ──
   private detectServerSoftware(dir: string): string {
     for (const { pattern, name } of SOFTWARE_PATTERNS) {
       if (this.findFileRecursive(dir, pattern)) return name;
+    }
+
+    // Check for serverconfig/ (strong Fabric indicator for pure world exports)
+    if (fs.existsSync(path.join(dir, 'serverconfig'))) {
+      return 'Fabric';
     }
 
     const jars = fs.readdirSync(dir).filter(f => f.endsWith('.jar') && !f.startsWith('.'));
@@ -610,9 +788,9 @@ export class ImportService {
 
     if (serverJars.length > 0) {
       const jar = serverJars[0].toLowerCase();
+      if (jar.includes('fabric')) return 'Fabric';
       if (jar.includes('paper')) return 'Paper';
       if (jar.includes('purpur')) return 'Purpur';
-      if (jar.includes('fabric')) return 'Fabric';
       if (jar.includes('forge')) return 'Forge';
       if (jar.includes('neoforge')) return 'NeoForge';
       if (jar.includes('spigot')) return 'Spigot';
@@ -621,11 +799,17 @@ export class ImportService {
       if (jar.includes('vanilla') || jar.includes('server')) return 'Vanilla';
     }
 
+    // Check for mods/ directory (also strong Fabric indicator)
+    if (fs.existsSync(path.join(dir, 'mods')) && !fs.existsSync(path.join(dir, 'plugins'))) {
+      const mods = fs.readdirSync(path.join(dir, 'mods')).filter(f => f.endsWith('.jar'));
+      if (mods.length > 0) return 'Fabric';
+    }
+
     return 'Vanilla';
   }
 
-  private detectVersionFromSource(serverPath: string, worldDir: string): string {
-    const lvl = this.readLevelDat(worldDir);
+  private async detectVersionFromSource(serverPath: string, worldDir: string): Promise<string> {
+    const lvl = await this.readLevelDatAsync(worldDir);
     if (lvl.version) return lvl.version;
 
     const jars = fs.readdirSync(serverPath).filter(f => f.endsWith('.jar'));
@@ -637,86 +821,201 @@ export class ImportService {
     return '1.21.4';
   }
 
-  private readLevelDat(worldPath: string): any {
+  // ── level.dat parsing with prismarine-nbt ──
+  private async readLevelDatAsync(worldPath: string): Promise<any> {
     const levelDatPath = path.join(worldPath, 'level.dat');
-    if (!fs.existsSync(levelDatPath)) return {};
-
-    try {
-      const buf = fs.readFileSync(levelDatPath);
-      const str = buf.toString('latin1');
-      const result: any = {};
-
-      const seedMatch = str.match(/RandomSeed[^\d]*(-?\d+)/);
-      if (seedMatch) result.seed = seedMatch[1];
-
-      const versionMatch = str.match(/DataVersion[^\d]*(\d+)/);
-      if (versionMatch) result.saveVersion = parseInt(versionMatch[1]);
-
-      const versionNameMatch = str.match(/Version[^}]*Name[^\d]*(\d+\.\d+(?:\.\d+)?)/);
-      if (versionNameMatch) result.version = versionNameMatch[1];
-
-      const gameTypeMatch = str.match(/GameType[^\d]*(\d)/);
-      if (gameTypeMatch) result.gamemode = parseInt(gameTypeMatch[1]);
-
-      const difficultyMatch = str.match(/Difficulty[^\d]*(\d)/);
-      if (difficultyMatch) result.difficulty = parseInt(difficultyMatch[1]);
-
-      if (str.includes('hardcore') && str.includes('1')) result.hardcore = 1;
-
-      const timeMatch = str.match(/LastPlayed[^\d]*(\d+)/);
-      if (timeMatch) result.lastPlayed = new Date(parseInt(timeMatch[1])).toISOString();
-
-      return result;
-    } catch {
+    if (!fs.existsSync(levelDatPath)) {
+      console.log(`[Import] level.dat not found at ${levelDatPath}`);
       return {};
     }
-  }
 
-  private readPlayerDat(filePath: string): any {
     try {
-      const buf = fs.readFileSync(filePath);
-      const str = buf.toString('latin1');
+      const nbt = require('prismarine-nbt');
+      const data = fs.readFileSync(levelDatPath);
+      const { parsed } = await nbt.parse(data);
+      const simple = nbt.simplify(parsed);
+      const d = simple.Data || {};
+
       const result: any = {};
 
-      const xpMatch = str.match(/XpLevel[^\d]*(\d+)/);
-      if (xpMatch) result.XpLevel = parseInt(xpMatch[1]);
+      if (d.RandomSeed !== undefined) result.seed = String(d.RandomSeed);
+      else if (d.WorldGenSettings?.seed !== undefined) result.seed = String(d.WorldGenSettings.seed);
 
-      const healthMatch = str.match(/Health[^\d]*([\d.]+)/);
-      if (healthMatch) result.Health = parseFloat(healthMatch[1]);
-
-      const foodMatch = str.match(/foodLevel[^\d]*(\d+)/);
-      if (foodMatch) result.foodLevel = parseInt(foodMatch[1]);
-
-      const deathMatch = str.match(/DeathCount[^\d]*(\d+)/);
-      if (deathMatch) result.DeathCount = parseInt(deathMatch[1]);
-
-      const timeMatch = str.match(/PlayTime[^\d]*(\d+)/);
-      if (timeMatch) result.PlayTime = parseInt(timeMatch[1]);
-
-      const dimMatch = str.match(/Dimension[^\d]*(-?\d+)/);
-      if (dimMatch) {
-        const dim = parseInt(dimMatch[1]);
-        result.Dimension = dim === -1 ? 'minecraft:nether' : dim === 1 ? 'minecraft:end' : 'minecraft:overworld';
+      if (d.Version?.Name !== undefined) {
+        result.version = String(d.Version.Name);
+      } else if (d.DataVersion !== undefined) {
+        // Map known DataVersion numbers to version strings as fallback
+        result.saveVersion = d.DataVersion;
       }
 
-      const posMatch = str.match(/Pos[^]]*\[([\d.-]+),\s*([\d.-]+),\s*([\d.-]+)\]/);
-      if (posMatch) result.Pos = [parseFloat(posMatch[1]), parseFloat(posMatch[2]), parseFloat(posMatch[3])];
+      if (d.GameType !== undefined) result.gamemode = Number(d.GameType);
+      if (d.Difficulty !== undefined) result.difficulty = Number(d.Difficulty);
+      if (d.hardcore !== undefined) result.hardcore = d.hardcore ? 1 : 0;
+      if (d.LastPlayed !== undefined) result.lastPlayed = new Date(Number(d.LastPlayed)).toISOString();
 
+      console.log(`[Import] level.dat parsed: seed=${result.seed}, version=${result.version}, gamemode=${result.gamemode}, difficulty=${result.difficulty}, hardcore=${result.hardcore}`);
       return result;
-    } catch {
-      return {};
+    } catch (err) {
+      console.log(`[Import] Failed to parse level.dat with prismarine-nbt, falling back to binary scan`);
+      // Fallback to binary scan
+      try {
+        const buf = fs.readFileSync(levelDatPath);
+        const str = buf.toString('latin1');
+        const result: any = {};
+
+        const seedMatch = str.match(/RandomSeed[^\d]*(-?\d+)/);
+        if (seedMatch) result.seed = seedMatch[1];
+
+        const versionMatch = str.match(/DataVersion[^\d]*(\d+)/);
+        if (versionMatch) result.saveVersion = parseInt(versionMatch[1]);
+
+        const versionNameMatch = str.match(/Version[^}]*Name[^\d]*(\d+\.\d+(?:\.\d+)?)/);
+        if (versionNameMatch) result.version = versionNameMatch[1];
+
+        const gameTypeMatch = str.match(/GameType[^\d]*(\d)/);
+        if (gameTypeMatch) result.gamemode = parseInt(gameTypeMatch[1]);
+
+        const difficultyMatch = str.match(/Difficulty[^\d]*(\d)/);
+        if (difficultyMatch) result.difficulty = parseInt(difficultyMatch[1]);
+
+        if (str.includes('hardcore') && str.includes('1')) result.hardcore = 1;
+
+        const timeMatch = str.match(/LastPlayed[^\d]*(\d+)/);
+        if (timeMatch) result.lastPlayed = new Date(parseInt(timeMatch[1])).toISOString();
+
+        return result;
+      } catch {
+        return {};
+      }
     }
   }
 
-  private readJsonFile(filePath: string): any {
+  // ── Dimension detection supporting all layouts ──
+  private detectDimensions(worldPath: string): { count: number; hasOverworld: boolean; hasNether: boolean; hasEnd: boolean } {
+    let hasOverworld = false;
+    let hasNether = false;
+    let hasEnd = false;
+
+    // Vanilla layout
+    if (this.hasRegionFiles(path.join(worldPath, 'region'))) hasOverworld = true;
+    if (this.hasRegionFiles(path.join(worldPath, 'DIM-1', 'region'))) hasNether = true;
+    if (this.hasRegionFiles(path.join(worldPath, 'DIM1', 'region'))) hasEnd = true;
+
+    // Fabric/Aternos layout: dimensions/minecraft/<dim>/region/
+    const dimsDir = path.join(worldPath, 'dimensions');
+    if (fs.existsSync(dimsDir)) {
+      try {
+        const namespaces = fs.readdirSync(dimsDir);
+        for (const ns of namespaces) {
+          const nsPath = path.join(dimsDir, ns);
+          if (!fs.statSync(nsPath).isDirectory()) continue;
+          const dims = fs.readdirSync(nsPath);
+          for (const dim of dims) {
+            const regionDir = path.join(nsPath, dim, 'region');
+            if (!this.hasRegionFiles(regionDir)) continue;
+            const dimLower = dim.toLowerCase();
+            if (dimLower.includes('overworld') || dimLower === 'the_end' || dimLower === 'the_nether') {
+              if (dimLower.includes('overworld')) hasOverworld = true;
+              else if (dimLower === 'the_nether') hasNether = true;
+              else if (dimLower === 'the_end') hasEnd = true;
+            } else {
+              // Custom dimension - just count it
+            }
+          }
+        }
+      } catch {}
+    }
+
+    // Also check for `_dimension_` markers in data/ for custom dimensions
+    if (!hasOverworld) {
+      // If we have a level.dat but no region dir, check if dimensions/ exists at all
+      if (fs.existsSync(dimsDir) && fs.existsSync(path.join(worldPath, 'level.dat'))) {
+        hasOverworld = fs.readdirSync(dimsDir).length > 0;
+      }
+    }
+
+    let count = 0;
+    if (hasOverworld) count++;
+    if (hasNether) count++;
+    if (hasEnd) count++;
+
+    // Count custom dimensions
+    if (fs.existsSync(dimsDir)) {
+      try {
+        const namespaces = fs.readdirSync(dimsDir);
+        for (const ns of namespaces) {
+          const nsPath = path.join(dimsDir, ns);
+          if (!fs.statSync(nsPath).isDirectory()) continue;
+          const dims = fs.readdirSync(nsPath);
+          for (const dim of dims) {
+            const dimLower = dim.toLowerCase();
+            if (dimLower.includes('overworld') || dimLower === 'the_nether' || dimLower === 'the_end') continue;
+            if (fs.existsSync(path.join(nsPath, dim, 'region'))) count++;
+          }
+        }
+      } catch {}
+    }
+
+    if (count === 0 && fs.existsSync(path.join(worldPath, 'level.dat'))) {
+      // World exists but may not be generated yet — count as 1 dimension
+      count = 1;
+    }
+
+    return { count, hasOverworld, hasNether, hasEnd };
+  }
+
+  // ── World directory finding ──
+  private findWorldDirectory(dir: string): string | null {
+    // Check common world folder names
+    const candidates = ['world', 'worlds'];
+    for (const c of candidates) {
+      const p = path.join(dir, c);
+      if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
+        if (fs.existsSync(path.join(p, 'level.dat'))) return p;
+        if (this.hasChunkStorage(p)) return p;
+      }
+    }
+
+    // Check all subdirectories for level.dat or chunk storage
     try {
-      if (!fs.existsSync(filePath)) return null;
-      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-    } catch {
-      return null;
+      const entries = fs.readdirSync(dir);
+      for (const entry of entries) {
+        const full = path.join(dir, entry);
+        if (fs.statSync(full).isDirectory()) {
+          if (fs.existsSync(path.join(full, 'level.dat'))) return full;
+          if (this.hasChunkStorage(full)) return full;
+        }
+      }
+    } catch {}
+
+    // Check if the root is itself the world
+    if (fs.existsSync(path.join(dir, 'level.dat'))) {
+      return dir;
     }
+    if (this.hasChunkStorage(dir)) {
+      return dir;
+    }
+
+    return null;
   }
 
+  private findAllWorlds(dir: string): string[] {
+    const worlds: string[] = [];
+    try {
+      const entries = fs.readdirSync(dir);
+      for (const entry of entries) {
+        const full = path.join(dir, entry);
+        if (fs.statSync(full).isDirectory()) {
+          if (fs.existsSync(path.join(full, 'level.dat')) || this.hasChunkStorage(full)) {
+            worlds.push(full);
+          }
+        }
+      }
+    } catch {}
+    return worlds;
+  }
+
+  // ── Region/dimension scanning (supports all layouts) ──
   private getWorldInfo(worldPath: string): any {
     const info: any = {
       totalSize: 0,
@@ -734,42 +1033,88 @@ export class ImportService {
     info.totalRegions = dims.reduce((sum: number, d: any) => sum + (d.regionCount || 0), 0);
     info.totalChunks = dims.reduce((sum: number, d: any) => sum + (d.chunkCount || 0), 0);
 
-    const lvl = this.readLevelDat(worldPath);
-    info.seed = lvl.seed;
-    info.version = lvl.version;
-    info.lastPlayed = lvl.lastPlayed;
-
     return info;
   }
 
   private scanDimensions(worldPath: string): any[] {
     const results: any[] = [];
-    const dims = [
-      { folderName: '.', dimension: 'minecraft:overworld', displayName: 'Overworld' },
-      { folderName: 'DIM-1', dimension: 'minecraft:nether', displayName: 'Nether' },
-      { folderName: 'DIM1', dimension: 'minecraft:end', displayName: 'End' },
-    ];
 
-    for (const dim of dims) {
-      const dimPath = path.join(worldPath, dim.folderName);
-      if (dim.folderName !== '.' && !fs.existsSync(dimPath)) continue;
+    // Vanilla: overworld at root
+    const owRegionDir = path.join(worldPath, 'region');
+    let owRegionCount = 0;
+    let owChunkCount = 0;
+    if (fs.existsSync(owRegionDir)) {
+      try {
+        const files = fs.readdirSync(owRegionDir).filter(f => f.endsWith('.mca'));
+        owRegionCount = files.length;
+        for (const f of files) owChunkCount += this.countChunks(path.join(owRegionDir, f));
+      } catch {}
+    }
+    const owSize = this.getDirSize(worldPath, ['region', 'DIM-1', 'DIM1', 'dimensions']);
+    results.push({ folderName: '.', dimension: 'minecraft:overworld', displayName: 'Overworld', regionCount: owRegionCount, chunkCount: owChunkCount, size: this.formatBytes(owSize) });
 
-      const regionDir = path.join(dimPath, 'region');
-      let regionCount = 0;
-      let chunkCount = 0;
+    // Vanilla Nether
+    const netherRegionDir = path.join(worldPath, 'DIM-1', 'region');
+    let netherRegionCount = 0;
+    let netherChunkCount = 0;
+    if (fs.existsSync(netherRegionDir)) {
+      try {
+        const files = fs.readdirSync(netherRegionDir).filter(f => f.endsWith('.mca'));
+        netherRegionCount = files.length;
+        for (const f of files) netherChunkCount += this.countChunks(path.join(netherRegionDir, f));
+      } catch {}
+    }
+    if (netherRegionCount > 0) {
+      const netherSize = this.getDirSize(path.join(worldPath, 'DIM-1'));
+      results.push({ folderName: 'DIM-1', dimension: 'minecraft:nether', displayName: 'Nether', regionCount: netherRegionCount, chunkCount: netherChunkCount, size: this.formatBytes(netherSize) });
+    }
 
-      if (fs.existsSync(regionDir)) {
-        try {
-          const files = fs.readdirSync(regionDir).filter(f => f.endsWith('.mca'));
-          regionCount = files.length;
-          for (const f of files) {
-            chunkCount += this.countChunks(path.join(regionDir, f));
+    // Vanilla End
+    const endRegionDir = path.join(worldPath, 'DIM1', 'region');
+    let endRegionCount = 0;
+    let endChunkCount = 0;
+    if (fs.existsSync(endRegionDir)) {
+      try {
+        const files = fs.readdirSync(endRegionDir).filter(f => f.endsWith('.mca'));
+        endRegionCount = files.length;
+        for (const f of files) endChunkCount += this.countChunks(path.join(endRegionDir, f));
+      } catch {}
+    }
+    if (endRegionCount > 0) {
+      const endSize = this.getDirSize(path.join(worldPath, 'DIM1'));
+      results.push({ folderName: 'DIM1', dimension: 'minecraft:end', displayName: 'End', regionCount: endRegionCount, chunkCount: endChunkCount, size: this.formatBytes(endSize) });
+    }
+
+    // Fabric/Aternos: dimensions/<namespace>/<dimension>/region/
+    const dimsDir = path.join(worldPath, 'dimensions');
+    if (fs.existsSync(dimsDir)) {
+      try {
+        const namespaces = fs.readdirSync(dimsDir);
+        for (const ns of namespaces) {
+          const nsPath = path.join(dimsDir, ns);
+          if (!fs.statSync(nsPath).isDirectory()) continue;
+          const dims = fs.readdirSync(nsPath);
+          for (const dim of dims) {
+            const dimPath = path.join(nsPath, dim);
+            const regionDir = path.join(dimPath, 'region');
+            let rCount = 0;
+            let cCount = 0;
+            if (fs.existsSync(regionDir)) {
+              try {
+                const files = fs.readdirSync(regionDir).filter(f => f.endsWith('.mca'));
+                rCount = files.length;
+                for (const f of files) cCount += this.countChunks(path.join(regionDir, f));
+              } catch {}
+            }
+            if (rCount > 0) {
+              const dimSize = this.getDirSize(dimPath);
+              const dimName = `${ns}:${dim}`;
+              const displayName = dim.charAt(0).toUpperCase() + dim.slice(1).replace(/_/g, ' ');
+              results.push({ folderName: `dimensions/${ns}/${dim}`, dimension: dimName, displayName, regionCount: rCount, chunkCount: cCount, size: this.formatBytes(dimSize) });
+            }
           }
-        } catch {}
-      }
-
-      const size = dim.folderName === '.' ? this.getDirSize(worldPath) : this.getDirSize(dimPath);
-      results.push({ ...dim, regionCount, chunkCount, size: this.formatBytes(size) });
+        }
+      } catch {}
     }
 
     return results;
@@ -790,68 +1135,63 @@ export class ImportService {
     } catch { return 0; }
   }
 
-  private findWorldDirectory(dir: string): string | null {
-    const candidates = ['world', 'worlds'];
-    for (const c of candidates) {
-      const p = path.join(dir, c);
-      if (fs.existsSync(p) && fs.statSync(p).isDirectory()) {
-        if (fs.existsSync(path.join(p, 'level.dat'))) return p;
-        if (fs.existsSync(path.join(p, 'region'))) return p;
-      }
-    }
+  private readJsonFile(filePath: string): any {
+    try {
+      if (!fs.existsSync(filePath)) return null;
+      return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    } catch { return null; }
+  }
 
-    // Check for Aternos-style: world in subfolder
+  private getDirSize(dir: string, excludeDirs?: string[]): number {
+    let total = 0;
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const e of entries) {
+        if (excludeDirs && e.isDirectory() && excludeDirs.includes(e.name)) continue;
+        const p = path.join(dir, e.name);
+        if (e.isFile()) total += fs.statSync(p).size;
+        else if (e.isDirectory()) total += this.getDirSize(p);
+      }
+    } catch {}
+    return total;
+  }
+
+  private formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+  }
+
+  private findFileRecursive(dir: string, target: string): string | null {
     try {
       const entries = fs.readdirSync(dir);
+      if (entries.includes(target)) return path.join(dir, target);
       for (const entry of entries) {
         const full = path.join(dir, entry);
         if (fs.statSync(full).isDirectory()) {
-          if (fs.existsSync(path.join(full, 'level.dat')) ||
-              fs.existsSync(path.join(full, 'region'))) {
-            return full;
-          }
+          const found = this.findFileRecursive(full, target);
+          if (found) return found;
         }
       }
     } catch {}
-
-    // Check dir itself (world folder directly)
-    if (fs.existsSync(path.join(dir, 'level.dat')) || fs.existsSync(path.join(dir, 'region'))) {
-      return dir;
-    }
-
     return null;
   }
 
-  private findAllWorlds(dir: string): string[] {
-    const worlds: string[] = [];
-    try {
-      const entries = fs.readdirSync(dir);
-      for (const entry of entries) {
-        const full = path.join(dir, entry);
-        if (fs.statSync(full).isDirectory()) {
-          if (fs.existsSync(path.join(full, 'level.dat')) || fs.existsSync(path.join(full, 'region'))) {
-            worlds.push(full);
-          }
-        }
-      }
-    } catch {}
-    return worlds;
-  }
+  private copyRecursive(src: string, dest: string) {
+    if (!fs.existsSync(src)) return;
+    if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
 
-  private detectServerSoftwareFromJar(dir: string): string {
-    const jars = fs.readdirSync(dir).filter(f => f.endsWith('.jar'));
-    for (const jar of jars) {
-      const low = jar.toLowerCase();
-      if (low.includes('paper')) return 'Paper';
-      if (low.includes('purpur')) return 'Purpur';
-      if (low.includes('fabric')) return 'Fabric';
-      if (low.includes('forge')) return 'Forge';
-      if (low.includes('neoforge')) return 'NeoForge';
-      if (low.includes('spigot')) return 'Spigot';
-      if (low.includes('bukkit')) return 'Bukkit';
-      if (low.includes('quilt')) return 'Quilt';
+    const entries = fs.readdirSync(src, { withFileTypes: true });
+    for (const entry of entries) {
+      const srcPath = path.join(src, entry.name);
+      const destPath = path.join(dest, entry.name);
+      if (entry.isFile()) {
+        try { fs.copyFileSync(srcPath, destPath); } catch {}
+      } else if (entry.isDirectory()) {
+        this.copyRecursive(srcPath, destPath);
+      }
     }
-    return 'Vanilla';
   }
 
   private async extractArchive(archivePath: string): Promise<string> {
@@ -873,7 +1213,6 @@ export class ImportService {
           .on('error', reject);
       });
 
-      // Handle nested single-folder zips (common for Aternos/world downloads)
       this.flattenExtracted(extractDir);
     } else if (ext === '.rar' || ext === '.7z') {
       try {
@@ -920,57 +1259,6 @@ export class ImportService {
       } catch {}
     }
     return '7z';
-  }
-
-  private getDirSize(dir: string): number {
-    let total = 0;
-    try {
-      const entries = fs.readdirSync(dir, { withFileTypes: true });
-      for (const e of entries) {
-        const p = path.join(dir, e.name);
-        if (e.isFile()) total += fs.statSync(p).size;
-        else if (e.isDirectory()) total += this.getDirSize(p);
-      }
-    } catch {}
-    return total;
-  }
-
-  private formatBytes(bytes: number): string {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-  }
-
-  private findFileRecursive(dir: string, target: string): string | null {
-    try {
-      const entries = fs.readdirSync(dir);
-      if (entries.includes(target)) return path.join(dir, target);
-      for (const entry of entries) {
-        const full = path.join(dir, entry);
-        if (fs.statSync(full).isDirectory()) {
-          const found = this.findFileRecursive(full, target);
-          if (found) return found;
-        }
-      }
-    } catch {}
-    return null;
-  }
-
-  private copyRecursive(src: string, dest: string) {
-    if (!fs.existsSync(src)) return;
-    if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-
-    const entries = fs.readdirSync(src, { withFileTypes: true });
-    for (const entry of entries) {
-      const srcPath = path.join(src, entry.name);
-      const destPath = path.join(dest, entry.name);
-      if (entry.isFile()) {
-        try { fs.copyFileSync(srcPath, destPath); } catch {}
-      } else if (entry.isDirectory()) {
-        this.copyRecursive(srcPath, destPath);
-      }
-    }
   }
 }
 
