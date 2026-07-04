@@ -1,4 +1,4 @@
-import { execAsync } from '../utils'; // Assume we have or can use util.promisify(child_process.exec)
+
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
@@ -13,6 +13,8 @@ const execPromise = util.promisify(child_process.exec);
 export type JavaSource = 'MANAGED' | 'SYSTEM';
 
 export interface JavaVersion {
+  vendor?: string;
+  javaHome?: string;
   path: string;
   version: string;
   majorVersion: number;
@@ -64,7 +66,7 @@ export class JavaManager {
         if (stat.isDirectory()) {
           const res = searchExe(fullPath);
           if (res) return res;
-        } else if (file === (platform === 'win32' ? 'java.exe' : 'java')) {
+        } else if (file === (os.platform() === 'win32' ? 'java.exe' : 'java')) {
           return fullPath;
         }
       }
@@ -83,12 +85,11 @@ export class JavaManager {
 
     if (onProgress) onProgress(`Downloading Java ${majorVersion}...`);
     
-    // Download from Adoptium
-    const platform = os.platform() === 'win32' ? 'windows' : os.platform() === 'darwin' ? 'mac' : 'linux';
+const dlPlatform = os.platform() === 'win32' ? 'windows' : os.platform() === 'darwin' ? 'mac' : 'linux';
     const arch = os.arch() === 'x64' ? 'x64' : 'aarch64';
     
     // Using JRE for runtime
-    const url = `${ADOPTIUM_API}/binary/latest/${majorVersion}/ga/${platform}/${arch}/jre/hotspot/normal/eclipse`;
+    const url = `https://api.adoptium.net/v3/binary/latest/${majorVersion}/ga/${dlPlatform}/${arch}/jre/hotspot/normal/eclipse`;
 
     const downloadDir = this.getManagedJavaDir(majorVersion);
     const tempZip = path.join(downloadDir, 'temp.zip');
@@ -101,7 +102,7 @@ export class JavaManager {
     
     if (onProgress) onProgress(`Extracting Java ${majorVersion}...`);
     
-    if (platform === 'win32') {
+    if (os.platform() === 'win32') {
       await fs.createReadStream(tempZip)
         .pipe(unzipper.Extract({ path: downloadDir }))
         .promise();
@@ -118,7 +119,7 @@ export class JavaManager {
     }
 
     // Ensure executable permissions on linux/mac
-    if (platform !== 'win32') {
+    if (os.platform() !== 'win32') {
       fs.chmodSync(newExe, '755');
     }
 

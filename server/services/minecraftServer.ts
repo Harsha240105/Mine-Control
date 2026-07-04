@@ -362,7 +362,7 @@ class MinecraftServerManager extends EventEmitter {
 
     const jarVersion = this.getVersionFromConfig(config);
     const jarSource = this.getSourceFromConfig(config);
-    const required = JavaDetector.getRequiredJavaVersion(jarVersion, jarSource);
+    const required = JavaManager.getRequiredJavaVersion(jarVersion);
 
     let javaPath = config.javaPath || 'java';
     let javaMajor = 0;
@@ -386,8 +386,8 @@ class MinecraftServerManager extends EventEmitter {
       add('Java Version', false, `Configured Java at "${javaPath}" is version ${javaMajor}, but Java ${required}+ is needed.`, true, 'install-java');
     }
 
-    const installed = await JavaDetector.scan();
-    const viable = installed.filter(j => j.majorVersion >= required).sort((a: any, b: any) => a.majorVersion - b.majorVersion);
+    const installed = await JavaManager.scan();
+    const viable = installed.filter((j: any) => j.majorVersion >= required).sort((a: any, b: any) => a.majorVersion - b.majorVersion);
 
     if (viable.length > 0) {
       javaPath = viable[0].path;
@@ -412,16 +412,13 @@ class MinecraftServerManager extends EventEmitter {
   async autoInstallJava(version: string, source: string): Promise<{ success: boolean; javaPath: string; message: string }> {
     try {
       const controlDir = path.resolve(this.serverDir, '..', '.minecontrol');
-      const required = JavaDetector.getRequiredJavaVersion(version, source);
-      const jreDir = await JavaDownloader.downloadAndInstall(required, path.join(controlDir, 'jre'), (pct: number) => {
-        this.emit('server:output', `[MineControl] Downloading Java ${required}... ${pct}%\n`);
+      const required = JavaManager.getRequiredJavaVersion(version);
+      const exePath = await JavaManager.ensureJavaInstalled(required, (msg) => {
+        this.emit('server:output', `[MineControl] ${msg}\n`);
       });
-      const exePath = path.join(jreDir, 'bin', 'java.exe').replace(/\\/g, '/');
       if (fs.existsSync(exePath)) {
-        const maj = await JavaDownloader.checkJavaVersion(exePath);
-        const info = await JavaDownloader.getVersionInfo(exePath);
-        this.saveJavaConfig(exePath, info.version, maj, info.vendor, jreDir);
-        return { success: true, javaPath: exePath, message: `Java ${maj} (${info.vendor}) installed at ${exePath}` };
+        this.saveJavaConfig(exePath, `${required}.0.0`, required, 'Eclipse Temurin', path.dirname(path.dirname(exePath)));
+        return { success: true, javaPath: exePath, message: `Java ${required} installed at ${exePath}` };
       }
       return { success: false, javaPath: '', message: 'Download succeeded but java.exe not found at expected location.' };
     } catch (err: any) {
@@ -594,44 +591,40 @@ class MinecraftServerManager extends EventEmitter {
   private async resolveJava(
     jarPath: string, config: any, version: string, source: string
   ): Promise<{ javaPath: string; javaMajor: number; javaVersion: string; javaVendor: string; javaHome: string }> {
-    const required = JavaDetector.getRequiredJavaVersion(version, source);
+    const required = JavaManager.getRequiredJavaVersion(version);
 
     // 1. Try per-server configured path (may be empty string for new servers)
     let configured = config.javaExecutable || config.javaPath || '';
     if (configured && configured !== 'java' && configured !== 'javaw') {
       const maj = await this.checkJavaVersion(configured);
       if (maj >= required) {
-        const info = await JavaDownloader.getVersionInfo(configured);
-        return { javaPath: configured, javaMajor: maj, javaVersion: info.version, javaVendor: info.vendor, javaHome: config.javaHome || '' };
+        return { javaPath: configured, javaMajor: maj, javaVersion: `${maj}.0.0`, javaVendor: 'Unknown', javaHome: config.javaHome || '' };
       }
     }
 
     // 2. Scan all installed JDKs
-    const installed = await JavaDetector.scan();
-    const viable = installed.filter(j => j.majorVersion >= required);
+    const installed = await JavaManager.scan();
+    const viable = installed.filter((j: any) => j.majorVersion >= required);
 
     if (viable.length > 0) {
-      const best = viable[0];
-      this.saveJavaConfig(best.path, best.version, best.majorVersion, best.vendor, best.javaHome);
+      const best = viable.sort((a: any, b: any) => a.majorVersion - b.majorVersion)[0];
+      this.saveJavaConfig(best.path, best.version, best.majorVersion, best.vendor || 'Unknown', best.javaHome || '');
       return {
         javaPath: best.path, javaMajor: best.majorVersion,
-        javaVersion: best.version, javaVendor: best.vendor, javaHome: best.javaHome,
+        javaVersion: best.version, javaVendor: best.vendor || 'Unknown', javaHome: best.javaHome || '',
       };
     }
 
     // 3. Auto-download Temurin
     this.emit('server:output', `[MineControl] No compatible Java ${required}+ found. Downloading Eclipse Temurin ${required}...\n`);
     const controlDir = path.resolve(this.serverDir, '..', '.minecontrol');
-    const jreExe = await JavaDownloader.downloadAndInstall(required, path.join(controlDir, 'jre'), (pct) => {
-      this.emit('server:output', `[MineControl] Downloading Java ${required}... ${pct}%\n`);
+    const exePath = await JavaManager.ensureJavaInstalled(required, (msg) => {
+      this.emit('server:output', `[MineControl] ${msg}\n`);
     });
-    const exePath = path.join(jreExe, 'bin', 'java.exe').replace(/\\/g, '/');
-    const maj = await JavaDownloader.checkJavaVersion(exePath);
-    const info = await JavaDownloader.getVersionInfo(exePath);
-    this.saveJavaConfig(exePath, info.version, maj, info.vendor, jreExe);
+    this.saveJavaConfig(exePath, `${required}.0.0`, required, 'Eclipse Temurin', path.dirname(path.dirname(exePath)));
     return {
-      javaPath: exePath, javaMajor: maj,
-      javaVersion: info.version, javaVendor: info.vendor, javaHome: jreExe,
+      javaPath: exePath, javaMajor: required,
+      javaVersion: `${required}.0.0`, javaVendor: 'Eclipse Temurin', javaHome: path.dirname(path.dirname(exePath)),
     };
   }
 
@@ -644,7 +637,7 @@ class MinecraftServerManager extends EventEmitter {
   }
 
   private saveJavaConfig(javaPath: string, javaVersion: string, javaMajor: number, javaVendor: string, javaHome: string) {
-    this._lastJavaInfo = { path: javaPath, version: javaVersion, majorVersion: javaMajor, vendor: javaVendor, javaHome, arch: '64-bit', is64bit: true, source: 'MANAGED' };
+    this._lastJavaInfo = { path: javaPath, version: javaVersion, majorVersion: javaMajor, source: 'MANAGED', vendor: javaVendor, javaHome };
     try {
       const db = getDatabase();
       const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
@@ -788,7 +781,7 @@ class MinecraftServerManager extends EventEmitter {
         executable: javaPath,
         version: javaVersion,
         majorVersion: javaMajor,
-        vendor: javaVendor,
+        vendor: javaVendor || 'Unknown',
         javaHome: javaResult.javaHome,
         args: javaArgs,
         cwd: this.serverDir,
