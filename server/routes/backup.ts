@@ -89,6 +89,8 @@ router.post('/schedule', authMiddleware, requirePermission('backup.create'), (re
 });
 
 // ── Backup stats for dashboard ──
+router.get('/status', (req, res) => { res.json({ active: backupService.isBackupActive }); });
+
 router.get('/stats', authMiddleware, (_req: AuthRequest, res) => {
   try {
     const stats = backupService.getStorageStats();
@@ -186,7 +188,10 @@ router.post('/verify/:id', authMiddleware, async (req: AuthRequest, res) => {
 // ── Restore backup (auto-creates safety backup) ──
 router.post('/restore/:id', authMiddleware, requirePermission('backup.restore'), async (req: AuthRequest, res) => {
   try {
-    const result = await backupService.restoreBackup(req.params.id);
+    const { restoreWorlds, restorePlayers, restorePlugins, restoreMods, restoreConfig, restoreResourcepacks } = req.body;
+    const result = await backupService.restoreBackup(req.params.id, {
+      restoreWorlds, restorePlayers, restorePlugins, restoreMods, restoreConfig, restoreResourcepacks
+    });
     res.json({ success: true, safetyBackupId: result.safetyBackup.id, message: 'Backup restored. Restart the server for changes to take effect.' });
   } catch (error: any) {
     res.status(400).json({ error: error.message });

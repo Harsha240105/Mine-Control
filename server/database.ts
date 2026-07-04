@@ -1265,6 +1265,22 @@ function initializeSchema() {
     db.prepare('INSERT INTO schema_version (version) VALUES (16)').run();
   }
 
+  if (currentVersion < 17) {
+    const worldCols17 = db.prepare("PRAGMA table_info('worlds')").all().map((r: any) => r.name);
+    if (!worldCols17.includes('border_size')) db.exec("ALTER TABLE worlds ADD COLUMN border_size REAL DEFAULT 29999984");
+    if (!worldCols17.includes('border_center_x')) db.exec("ALTER TABLE worlds ADD COLUMN border_center_x REAL DEFAULT 0");
+    if (!worldCols17.includes('border_center_z')) db.exec("ALTER TABLE worlds ADD COLUMN border_center_z REAL DEFAULT 0");
+    if (!worldCols17.includes('datapacks')) db.exec("ALTER TABLE worlds ADD COLUMN datapacks TEXT DEFAULT '[]'");
+    if (!worldCols17.includes('structures')) db.exec("ALTER TABLE worlds ADD COLUMN structures TEXT DEFAULT '{}'");
+
+    const playerCols17 = db.prepare("PRAGMA table_info('players')").all().map((r: any) => r.name);
+    if (!playerCols17.includes('is_op')) db.exec("ALTER TABLE players ADD COLUMN is_op INTEGER DEFAULT 0");
+    if (!playerCols17.includes('op_level')) db.exec("ALTER TABLE players ADD COLUMN op_level INTEGER DEFAULT 0");
+    if (!playerCols17.includes('bypasses_player_limit')) db.exec("ALTER TABLE players ADD COLUMN bypasses_player_limit INTEGER DEFAULT 0");
+
+    db.prepare('INSERT INTO schema_version (version) VALUES (17)').run();
+  }
+
 }
 
 function migrateDefaultServer() {

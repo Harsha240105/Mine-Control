@@ -26,7 +26,7 @@ router.get('/', authMiddleware, (_req: AuthRequest, res) => {
   let jarPlugins: string[] = [];
   try {
     jarPlugins = fs.readdirSync(PLUGINS_DIR).filter(f => f.endsWith('.jar'));
-  } catch {}
+  } catch { }
 
   const plugins = jarPlugins.map((jarFile: string) => {
     const name = jarFile.replace(/\.jar$/, '');

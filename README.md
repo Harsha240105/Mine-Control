@@ -7,7 +7,7 @@
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.69-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.70-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="MIT License"/>
@@ -18,6 +18,17 @@
 </p>
 
 ---
+## 🚀 v1.0.70: Stability + Persistence + Multi-User Release
+
+MineControl OS has undergone a massive stability and persistence audit to ensure a flawless experience for end-users right out of the box:
+- **Resilient Node Backend**: Eliminated all `process.exit()` calls and dangerous stream handling (e.g. `fs.createReadStream().pipe()`) to guarantee that the Electron backend never crashes unexpectedly.
+- **Robust ZIP & Backup Architecture**: Swapped to an asynchronous, non-blocking `tar.exe` process for backup creation, meaning the Event Loop remains unblocked and the UI stays perfectly responsive. Implemented `autodrain()` for extraction to eliminate catastrophic memory leaks.
+- **Data Symmetry**: Server Properties and settings now perfectly synchronize between the SQLite backend and the `server.properties` file bi-directionally.
+- **Automated Discord Fallbacks**: In the absence of a GitHub access token, in-app feedback automatically routes to a secure Discord webhook. Discord Rich Presence has also been refactored for stable initialization.
+- **Single-Step Server Wizard**: The multi-page wizard was completely flattened into a singular, scrolling form to prevent infinite logic loops for new users creating their first servers.
+- **Electron Lifecycle Integrity**: The app now actively checks for running world backups before quitting, presenting a warning to prevent fatal data corruption.
+- **Automated Validation**: Integrated `validate-release.js` into our CI/CD pipeline to automatically sanity-check the TypeScript build, stream error handlers, and dangerous exit codes before tagging a release.
+
 
 ## Overview
 

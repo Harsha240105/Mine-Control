@@ -629,13 +629,17 @@ export const feedbackService = {
             const pkg = getAppVersion();
             const autoConfig = { repository: 'Harsha240105/Mine-Control', api_token: '' };
             const { getCredential } = require('./encryption');
+            
             const token = getCredential('github_token');
+            const webhookUrl = getCredential('discord_webhook_url') || process.env.DISCORD_WEBHOOK_URL || process.env.DISCORD_WEBHOOK;
             if (token) {
               autoConfig.api_token = token;
               await this._createGitHubIssue(ticket, autoConfig);
+            } else if (webhookUrl) {
+              await this._sendToDiscordWebhook(ticket, webhookUrl);
             } else {
               // No token available — mark as failed with clear message
-              const msg = 'GitHub token not configured. Set up a token in Settings → GitHub to sync feedback.';
+              const msg = 'GitHub token or Discord Webhook not configured. Set up a token/webhook in Settings to sync feedback.';
               db.prepare("UPDATE sync_queue SET status = 'failed', error = ? WHERE id = ?").run(msg, item.id);
               db.prepare("UPDATE feedback_tickets SET sync_status = 'failed', sync_error = ?, sync_retries = sync_retries + 1, updated_at = ? WHERE id = ?").run(msg, new Date().toISOString(), item.ticket_id);
               failed++;
@@ -743,6 +747,46 @@ export const feedbackService = {
 
     body += `---\n*Created by MineControl OS Feedback Sync*\n`;
     return body;
+  },
+
+  
+  _sendToDiscordWebhook(ticket: any, webhookUrl: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const https = require('https');
+      let url: URL;
+      try {
+        url = new URL(webhookUrl);
+      } catch {
+        return reject(new Error('Invalid Discord Webhook URL'));
+      }
+      
+      const body = this._formatDiagnosticBody(ticket);
+      const payload = JSON.stringify({
+        content: `**New Feedback / Bug Report** from ${ticket.username}`,
+        embeds: [{
+           title: ticket.summary || 'Bug Report',
+           description: body.substring(0, 4096),
+           color: ticket.issue_type === 'bug' ? 0xff0000 : (ticket.issue_type === 'crash' ? 0x990000 : 0x00ff00)
+        }]
+      });
+
+      const req = https.request({
+        hostname: url.hostname,
+        port: 443,
+        path: url.pathname + url.search,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(payload)
+        }
+      }, (res: any) => {
+         if (res.statusCode >= 200 && res.statusCode < 300) resolve();
+         else reject(new Error(`Discord webhook failed: ${res.statusCode}`));
+      });
+      req.on('error', reject);
+      req.write(payload);
+      req.end();
+    });
   },
 
   _checkForDuplicate(ticket: any, config: any): Promise<{ isDuplicate: boolean; existingIssue?: any }> {

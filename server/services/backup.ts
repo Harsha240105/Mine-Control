@@ -86,6 +86,8 @@ function addFileToArchive(archive: archiver.Archiver, filePath: string, archiveN
 }
 
 export class BackupService {
+  public isBackupActive: boolean = false;
+
   async createBackup(options: {
     name?: string;
     reason?: string;
@@ -213,7 +215,7 @@ export class BackupService {
     });
   }
 
-  async restoreBackup(backupId: string): Promise<{ safetyBackup: any }> {
+  async restoreBackup(backupId: string, options?: { restoreWorlds?: boolean, restorePlayers?: boolean, restorePlugins?: boolean, restoreMods?: boolean, restoreConfig?: boolean, restoreResourcepacks?: boolean }): Promise<{ safetyBackup: any }> {
     const db = getDatabase();
     const backup = db.prepare('SELECT * FROM backups WHERE id = ?').get(backupId) as any;
     if (!backup) throw new Error('Backup not found');
@@ -247,9 +249,12 @@ export class BackupService {
     const dest = (p: string) => resolveMinecraftDir(p);
 
     const includes = {
-      worlds: backup.includes_worlds, players: backup.includes_players,
-      plugins: backup.includes_plugins, mods: backup.includes_mods,
-      config: backup.includes_config, resourcepacks: backup.includes_resourcepacks,
+      worlds: options?.restoreWorlds ?? backup.includes_worlds,
+      players: options?.restorePlayers ?? backup.includes_players,
+      plugins: options?.restorePlugins ?? backup.includes_plugins,
+      mods: options?.restoreMods ?? backup.includes_mods,
+      config: options?.restoreConfig ?? backup.includes_config,
+      resourcepacks: options?.restoreResourcepacks ?? backup.includes_resourcepacks,
     };
 
     // Restore worlds (all dimensions)

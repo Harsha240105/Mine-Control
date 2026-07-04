@@ -146,8 +146,38 @@ async function createWindow() {
       }
     }, 10000);
 
-    app.on('before-quit', () => {
+    let isQuitting = false;
+
+    app.on('before-quit', (event) => {
       clearInterval(recoveryInterval);
+
+      if (isQuitting) return;
+      event.preventDefault();
+
+      fetch('http://127.0.0.1:3001/api/backup/status')
+        .then(res => res.json())
+        .then(data => {
+          if (data.active) {
+            const choice = dialog.showMessageBoxSync({
+              type: 'warning',
+              buttons: ['Cancel Quit', 'Force Quit'],
+              defaultId: 0,
+              title: 'Backup in Progress',
+              message: 'A world backup is currently in progress.\n\nQuitting now will kill the background server process and may corrupt the backup.\n\nAre you sure you want to quit?'
+            });
+            if (choice === 1) {
+              isQuitting = true;
+              app.quit();
+            }
+          } else {
+            isQuitting = true;
+            app.quit();
+          }
+        })
+        .catch(() => {
+          isQuitting = true;
+          app.quit();
+        });
     });
   }
 
@@ -336,6 +366,17 @@ app.on('activate', () => {
 // before-quit cleanup is handled at line 149
 
 // IPC handlers
+ipcMain.handle('get-auto-launch', () => {
+  return app.getLoginItemSettings().openAtLogin;
+});
+
+ipcMain.handle('set-auto-launch', (_event, enable: boolean) => {
+  app.setLoginItemSettings({
+    openAtLogin: enable,
+    openAsHidden: true // Optional: hide the window on startup
+  });
+});
+
 ipcMain.handle('get-version', () => {
   return app.getVersion();
 });

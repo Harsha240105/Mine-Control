@@ -428,15 +428,11 @@ export async function exportWorldAsZip(name: string, outputPath?: string): Promi
   const outPath = outputPath || path.join(getWorldsDir(), `${nameSanitized}-export.zip`);
 
   return new Promise((resolve, reject) => {
-    const output = fs.createWriteStream(outPath);
-    const archive = archiver('zip', { zlib: { level: 9 } });
-
-    output.on('close', () => resolve(outPath));
-    archive.on('error', reject);
-
-    archive.pipe(output);
-    archive.directory(worldPath, nameSanitized);
-    archive.finalize();
+    const { execFile } = require('child_process');
+    execFile('tar.exe', ['-a', '-c', '-f', outPath, '-C', worldPath, '.'], (error: any) => {
+      if (error) reject(error);
+      else resolve(outPath);
+    });
   });
 }
 

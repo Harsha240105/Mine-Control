@@ -59,10 +59,7 @@ router.get('/', authMiddleware, (req: AuthRequest, res) => {
 
   const enriched = worlds.map((w: any) => {
     const worldPath = w.folder_path || path.join(WORLDS_DIR, w.name);
-    let size = '0 B';
-    if (fs.existsSync(worldPath)) {
-      size = formatBytes(getFolderSize(worldPath));
-    }
+    let size = w.backup_size || '0 B';
 
     // Get dimensions
     const dims = db.prepare('SELECT * FROM world_dimensions WHERE world_name = ? ORDER BY id').all(w.name);
@@ -359,6 +356,10 @@ router.get('/:name/download', authMiddleware, requirePermission('world.manage'),
     readStream.on('end', () => {
       // Clean up temp export file
       try { fs.unlinkSync(zipPath); } catch {}
+    });
+    readStream.on('error', (err) => {
+      console.error('Error reading stream:', err);
+      if (!res.headersSent) res.status(500).json({ error: 'Stream error' });
     });
   } catch (err: any) {
     res.status(400).json({ error: err.message });

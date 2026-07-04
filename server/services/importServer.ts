@@ -36,6 +36,9 @@ interface WorldAnalysis {
   difficulty: string;
   hardcore: boolean;
   onlineMode: boolean;
+  borderSize?: number;
+  borderCenterX?: number;
+  borderCenterZ?: number;
   datapacks: string[];
   mods: string[];
   plugins: string[];
@@ -305,7 +308,7 @@ export class ImportService {
     }
 
     const datapacksDir = path.join(worldPath, 'datapacks');
-    let datapacks: string[] = [];
+    let datapacks: string[] = lvl.datapacks || [];
     if (fs.existsSync(datapacksDir)) {
       datapacks = fs.readdirSync(datapacksDir).filter(f => fs.statSync(path.join(datapacksDir, f)).isDirectory());
     }
@@ -397,6 +400,9 @@ export class ImportService {
       difficulty: lvl.difficulty !== undefined ? ['Peaceful', 'Easy', 'Normal', 'Hard'][lvl.difficulty] || 'Normal' : 'Normal',
       hardcore: !!lvl.hardcore,
       onlineMode,
+      borderSize: lvl.borderSize,
+      borderCenterX: lvl.borderCenterX,
+      borderCenterZ: lvl.borderCenterZ,
       datapacks,
       mods,
       plugins,
@@ -724,6 +730,26 @@ export class ImportService {
     this.copyConfigFiles(extractDir, serverDir);
     this.registerWorldInDb(targetWorldDir, levelName, worldInfo, serverId, type);
     ImportLogger.step(`World registered in database`);
+    
+    // Insert Players
+    try {
+      const players = this.analyzePlayers(targetWorldDir);
+      const insertPlayer = db.prepare(`
+        INSERT OR REPLACE INTO players (id, server_id, username, uuid, xp_level, health, food_level, dimension, pos_x, pos_y, pos_z, death_count, play_time)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const p of players) {
+        insertPlayer.run(
+          uuidv4(), serverId, p.username || p.uuid, p.uuid,
+          p.xpLevel, p.health, p.food, p.dimension,
+          p.coordinates.x, p.coordinates.y, p.coordinates.z,
+          p.deaths, p.playTime
+        );
+      }
+      ImportLogger.step(`Imported ${players.length} players`);
+    } catch (e: any) {
+      ImportLogger.warn(`Failed to insert players: ${e.message}`);
+    }
 
     if (config.destinationType !== 'existing') {
       db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('active_server_id', ?)").run(serverId);
@@ -833,6 +859,10 @@ export class ImportService {
       world_uuid: info.worldUuid || '',
       last_import: now,
       created_from: sourceType || 'import',
+      border_size: info.borderSize || 29999984,
+      border_center_x: info.borderCenterX || 0,
+      border_center_z: info.borderCenterZ || 0,
+      datapacks: JSON.stringify(info.datapacks || []),
     };
 
     const cols = Object.keys(world);
@@ -940,6 +970,14 @@ export class ImportService {
       if (d.Difficulty !== undefined) result.difficulty = Number(d.Difficulty);
       if (d.hardcore !== undefined) result.hardcore = d.hardcore ? 1 : 0;
       if (d.LastPlayed !== undefined) result.lastPlayed = new Date(Number(d.LastPlayed)).toISOString();
+      if (d.WorldBorder !== undefined) {
+        result.borderSize = d.WorldBorder.Size !== undefined ? Number(d.WorldBorder.Size) : 29999984;
+        result.borderCenterX = d.WorldBorder.CenterX !== undefined ? Number(d.WorldBorder.CenterX) : 0;
+        result.borderCenterZ = d.WorldBorder.CenterZ !== undefined ? Number(d.WorldBorder.CenterZ) : 0;
+      }
+      if (d.DataPacks?.Enabled !== undefined && Array.isArray(d.DataPacks.Enabled)) {
+        result.datapacks = d.DataPacks.Enabled.map((x: any) => String(x));
+      }
 
       ImportLogger.data('level.dat parsed', { seed: result.seed, version: result.version, gamemode: result.gamemode, difficulty: result.difficulty, hardcore: result.hardcore, uuid: result.worldUuid });
       return result;
@@ -1283,7 +1321,8 @@ export class ImportService {
   }
 
   private async extractArchive(archivePath: string): Promise<string> {
-    const ext = path.extname(archivePath).toLowerCase();
+    const isTarGz = archivePath.toLowerCase().endsWith('.tar.gz');
+    const ext = isTarGz ? '.tar.gz' : path.extname(archivePath).toLowerCase();
     const baseName = path.basename(archivePath, ext);
     const extractDir = path.join(path.dirname(archivePath), `__extracted_${baseName}_${Date.now()}`);
 
@@ -1302,6 +1341,13 @@ export class ImportService {
       });
 
       this.flattenExtracted(extractDir);
+      await this.extractRecursive(extractDir);
+    } else if (ext === '.tar.gz' || ext === '.tgz' || ext === '.tar') {
+      try {
+        execSync(`tar -xf "${archivePath}" -C "${extractDir}"`, { timeout: 120000 });
+      } catch (err: any) {
+        throw new Error(`Failed to extract tar archive: ${err.message}.`);
+      }
     } else if (ext === '.rar' || ext === '.7z') {
       try {
         execSync(`"${this.findExtractor()}" x "${archivePath}" -o"${extractDir}" -y`, { timeout: 120000 });
@@ -1313,6 +1359,24 @@ export class ImportService {
     }
 
     return extractDir;
+  }
+
+  private async extractRecursive(dir: string) {
+    const entries = fs.readdirSync(dir);
+    for (const e of entries) {
+      const fullPath = path.join(dir, e);
+      if (fs.statSync(fullPath).isFile()) {
+        const ext = path.extname(fullPath).toLowerCase();
+        if (['.zip', '.tar.gz', '.tgz'].includes(ext)) {
+          try {
+             const unzipped = await this.extractArchive(fullPath);
+             fs.rmSync(fullPath, { force: true }); // remove the inner zip
+          } catch {}
+        }
+      } else if (fs.statSync(fullPath).isDirectory()) {
+        await this.extractRecursive(fullPath);
+      }
+    }
   }
 
   private flattenExtracted(extractDir: string) {

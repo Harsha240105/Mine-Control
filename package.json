@@ -1,7 +1,7 @@
 {
   "name": "minecontrol-os",
   "private": true,
-  "version": "1.0.69",
+  "version": "1.0.70",
   "description": "Self-hosted Minecraft Server Management Platform",
   "author": "Harsha <hsharshavardhanh@soundaryainstitutions.in>",
   "main": "dist/electron/main.js",
@@ -22,7 +22,8 @@
     "start:electron": "electron dist/electron/main.js",
     "postinstall": "npm rebuild better-sqlite3 2>nul || exit 0",
     "lint": "eslint . --ext .ts,.tsx",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "validate": "node scripts/validate-release.js"
   },
   "dependencies": {
     "@types/three": "^0.184.1",

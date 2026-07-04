@@ -264,157 +264,42 @@ export default function Wizard() {
 
   if (creating) {
     return (
-      <div className="min-h-screen bg-surface-950 flex items-center justify-center">
-        <div className="fixed inset-0 overflow-hidden pointer-events-none">
-          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-minecraft-500/10 rounded-full blur-3xl animate-pulse" />
-        </div>
-        <div className="relative z-10 text-center max-w-md w-full px-6">
-          <div className="w-24 h-24 mx-auto mb-8 rounded-2xl bg-minecraft-600/20 border border-minecraft-500/30 flex items-center justify-center">
-            {createProgress < 100 ? (
-              <Loader2 className="w-12 h-12 text-minecraft-400 animate-spin" />
-            ) : (
-              <CheckCircle className="w-12 h-12 text-green-400" />
-            )}
-          </div>
-          <div className="mb-2">
-            <div className="h-2 bg-surface-800 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-minecraft-500 to-green-500 rounded-full transition-all duration-300"
-                style={{ width: `${createProgress}%` }}
-              />
-            </div>
-          </div>
-          <p className="text-sm text-gray-300 font-medium">{createStatus}</p>
-          <p className="text-xs text-gray-500 mt-1">{createProgress}%</p>
-          {createProgress >= 100 && (
-            <button
-              onClick={() => navigate('/dashboard')}
-              className="mt-6 btn-primary flex items-center gap-2 mx-auto"
-            >
-              <Play size={16} />
-              Open Dashboard
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  if (!activeServer) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="text-center space-y-3">
-          <div className="w-12 h-12 mx-auto rounded-full bg-gray-800 flex items-center justify-center">
-            <Server className="w-6 h-6 text-gray-500" />
-          </div>
-          <p className="text-gray-400 text-sm font-medium">No server selected</p>
-          <p className="text-gray-600 text-xs">Select a server from the Server Library to manage this page.</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-surface-950 flex flex-col">
-      {/* Progress Bar */}
-      <div className="fixed top-0 left-0 right-0 z-50">
-        <div className="h-1 bg-surface-800">
-          <div
-            className="h-full bg-gradient-to-r from-minecraft-500 to-blue-500 transition-all duration-500"
-            style={{ width: `${progressPercent}%` }}
-          />
-        </div>
-      </div>
-
+    <div className="min-h-screen bg-surface-950 flex flex-col overflow-y-auto">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 border-b border-surface-800">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-surface-800 sticky top-0 bg-surface-950/80 backdrop-blur z-40">
         <div className="flex items-center gap-3">
           <Server className="w-5 h-5 text-minecraft-500" />
           <span className="text-sm font-medium text-gray-200">Create New Server</span>
-          <span className="text-xs text-gray-500">Step {step + 1} of {STEPS.length}</span>
         </div>
         <button onClick={() => navigate('/')} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
           Cancel
         </button>
       </div>
 
-      <div className="flex-1 flex overflow-hidden">
-        {/* Step navigation sidebar */}
-        <div className="hidden md:flex flex-col w-56 border-r border-surface-800 p-4 bg-surface-900/50">
-          {STEPS.map((s, i) => (
-            <button
-              key={s}
-              onClick={() => i < step && setStep(i)}
-              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all mb-0.5 ${
-                i === step
-                  ? 'bg-minecraft-600/20 text-minecraft-400 border border-minecraft-500/20'
-                  : i < step
-                  ? 'text-green-400 hover:bg-surface-800'
-                  : 'text-gray-500'
-              }`}
-            >
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium ${
-                i === step ? 'bg-minecraft-600/30 text-minecraft-400' :
-                i < step ? 'bg-green-500/20 text-green-400' :
-                'bg-surface-800 text-gray-500'
-              }`}>
-                {i < step ? <Check size={12} /> : i + 1}
-              </div>
-              <span>{s}</span>
-            </button>
-          ))}
+      {/* Content - Single Page */}
+      <div className="flex-1 w-full max-w-4xl mx-auto p-6 lg:p-10 space-y-16 pb-32">
+        <section><StepIdentification data={data} update={update} /></section>
+        <section><StepCompatibility data={data} update={update} /></section>
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div><StepSoftware data={data} update={update} /></div>
+          <div><StepVersion data={data} update={update} versions={versions} loading={versionsLoading} search={versionSearch} setSearch={setVersionSearch} /></div>
+        </section>
+        <section><StepWorld data={data} update={update} /></section>
+        <section><StepSettings data={data} update={update}  /></section>
+        <section><StepJava data={data} update={update} ramSlider={ramSlider} setRamSlider={setRamSlider} /></section>
+        <section><StepPlugins data={data} update={update} togglePlugin={togglePlugin} /></section>
+        <section><StepSummary data={data} /></section>
+        
+        <div className="pt-8 border-t border-surface-800">
+          <button
+            onClick={handleCreate}
+            disabled={!data.name.trim() || !data.software || !data.version}
+            className="btn-primary w-full py-4 text-lg flex items-center justify-center gap-2"
+          >
+            <Sparkles size={20} />
+            Create Server
+          </button>
         </div>
-
-        {/* Content */}
-        <div className="flex-1 overflow-auto">
-          <div className="max-w-3xl mx-auto p-6 lg:p-10">
-            <StepContent
-              step={step}
-              data={data}
-              update={update}
-              versions={versions}
-              versionsLoading={versionsLoading}
-              versionSearch={versionSearch}
-              setVersionSearch={setVersionSearch}
-              ramSlider={ramSlider}
-              setRamSlider={setRamSlider}
-              togglePlugin={togglePlugin}
-              showPassword={showPassword}
-              setShowPassword={setShowPassword}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between px-6 py-4 border-t border-surface-800 bg-surface-900/50">
-        <button
-          onClick={step === 0 ? () => navigate('/') : prev}
-          className="btn-ghost flex items-center gap-2 text-sm"
-        >
-          <ArrowLeft size={14} />
-          {step === 0 ? 'Exit' : 'Back'}
-        </button>
-
-        <div className="flex items-center gap-2 text-xs text-gray-600">
-          {STEPS.map((_, i) => (
-            <div key={i} className={`w-2 h-2 rounded-full transition-colors ${
-              i === step ? 'bg-minecraft-500' : i < step ? 'bg-green-500' : 'bg-surface-700'
-            }`} />
-          ))}
-        </div>
-
-        <button
-          onClick={step === STEPS.length - 1 ? handleCreate : next}
-          disabled={!canNext()}
-          className="btn-primary flex items-center gap-2 text-sm"
-        >
-          {step === STEPS.length - 1 ? (
-            <><Sparkles size={14} /> Create Server</>
-          ) : (
-            <><span>Next</span> <ArrowRight size={14} /></>
-          )}
-        </button>
       </div>
     </div>
   );
@@ -1002,4 +887,5 @@ function StepCreate({ data }: { data: WizardData }) {
       </div>
     </div>
   );
+}
 }

@@ -81,6 +81,25 @@ class DiscordService {
     });
 
     // Reconnect when active server changes
+    minecraftServer.on('server:started', () => {
+      const cfg = this.loadConfig();
+      if (cfg.autoReconnect && !this._connected && !this._connecting) {
+        this.reconnect();
+      }
+    });
+    
+    // Periodically update Discord Activity Status with player count
+    setInterval(() => {
+      if (this._connected && this.client.user) {
+        try {
+          const db = require('../database').getDatabase();
+          const p = db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online'").get();
+          const online = p ? p.c : 0;
+          this.client.user.setActivity(`with ${online} players`, { type: 0 }); // 0 = Playing
+        } catch {}
+      }
+    }, 15000);
+
     activeServer.on('changed', () => {
       if (this._connected) {
         this.reconnect();
@@ -322,6 +341,12 @@ class DiscordService {
   }
 
   async notifyServerStopped(code?: number | null) {
+    setTimeout(() => {
+      if (this._connected) {
+        this.client.user?.setStatus('invisible');
+        this.disconnect();
+      }
+    }, 2000);
     if (!this.shouldNotify('notify_server_stop')) return;
     const server = this.getServerInfo();
 
@@ -607,7 +632,9 @@ class DiscordService {
     for (const { event, handler } of this.boundHandlers) {
       minecraftServer.off(event as any, handler);
     }
-    eventBus.removeAllListeners();
+    for (const { event, handler } of this.boundHandlers) {
+      if (event.startsWith('backup:')) eventBus.off(event, handler);
+    }
     this.boundHandlers = [];
   }
 
@@ -622,9 +649,14 @@ class DiscordService {
     this.hook('player:leave', (username: string) => this.notifyPlayerLeft(username));
 
     // Backup events via event bus
-    eventBus.on('backup:created', (data: any) => this.notifyBackupCreated(data));
-    eventBus.on('backup:restored', (data: any) => this.notifyBackupRestored(data));
-    eventBus.on('backup:failed', (data: any) => this.notifyBackupFailed(data));
+    this.hookBus('backup:created', (data: any) => this.notifyBackupCreated(data));
+    this.hookBus('backup:restored', (data: any) => this.notifyBackupRestored(data));
+    this.hookBus('backup:failed', (data: any) => this.notifyBackupFailed(data));
+  }
+
+  private hookBus(event: string, handler: (...args: any[]) => void) {
+    eventBus.on(event, handler);
+    this.boundHandlers.push({ event, handler });
   }
 
   private hook(event: string, handler: (...args: any[]) => void) {

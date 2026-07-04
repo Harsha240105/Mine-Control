@@ -7,7 +7,7 @@ import { EventEmitter } from 'events';
 import unzipper from 'unzipper';
 import { getDatabase } from '../database';
 import { resolveMinecraftDir, setMinecraftDir } from '../paths';
-import { JavaDetector, JavaDownloader, JavaVersion } from './JavaDetector';
+import { JavaManager, JavaVersion } from './JavaManager';
 
 export enum ServerState {
   STOPPED = 'stopped',
@@ -687,7 +687,7 @@ class MinecraftServerManager extends EventEmitter {
 
       // Phase 2: Java resolution — use version-based requirement as authoritative
       this.appendStartupLog('Resolving Java runtime...');
-      const requiredMajor = JavaDetector.getRequiredJavaVersion(versionStr, sourceStr);
+      const requiredMajor = JavaManager.getRequiredJavaVersion(versionStr);
       this.appendStartupLog(`Required: Java ${requiredMajor}`);
 
       const javaResult = await this.resolveJava(jarPath, config, versionStr, sourceStr);

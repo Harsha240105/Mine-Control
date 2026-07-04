@@ -14,7 +14,7 @@ import { validateServer, getConnectionWizardData } from '../services/connectionV
 import { mcPing, formatDescription } from '../services/mcPing';
 import { connectionManager } from '../services/connectionManager';
 import { firewallManager } from '../services/firewallManager';
-import { JavaDetector } from '../services/JavaDetector';
+import { JavaManager } from '../services/JavaManager';
 import {
   cacheGet, cacheSet, httpsGet, downloadFile, isPaperAvailable,
   downloadPaperVersion, downloadFabricVersion, downloadPurpurVersion,
@@ -45,7 +45,7 @@ const router = Router();
 
 router.get('/java/scan', authMiddleware, async (_req, res) => {
   try {
-    const installs = await JavaDetector.scan();
+    const installs = await JavaManager.scan();
     res.json(installs);
   } catch (err: any) {
     sendError(res, 500, err);
@@ -79,7 +79,7 @@ router.get('/java/resolve-required', authMiddleware, async (req: AuthRequest, re
   try {
     const version = req.query.version as string;
     const source = req.query.source as string;
-    const required = JavaDetector.getRequiredJavaVersion(version || '1.21', source || 'paper');
+    const required = JavaManager.getRequiredJavaVersion(version || '1.21', source || 'paper');
     res.json({ required, version, source });
   } catch (err: any) {
     sendError(res, 500, err);
@@ -106,7 +106,7 @@ router.post('/java/remove', authMiddleware, async (req: AuthRequest, res) => {
 router.post('/java/resolve', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { version, source } = req.body;
-    const result = await JavaDetector.resolveBestJava(version || '1.21', source || 'paper');
+    const result = await JavaManager.ensureJavaInstalled(JavaManager.getRequiredJavaVersion(version || '1.21', source || 'paper'));
     res.json(result);
   } catch (err: any) {
     sendError(res, 500, err);
@@ -129,7 +129,7 @@ router.post('/repair', authMiddleware, requirePermission('server.start'), async 
         fs.chmodSync(mcDir, 0o755);
         result = { success: true, message: 'Permissions fixed' };
         break;
-      case 'kill-port':
+            case 'kill-port':
         result = await minecraftServer.autoFixPort();
         break;
       case 'adjust-ram':
@@ -137,8 +137,31 @@ router.post('/repair', authMiddleware, requirePermission('server.start'), async 
         minecraftServer.updateConfig('maxRam', `${totalMem}G`);
         result = { success: true, message: `RAM adjusted to ${totalMem}G` };
         break;
+      case 'download-server':
+        const cfg = minecraftServer.getConfig();
+        const verStr = (cfg.jarFile || '').replace(/^(paper|vanilla|fabric|forge|neoforge|quilt|purpur|spigot|folia|pufferfish)-/i, '').replace('.jar', '');
+        const srcStr = (cfg.jarFile || '').match(/^(paper|vanilla|fabric|forge|neoforge|quilt|purpur|spigot|folia|pufferfish)/i)?.[1]?.toLowerCase() || 'paper';
+        await downloadVersion(verStr || '1.21.4', srcStr, path.join(minecraftServer.directory, cfg.jarFile || 'server.jar'));
+        result = { success: true, message: 'Server JAR downloaded successfully' };
+        break;
+      case 'repair-fabric':
+        const fCfg = minecraftServer.getConfig();
+        const fVer = (fCfg.jarFile || '').replace(/^fabric-/i, '').replace('.jar', '');
+        await downloadFabricVersion(fVer || '1.21.4', path.join(minecraftServer.directory, 'fabric-server-launch.jar'));
+        result = { success: true, message: 'Fabric loader repaired successfully' };
+        break;
+      case 'repair-forge':
+      case 'repair-neoforge':
+        result = { success: false, message: 'Repairing Forge/NeoForge requires running their installer manually currently.' };
+        break;
+      case 'repair-quilt':
+        const qCfg = minecraftServer.getConfig();
+        const qVer = (qCfg.jarFile || '').replace(/^quilt-/i, '').replace('.jar', '');
+        await downloadQuiltVersion(qVer || '1.21.4', path.join(minecraftServer.directory, 'quilt-server-launch.jar'));
+        result = { success: true, message: 'Quilt loader repaired successfully' };
+        break;
       default:
-        return sendError(res, 400, { message: `Unknown action: ${action}`, code: 'UNKNOWN_ACTION', reason: `The action "${action}" is not recognized`, details: `Valid actions: fix-port, install-java, fix-permissions, kill-port, adjust-ram` });
+        return sendError(res, 400, { message: `Unknown action: ${action}`, code: 'UNKNOWN_ACTION', reason: `The action "${action}" is not recognized`, details: `Valid actions: fix-port, install-java, fix-permissions, kill-port, adjust-ram, download-server, repair-fabric, repair-quilt` });
     }
     emitToAll('server:repair-complete', { action, result });
     res.json(result);
@@ -801,7 +824,7 @@ router.get('/diagnostics', authMiddleware, async (_req: AuthRequest, res) => {
 
   // Java check — scan all installed JDKs
   try {
-    const installs = await JavaDetector.scan();
+    const installs = await JavaManager.scan();
     if (installs.length === 0) {
       checks.push({ name: 'Java Installation', status: 'fail', message: 'No Java installation found. Install Java 21+ from https://adoptium.net/' });
     } else {
@@ -1117,7 +1140,7 @@ router.post('/health-check', authMiddleware, async (_req: AuthRequest, res) => {
   }
 
   try {
-    const installs = await JavaDetector.scan();
+    const installs = await JavaManager.scan();
     if (installs.length === 0) {
       checks.push({ name: 'Java', status: 'fail', message: 'No Java installation found' });
     } else {
