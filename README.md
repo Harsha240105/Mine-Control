@@ -7,7 +7,7 @@
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.70-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/Latest_v1.0.70-rc.1-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="MIT License"/>
@@ -18,7 +18,10 @@
 </p>
 
 ---
-## 🚀 v1.0.70: Stability + Persistence + Multi-User Release
+## 🚀 v1.0.70-rc.1: Stability + Persistence Release Candidate
+
+> ⚠️ **RELEASE CANDIDATE 1 (RC1)**
+> This version is currently in testing before being marked as Stable. We need users with different Windows setups to install it from GitHub and report any issues or edge cases.
 
 MineControl OS has undergone a massive stability and persistence audit to ensure a flawless experience for end-users right out of the box:
 - **Resilient Node Backend**: Eliminated all `process.exit()` calls and dangerous stream handling (e.g. `fs.createReadStream().pipe()`) to guarantee that the Electron backend never crashes unexpectedly.
