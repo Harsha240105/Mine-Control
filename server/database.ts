@@ -1310,6 +1310,291 @@ function initializeSchema() {
     db.prepare('INSERT INTO schema_version (version) VALUES (18)').run();
   }
 
+  // CRITICAL: Validate all required tables exist. Create any missing ones.
+  // This is a safety net for fresh installs where migrations may have failed.
+  ensureAllTablesExist();
+
+}
+
+function ensureAllTablesExist() {
+  const requiredTables: Record<string, string> = {
+    users: `CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'owner', created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_login TEXT, session_token TEXT
+    )`,
+    players: `CREATE TABLE IF NOT EXISTS players (
+      id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, uuid TEXT UNIQUE NOT NULL,
+      role TEXT NOT NULL DEFAULT 'Member', status TEXT NOT NULL DEFAULT 'offline',
+      last_login TEXT, playtime INTEGER NOT NULL DEFAULT 0, ip TEXT,
+      join_date TEXT NOT NULL DEFAULT (datetime('now')), muted INTEGER NOT NULL DEFAULT 0,
+      notes TEXT, health REAL DEFAULT 20, food_level INTEGER DEFAULT 20,
+      xp_level INTEGER DEFAULT 0, xp_progress REAL DEFAULT 0, dimension TEXT DEFAULT '',
+      pos_x REAL DEFAULT 0, pos_y REAL DEFAULT 0, pos_z REAL DEFAULT 0,
+      world_name TEXT DEFAULT 'world', death_count INTEGER DEFAULT 0, kills INTEGER DEFAULT 0,
+      first_join TEXT, last_disconnect TEXT, inventory TEXT DEFAULT '[]',
+      armor TEXT DEFAULT '[]', ender_chest TEXT DEFAULT '[]', advancements TEXT DEFAULT '{}',
+      statistics TEXT DEFAULT '{}'
+    )`,
+    roles: `CREATE TABLE IF NOT EXISTS roles (
+      name TEXT PRIMARY KEY, level INTEGER NOT NULL DEFAULT 0,
+      color TEXT NOT NULL DEFAULT '#aaaaaa', permissions TEXT NOT NULL DEFAULT '[]'
+    )`,
+    whitelist: `CREATE TABLE IF NOT EXISTS whitelist (
+      id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, uuid TEXT,
+      added_by TEXT, added_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    banned_players: `CREATE TABLE IF NOT EXISTS banned_players (
+      id TEXT PRIMARY KEY, username TEXT NOT NULL, uuid TEXT, reason TEXT,
+      banned_by TEXT, banned_at TEXT NOT NULL DEFAULT (datetime('now')), server_id TEXT
+    )`,
+    server_config: `CREATE TABLE IF NOT EXISTS server_config (
+      key TEXT PRIMARY KEY, value TEXT NOT NULL
+    )`,
+    backups: `CREATE TABLE IF NOT EXISTS backups (
+      id TEXT PRIMARY KEY, server_id TEXT, name TEXT NOT NULL, size TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), type TEXT NOT NULL DEFAULT 'manual',
+      worlds TEXT NOT NULL DEFAULT '[]', encrypted INTEGER NOT NULL DEFAULT 0, path TEXT NOT NULL
+    )`,
+    worlds: `CREATE TABLE IF NOT EXISTS worlds (
+      name TEXT PRIMARY KEY, server_id TEXT, seed TEXT,
+      gamemode TEXT NOT NULL DEFAULT 'survival', difficulty TEXT NOT NULL DEFAULT 'normal',
+      size TEXT, last_backup TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    plugins: `CREATE TABLE IF NOT EXISTS plugins (
+      name TEXT PRIMARY KEY, version TEXT NOT NULL DEFAULT '1.0',
+      enabled INTEGER NOT NULL DEFAULT 1, description TEXT, author TEXT,
+      main_class TEXT, server_id TEXT
+    )`,
+    mods: `CREATE TABLE IF NOT EXISTS mods (
+      name TEXT PRIMARY KEY, version TEXT NOT NULL DEFAULT '1.0',
+      enabled INTEGER NOT NULL DEFAULT 1, description TEXT, author TEXT,
+      source TEXT DEFAULT '', modrinth_id TEXT, curseforge_id INTEGER,
+      side TEXT DEFAULT 'both', server_id TEXT
+    )`,
+    shaders: `CREATE TABLE IF NOT EXISTS shaders (
+      name TEXT PRIMARY KEY, version TEXT NOT NULL DEFAULT '1.0',
+      enabled INTEGER NOT NULL DEFAULT 1, description TEXT, author TEXT,
+      source TEXT DEFAULT '', server_id TEXT
+    )`,
+    resource_packs: `CREATE TABLE IF NOT EXISTS resource_packs (
+      name TEXT PRIMARY KEY, version TEXT NOT NULL DEFAULT '1.0',
+      enabled INTEGER NOT NULL DEFAULT 1, description TEXT, author TEXT,
+      source TEXT DEFAULT '', server_id TEXT
+    )`,
+    system_stats: `CREATE TABLE IF NOT EXISTS system_stats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, cpu REAL NOT NULL, ram REAL NOT NULL,
+      tps REAL NOT NULL, players INTEGER NOT NULL, timestamp INTEGER NOT NULL
+    )`,
+    sessions: `CREATE TABLE IF NOT EXISTS sessions (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token TEXT UNIQUE NOT NULL,
+      ip TEXT, user_agent TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at TEXT NOT NULL
+    )`,
+    chat_log: `CREATE TABLE IF NOT EXISTS chat_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, server_id TEXT, username TEXT NOT NULL,
+      uuid TEXT, message TEXT NOT NULL, timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    audit_log: `CREATE TABLE IF NOT EXISTS audit_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, username TEXT,
+      details TEXT, ip TEXT, timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    claims: `CREATE TABLE IF NOT EXISTS claims (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, owner TEXT NOT NULL,
+      world TEXT NOT NULL DEFAULT 'world', x1 INTEGER NOT NULL DEFAULT 0,
+      z1 INTEGER NOT NULL DEFAULT 0, x2 INTEGER NOT NULL DEFAULT 0,
+      z2 INTEGER NOT NULL DEFAULT 0, color TEXT NOT NULL DEFAULT '#ff5555',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    build_tags: `CREATE TABLE IF NOT EXISTS build_tags (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL DEFAULT 'base',
+      world TEXT NOT NULL DEFAULT 'world', x REAL NOT NULL DEFAULT 0,
+      y REAL NOT NULL DEFAULT 0, z REAL NOT NULL DEFAULT 0, owner TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    github_issues: `CREATE TABLE IF NOT EXISTS github_issues (
+      id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT,
+      type TEXT NOT NULL DEFAULT 'bug', status TEXT NOT NULL DEFAULT 'open',
+      username TEXT, image_count INTEGER NOT NULL DEFAULT 0,
+      video_count INTEGER NOT NULL DEFAULT 0, github_url TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    servers: `CREATE TABLE IF NOT EXISTS servers (
+      id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT UNIQUE NOT NULL,
+      port INTEGER NOT NULL DEFAULT 25565, directory TEXT NOT NULL,
+      version TEXT DEFAULT '', version_source TEXT DEFAULT '',
+      javaPath TEXT NOT NULL DEFAULT 'java', jarFile TEXT NOT NULL DEFAULT 'server.jar',
+      minRam TEXT NOT NULL DEFAULT '2G', maxRam TEXT NOT NULL DEFAULT '8G',
+      motd TEXT NOT NULL DEFAULT '', difficulty TEXT NOT NULL DEFAULT 'normal',
+      gamemode TEXT NOT NULL DEFAULT 'survival', pvp INTEGER NOT NULL DEFAULT 1,
+      maxPlayers INTEGER NOT NULL DEFAULT 4, viewDistance INTEGER NOT NULL DEFAULT 10,
+      onlineMode INTEGER NOT NULL DEFAULT 1, autoRestart INTEGER NOT NULL DEFAULT 1,
+      autoBackup INTEGER NOT NULL DEFAULT 1, whitelistEnabled INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'stopped', created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT
+    )`,
+    schedules: `CREATE TABLE IF NOT EXISTS schedules (
+      id TEXT PRIMARY KEY, server_id TEXT, name TEXT NOT NULL, cron TEXT NOT NULL,
+      action TEXT NOT NULL, command TEXT, enabled INTEGER NOT NULL DEFAULT 1,
+      last_run TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    notifications: `CREATE TABLE IF NOT EXISTS notifications (
+      id TEXT PRIMARY KEY, server_id TEXT, type TEXT NOT NULL, title TEXT NOT NULL,
+      message TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    feedback_tickets: `CREATE TABLE IF NOT EXISTS feedback_tickets (
+      id TEXT PRIMARY KEY, user_id TEXT, username TEXT, type TEXT NOT NULL DEFAULT 'bug',
+      title TEXT NOT NULL, description TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open',
+      priority TEXT NOT NULL DEFAULT 'medium', created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT
+    )`,
+    ui_state: `CREATE TABLE IF NOT EXISTS ui_state (
+      key TEXT PRIMARY KEY, value TEXT NOT NULL
+    )`,
+    player_history: `CREATE TABLE IF NOT EXISTS player_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, player_id TEXT NOT NULL,
+      event_type TEXT NOT NULL, event_data TEXT, timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    world_dimensions: `CREATE TABLE IF NOT EXISTS world_dimensions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, world_name TEXT NOT NULL,
+      dimension TEXT NOT NULL, size TEXT, explored REAL DEFAULT 0
+    )`,
+    backup_schedule: `CREATE TABLE IF NOT EXISTS backup_schedule (
+      id TEXT PRIMARY KEY, server_id TEXT, name TEXT NOT NULL, cron TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1, last_run TEXT
+    )`,
+    connection_diagnostics: `CREATE TABLE IF NOT EXISTS connection_diagnostics (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, server_id TEXT, check_type TEXT NOT NULL,
+      status TEXT NOT NULL, message TEXT, timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    connection_config: `CREATE TABLE IF NOT EXISTS connection_config (
+      key TEXT PRIMARY KEY, value TEXT NOT NULL
+    )`,
+    discord_config: `CREATE TABLE IF NOT EXISTS discord_config (
+      key TEXT PRIMARY KEY, value TEXT NOT NULL
+    )`,
+    discord_notifications: `CREATE TABLE IF NOT EXISTS discord_notifications (
+      id TEXT PRIMARY KEY, server_id TEXT, type TEXT NOT NULL, channel_id TEXT,
+      enabled INTEGER NOT NULL DEFAULT 1
+    )`,
+    ticket_history: `CREATE TABLE IF NOT EXISTS ticket_history (
+      id TEXT PRIMARY KEY, ticket_id TEXT NOT NULL, action TEXT NOT NULL,
+      user_id TEXT, details TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    ticket_attachments: `CREATE TABLE IF NOT EXISTS ticket_attachments (
+      id TEXT PRIMARY KEY, ticket_id TEXT NOT NULL, filename TEXT NOT NULL,
+      path TEXT NOT NULL, size INTEGER, uploaded_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    sync_queue: `CREATE TABLE IF NOT EXISTS sync_queue (
+      id TEXT PRIMARY KEY, action TEXT NOT NULL, data TEXT,
+      status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    issue_tracker_config: `CREATE TABLE IF NOT EXISTS issue_tracker_config (
+      key TEXT PRIMARY KEY, value TEXT NOT NULL
+    )`,
+    guide_preferences: `CREATE TABLE IF NOT EXISTS guide_preferences (
+      user_id TEXT PRIMARY KEY, preferences TEXT NOT NULL DEFAULT '{}'
+    )`,
+    guide_bookmarks: `CREATE TABLE IF NOT EXISTS guide_bookmarks (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, article_id TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    guide_recently_viewed: `CREATE TABLE IF NOT EXISTS guide_recently_viewed (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, article_id TEXT NOT NULL,
+      viewed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    guide_tutorial_progress: `CREATE TABLE IF NOT EXISTS guide_tutorial_progress (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, tutorial_id TEXT NOT NULL,
+      step INTEGER NOT NULL DEFAULT 0, completed INTEGER NOT NULL DEFAULT 0
+    )`,
+    guide_search_history: `CREATE TABLE IF NOT EXISTS guide_search_history (
+      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, query TEXT NOT NULL,
+      searched_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    privacy_preferences: `CREATE TABLE IF NOT EXISTS privacy_preferences (
+      user_id TEXT PRIMARY KEY, data_collection INTEGER NOT NULL DEFAULT 1,
+      crash_reports INTEGER NOT NULL DEFAULT 1, usage_stats INTEGER NOT NULL DEFAULT 1
+    )`,
+    feature_permissions: `CREATE TABLE IF NOT EXISTS feature_permissions (
+      feature TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 1,
+      min_role TEXT NOT NULL DEFAULT 'Member'
+    )`,
+    security_checks: `CREATE TABLE IF NOT EXISTS security_checks (
+      id TEXT PRIMARY KEY, check_name TEXT NOT NULL, status TEXT NOT NULL,
+      details TEXT, last_checked TEXT
+    )`,
+    encrypted_credentials: `CREATE TABLE IF NOT EXISTS encrypted_credentials (
+      key TEXT PRIMARY KEY, encrypted_value TEXT NOT NULL, iv TEXT NOT NULL,
+      auth_tag TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    credential_metadata: `CREATE TABLE IF NOT EXISTS credential_metadata (
+      key TEXT PRIMARY KEY, description TEXT, last_rotated TEXT
+    )`,
+    security_audit_log: `CREATE TABLE IF NOT EXISTS security_audit_log (
+      id TEXT PRIMARY KEY, action TEXT NOT NULL, user_id TEXT, details TEXT,
+      ip TEXT, timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    update_preferences: `CREATE TABLE IF NOT EXISTS update_preferences (
+      key TEXT PRIMARY KEY, value TEXT NOT NULL
+    )`,
+    update_history: `CREATE TABLE IF NOT EXISTS update_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, version TEXT NOT NULL,
+      action TEXT NOT NULL, status TEXT NOT NULL, details TEXT,
+      timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    release_notes_cache: `CREATE TABLE IF NOT EXISTS release_notes_cache (
+      version TEXT PRIMARY KEY, notes TEXT NOT NULL, fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    update_migrations: `CREATE TABLE IF NOT EXISTS update_migrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, from_version TEXT, to_version TEXT,
+      status TEXT NOT NULL, result TEXT, details TEXT,
+      timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    uninstall_history: `CREATE TABLE IF NOT EXISTS uninstall_history (
+      id TEXT PRIMARY KEY, action TEXT NOT NULL, details TEXT,
+      timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    restore_state: `CREATE TABLE IF NOT EXISTS restore_state (
+      key TEXT PRIMARY KEY, value TEXT NOT NULL
+    )`,
+    github_comments: `CREATE TABLE IF NOT EXISTS github_comments (
+      id TEXT PRIMARY KEY, issue_id TEXT NOT NULL, comment_id INTEGER NOT NULL,
+      body TEXT, author TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    history: `CREATE TABLE IF NOT EXISTS history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, details TEXT,
+      timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+    settings: `CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY, value TEXT NOT NULL
+    )`,
+    logs: `CREATE TABLE IF NOT EXISTS logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, level TEXT NOT NULL, message TEXT NOT NULL,
+      source TEXT, timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    )`,
+  };
+
+  const existingTables = new Set(
+    (db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as any[]).map(r => r.name)
+  );
+
+  let created = 0;
+  for (const [tableName, createSQL] of Object.entries(requiredTables)) {
+    if (!existingTables.has(tableName)) {
+      try {
+        db.exec(createSQL);
+        created++;
+        console.log(`[DB] Created missing table: ${tableName}`);
+      } catch (err: any) {
+        console.error(`[DB] Failed to create table ${tableName}:`, err.message);
+      }
+    }
+  }
+
+  if (created > 0) {
+    console.log(`[DB] Auto-created ${created} missing table(s)`);
+  }
 }
 
 function migrateDefaultServer() {
