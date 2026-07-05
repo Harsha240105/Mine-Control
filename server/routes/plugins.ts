@@ -8,18 +8,26 @@ import { emitToAll } from '../socketManager';
 
 const router = Router();
 
+function getActiveServerId(): string | null {
+  const db = getDatabase();
+  return (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value || null;
+}
+
 function getPluginsDir(): string {
   return resolveMinecraftDir('plugins');
 }
 
 router.get('/', authMiddleware, (_req: AuthRequest, res) => {
   const PLUGINS_DIR = getPluginsDir();
+  const serverId = getActiveServerId();
   if (!fs.existsSync(PLUGINS_DIR)) {
     return res.json([]);
   }
 
   const db = getDatabase();
-  const dbPlugins = db.prepare('SELECT * FROM plugins').all() as any[];
+  const dbPlugins = serverId
+    ? db.prepare('SELECT * FROM plugins WHERE server_id = ? OR server_id IS NULL').all(serverId) as any[]
+    : db.prepare('SELECT * FROM plugins').all() as any[];
   const dbPluginNames = new Set(dbPlugins.map((p: any) => p.name));
 
   // Scan actual plugins directory
@@ -211,11 +219,12 @@ router.post('/:name/toggle', authMiddleware, requirePermission('plugin.manage'),
 
 function registerPluginInDb(name: string) {
   const db = getDatabase();
-  const existing = db.prepare('SELECT name FROM plugins WHERE name = ?').get(name);
+  const serverId = getActiveServerId();
+  const existing = db.prepare('SELECT name FROM plugins WHERE name = ? AND (server_id = ? OR server_id IS NULL)').get(name, serverId);
   if (!existing) {
     db.prepare(
-      'INSERT INTO plugins (name, version, enabled, description, author) VALUES (?, ?, ?, ?, ?)'
-    ).run(name, '1.0', 1, 'Minecraft plugin', 'Unknown');
+      'INSERT INTO plugins (name, version, enabled, description, author, server_id) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(name, '1.0', 1, 'Minecraft plugin', 'Unknown', serverId);
   }
 }
 

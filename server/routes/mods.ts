@@ -8,18 +8,26 @@ import { emitToAll } from '../socketManager';
 
 const router = Router();
 
+function getActiveServerId(): string | null {
+  const db = getDatabase();
+  return (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value || null;
+}
+
 function getModsDir(): string {
   return resolveMinecraftDir('mods');
 }
 
 router.get('/', authMiddleware, (_req: AuthRequest, res) => {
   const MODS_DIR = getModsDir();
+  const serverId = getActiveServerId();
   if (!fs.existsSync(MODS_DIR)) {
     return res.json([]);
   }
 
   const db = getDatabase();
-  const dbMods = db.prepare('SELECT * FROM mods').all() as any[];
+  const dbMods = serverId
+    ? db.prepare('SELECT * FROM mods WHERE server_id = ? OR server_id IS NULL').all(serverId) as any[]
+    : db.prepare('SELECT * FROM mods').all() as any[];
   const dbModNames = new Set(dbMods.map((m: any) => m.name));
 
   let jarMods: string[] = [];
@@ -229,11 +237,12 @@ router.post('/:name/toggle', authMiddleware, requirePermission('plugin.manage'),
 
 function registerModInDb(name: string) {
   const db = getDatabase();
-  const existing = db.prepare('SELECT name FROM mods WHERE name = ?').get(name);
+  const serverId = getActiveServerId();
+  const existing = db.prepare('SELECT name FROM mods WHERE name = ? AND (server_id = ? OR server_id IS NULL)').get(name, serverId);
   if (!existing) {
     db.prepare(
-      'INSERT INTO mods (name, version, enabled, description, author) VALUES (?, ?, ?, ?, ?)'
-    ).run(name, '1.0', 1, 'Minecraft mod', 'Unknown');
+      'INSERT INTO mods (name, version, enabled, description, author, server_id) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(name, '1.0', 1, 'Minecraft mod', 'Unknown', serverId);
   }
 }
 

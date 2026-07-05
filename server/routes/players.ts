@@ -11,6 +11,11 @@ import { resolveMinecraftDir } from '../paths';
 
 const router = Router();
 
+function getActiveServerId(): string | null {
+  const db = getDatabase();
+  return (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value || null;
+}
+
 // ── Auto-detect players from filesystem ──
 router.post('/detect', authMiddleware, requirePermission('whitelist.manage'), (_req: AuthRequest, res) => {
   const result = autoDetectPlayers();
@@ -45,15 +50,21 @@ router.get('/', authMiddleware, (req: AuthRequest, res) => {
 // ── Banned players list ──
 router.get('/banned', authMiddleware, (_req: AuthRequest, res) => {
   const db = getDatabase();
-  const banned = db.prepare('SELECT * FROM banned_players ORDER BY banned_at DESC').all();
+  const serverId = getActiveServerId();
+  const banned = serverId
+    ? db.prepare('SELECT * FROM banned_players WHERE server_id = ? OR server_id IS NULL ORDER BY banned_at DESC').all(serverId)
+    : db.prepare('SELECT * FROM banned_players ORDER BY banned_at DESC').all();
   res.json(banned);
 });
 
 // ── Chat log ──
 router.get('/chat', authMiddleware, (req: AuthRequest, res) => {
   const db = getDatabase();
+  const serverId = getActiveServerId();
   const limit = parseInt(req.query.limit as string) || 50;
-  const chat = db.prepare('SELECT * FROM chat_log ORDER BY timestamp DESC LIMIT ?').all(limit);
+  const chat = serverId
+    ? db.prepare('SELECT * FROM chat_log WHERE server_id = ? OR server_id IS NULL ORDER BY timestamp DESC LIMIT ?').all(serverId, limit)
+    : db.prepare('SELECT * FROM chat_log ORDER BY timestamp DESC LIMIT ?').all(limit);
   res.json(chat.reverse());
 });
 
@@ -334,6 +345,7 @@ router.post('/:id/ban', authMiddleware, requirePermission('player.ban'), (req: A
 
   db.prepare('UPDATE players SET status = ? WHERE id = ?').run('banned', player.id);
 
+  const serverId = getActiveServerId();
   const bannedPlayer = {
     id: uuidv4(),
     username: player.username,
@@ -341,8 +353,9 @@ router.post('/:id/ban', authMiddleware, requirePermission('player.ban'), (req: A
     reason: reason || 'Banned by operator',
     banned_by: req.user?.username || 'unknown',
     banned_at: new Date().toISOString(),
+    server_id: serverId,
   };
-  db.prepare('INSERT INTO banned_players (id, username, uuid, reason, banned_by, banned_at) VALUES (?, ?, ?, ?, ?, ?)')
+  db.prepare('INSERT INTO banned_players (id, username, uuid, reason, banned_by, banned_at, server_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(...Object.values(bannedPlayer));
 
   // Write to banned-players.json
@@ -452,6 +465,7 @@ router.post('/:id/temp-ban', authMiddleware, requirePermission('player.ban'), (r
 
   db.prepare('UPDATE players SET status = ? WHERE id = ?').run('banned', player.id);
 
+  const serverId = getActiveServerId();
   const bannedPlayer = {
     id: uuidv4(),
     username: player.username,
@@ -459,8 +473,9 @@ router.post('/:id/temp-ban', authMiddleware, requirePermission('player.ban'), (r
     reason: `${reason || 'Temporarily banned'} (Duration: ${duration || 'permanent'})`,
     banned_by: req.user?.username || 'unknown',
     banned_at: new Date().toISOString(),
+    server_id: serverId,
   };
-  db.prepare('INSERT INTO banned_players (id, username, uuid, reason, banned_by, banned_at) VALUES (?, ?, ?, ?, ?, ?)')
+  db.prepare('INSERT INTO banned_players (id, username, uuid, reason, banned_by, banned_at, server_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(...Object.values(bannedPlayer));
 
   recordEvent(player.id, 'banned', `Temp ban: ${duration} - ${reason || ''}`);

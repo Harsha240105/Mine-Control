@@ -1,11 +1,12 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import https from 'https';
+import http from 'http';
 import { getDatabase } from '../database';
 import { activeServer } from '../activeServer';
 import { execSync } from 'child_process';
 
-const SIMULATED_LATEST = '1.0.53';
 const SIMULATED_SIZE_MB = 85;
 
 function getPref(key: string): string {
@@ -129,9 +130,28 @@ export const updaterService = {
 
     setPref('last_update_check', now);
 
-    // In dev mode, simulate checking against a known "latest" version
-    const latest = SIMULATED_LATEST;
-    const available = latest !== currentVersion;
+    let latest = currentVersion;
+    let available = false;
+    let updateSize = null;
+
+    try {
+      const result = execSync(
+        'curl -s https://api.github.com/repos/Harsha240105/Mine-Control/releases/latest',
+        { encoding: 'utf-8', timeout: 10000 }
+      );
+      const release = JSON.parse(result);
+      if (release.tag_name) {
+        latest = release.tag_name.replace(/^v/, '');
+        available = latest !== currentVersion;
+        const asset = release.assets?.find((a: any) => a.name.endsWith('.exe'));
+        if (asset) {
+          updateSize = Math.round(asset.size / (1024 * 1024));
+        }
+      }
+    } catch {
+      latest = currentVersion;
+      available = false;
+    }
 
     setPref('latest_version', latest);
     setPref('update_available', available ? 'true' : 'false');
@@ -148,10 +168,10 @@ export const updaterService = {
       currentVersion,
       latestVersion: latest,
       updateAvailable: available,
-      updateSize: available ? SIMULATED_SIZE_MB : null,
+      updateSize: available ? updateSize : null,
       lastChecked: now,
       message: available
-        ? `Update v${latest} is available (${SIMULATED_SIZE_MB} MB)`
+        ? `Update v${latest} is available${updateSize ? ` (${updateSize} MB)` : ''}`
         : 'You are running the latest version',
     };
   },
@@ -165,17 +185,41 @@ export const updaterService = {
     setPref('download_status', 'downloading');
     setPref('download_progress', '0');
 
-    // In dev mode, simulate download progress
+    const latestVersion = getPref('latest_version');
+    if (!latestVersion) {
+      setPref('download_status', 'error');
+      return { success: false, message: 'No update available. Please check for updates first.' };
+    }
+
     try {
-      // Simulate download (dev mode)
+      let downloadUrl = '';
+      try {
+        const result = execSync(
+          'curl -s https://api.github.com/repos/Harsha240105/Mine-Control/releases/latest',
+          { encoding: 'utf-8', timeout: 10000 }
+        );
+        const release = JSON.parse(result);
+        const asset = release.assets?.find((a: any) => a.name.endsWith('.exe'));
+        if (asset) downloadUrl = asset.browser_download_url;
+      } catch {}
+
+      if (downloadUrl) {
+        const downloadDir = path.join(getDataPath(), 'updates');
+        if (!fs.existsSync(downloadDir)) fs.mkdirSync(downloadDir, { recursive: true });
+        const installerPath = path.join(downloadDir, `MineControl-Setup-${latestVersion}.exe`);
+
+        execSync(`curl -L -o "${installerPath}" "${downloadUrl}"`, { timeout: 300000 });
+        setPref('download_path', installerPath);
+      }
+
       setPref('download_progress', '100');
       setPref('download_status', 'downloaded');
       setPref('rollback_available', 'true');
 
       const db = getDatabase();
-      db.prepare("INSERT INTO update_history (version, action, status, details) VALUES (?, 'downloaded', 'success', 'Update package downloaded')").run(getAppVersion());
+      db.prepare("INSERT INTO update_history (version, action, status, details) VALUES (?, 'downloaded', 'success', 'Update package downloaded')").run(latestVersion);
 
-      return { success: true, message: 'Update downloaded successfully (simulated)' };
+      return { success: true, message: `Update v${latestVersion} downloaded successfully` };
     } catch (err: any) {
       setPref('download_status', 'error');
       setPref('download_progress', '0');
@@ -214,7 +258,7 @@ export const updaterService = {
 
       // Record installation
       const currentVersion = getAppVersion();
-      const latestVersion = getPref('latest_version') || SIMULATED_LATEST;
+      const latestVersion = getPref('latest_version');
       const db = getDatabase();
 
       setPref('current_version', latestVersion);
@@ -297,7 +341,7 @@ export const updaterService = {
     try {
       const db = getDatabase();
       const fromVersion = getAppVersion();
-      const toVersion = getPref('latest_version') || SIMULATED_LATEST;
+      const toVersion = getPref('latest_version');
 
       const row = db.prepare('SELECT MAX(version) as v FROM schema_version').get() as any;
       const currentSchemaVersion = row?.v ?? 0;
@@ -316,7 +360,7 @@ export const updaterService = {
     } catch (err: any) {
       const db = getDatabase();
       db.prepare("INSERT INTO update_migrations (from_version, to_version, status, result, details) VALUES (?, ?, 'failed', 'error', ?)").run(
-        getAppVersion(), getPref('latest_version') || SIMULATED_LATEST, err.message
+        getAppVersion(), getPref('latest_version'), err.message
       );
       return { success: false, message: err.message || 'Migration failed' };
     }

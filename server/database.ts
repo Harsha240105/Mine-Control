@@ -1281,6 +1281,35 @@ function initializeSchema() {
     db.prepare('INSERT INTO schema_version (version) VALUES (17)').run();
   }
 
+  if (currentVersion < 18) {
+    // Add server_id to plugins for per-server isolation
+    const pluginCols = db.prepare("PRAGMA table_info('plugins')").all().map((r: any) => r.name);
+    if (!pluginCols.includes('server_id')) db.exec("ALTER TABLE plugins ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_plugins_server_id ON plugins(server_id)");
+
+    // Add server_id to mods for per-server isolation
+    const modCols = db.prepare("PRAGMA table_info('mods')").all().map((r: any) => r.name);
+    if (!modCols.includes('server_id')) db.exec("ALTER TABLE mods ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_mods_server_id ON mods(server_id)");
+
+    // Add server_id to shaders for per-server isolation
+    const shaderCols = db.prepare("PRAGMA table_info('shaders')").all().map((r: any) => r.name);
+    if (!shaderCols.includes('server_id')) db.exec("ALTER TABLE shaders ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_shaders_server_id ON shaders(server_id)");
+
+    // Add server_id to resource_packs for per-server isolation
+    const packCols = db.prepare("PRAGMA table_info('resource_packs')").all().map((r: any) => r.name);
+    if (!packCols.includes('server_id')) db.exec("ALTER TABLE resource_packs ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_resource_packs_server_id ON resource_packs(server_id)");
+
+    // Add server_id to banned_players for per-server isolation
+    const banCols = db.prepare("PRAGMA table_info('banned_players')").all().map((r: any) => r.name);
+    if (!banCols.includes('server_id')) db.exec("ALTER TABLE banned_players ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_banned_players_server_id ON banned_players(server_id)");
+
+    db.prepare('INSERT INTO schema_version (version) VALUES (18)').run();
+  }
+
 }
 
 function migrateDefaultServer() {

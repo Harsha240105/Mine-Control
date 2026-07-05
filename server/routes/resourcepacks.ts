@@ -9,6 +9,11 @@ import { emitToAll } from '../socketManager';
 
 const router = Router();
 
+function getActiveServerId(): string | null {
+  const db = getDatabase();
+  return (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value || null;
+}
+
 const upload = multer({
   dest: path.join(require('os').tmpdir(), 'mc-resourcepack-uploads'),
   limits: { fileSize: 500 * 1024 * 1024 },
@@ -25,12 +30,15 @@ function getResourcePacksDir(): string {
 
 router.get('/', authMiddleware, (_req: AuthRequest, res) => {
   const RP_DIR = getResourcePacksDir();
+  const serverId = getActiveServerId();
   if (!fs.existsSync(RP_DIR)) {
     return res.json([]);
   }
 
   const db = getDatabase();
-  const dbPacks = db.prepare('SELECT * FROM resource_packs').all() as any[];
+  const dbPacks = serverId
+    ? db.prepare('SELECT * FROM resource_packs WHERE server_id = ? OR server_id IS NULL').all(serverId) as any[]
+    : db.prepare('SELECT * FROM resource_packs').all() as any[];
 
   let packFiles: string[] = [];
   try {
@@ -193,11 +201,12 @@ router.post('/:name/toggle', authMiddleware, requirePermission('plugin.manage'),
 
 function registerPackInDb(name: string) {
   const db = getDatabase();
-  const existing = db.prepare('SELECT name FROM resource_packs WHERE name = ?').get(name);
+  const serverId = getActiveServerId();
+  const existing = db.prepare('SELECT name FROM resource_packs WHERE name = ? AND (server_id = ? OR server_id IS NULL)').get(name, serverId);
   if (!existing) {
     db.prepare(
-      'INSERT INTO resource_packs (name, version, enabled, description, author) VALUES (?, ?, ?, ?, ?)'
-    ).run(name, '1.0', 1, 'Resource pack', 'Unknown');
+      'INSERT INTO resource_packs (name, version, enabled, description, author, server_id) VALUES (?, ?, ?, ?, ?, ?)'
+    ).run(name, '1.0', 1, 'Resource pack', 'Unknown', serverId);
   }
 }
 
