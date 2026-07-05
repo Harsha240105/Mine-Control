@@ -79,7 +79,7 @@ router.get('/java/resolve-required', authMiddleware, async (req: AuthRequest, re
   try {
     const version = req.query.version as string;
     const source = req.query.source as string;
-    const required = JavaManager.getRequiredJavaVersion(version || '1.21', source || 'paper');
+    const required = JavaManager.getRequiredJavaVersion(version || '1.21');
     res.json({ required, version, source });
   } catch (err: any) {
     sendError(res, 500, err);
@@ -106,7 +106,7 @@ router.post('/java/remove', authMiddleware, async (req: AuthRequest, res) => {
 router.post('/java/resolve', authMiddleware, async (req: AuthRequest, res) => {
   try {
     const { version, source } = req.body;
-    const result = await JavaManager.ensureJavaInstalled(JavaManager.getRequiredJavaVersion(version || '1.21', source || 'paper'));
+    const result = await JavaManager.ensureJavaInstalled(JavaManager.getRequiredJavaVersion(version || '1.21'));
     res.json(result);
   } catch (err: any) {
     sendError(res, 500, err);
