@@ -388,36 +388,62 @@ process.on('unhandledRejection', (reason) => {
   } catch {}
 });
 
-// Initialize active server
-const db = getDatabase();
-const active = activeServer.load();
-if (active) {
-  setMinecraftDir(active.directory);
-  minecraftServer.loadServer(active.directory);
-  console.log(`[Server] Active: ${active.name} (${active.slug})`);
-} else {
-  const count = db.prepare('SELECT COUNT(*) as c FROM servers').get() as any;
-  if (count.c === 0) {
-    const { v4 } = require('uuid');
-    const id = v4();
-    const portRow = db.prepare("SELECT value FROM server_config WHERE key = 'port'").get() as any;
-    const port = parseInt(portRow?.value || '25565');
-    const dir = getMinecraftDir();
-    db.prepare(`
-      INSERT INTO servers (id, name, slug, port, directory, status)
-      VALUES (?, 'My Server', 'my-server', ?, ?, 'stopped')
-    `).run(id, Number.isNaN(port) ? 25565 : port, dir);
-    db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('active_server_id', ?)").run(id);
-    activeServer.load();
-    setMinecraftDir(dir);
-    minecraftServer.loadServer(dir);
-    console.log(`[Server] Created default server at ${dir}`);
-  } else {
-    activeServer.load();
-  }
+// ══════════════════════════════════════════════════════════════════════
+// PHASE 1-2: Database initialization (open + migrate + validate + repair)
+// ══════════════════════════════════════════════════════════════════════
+console.log('[Startup] Phase 1-2: Initializing database...');
+let db: ReturnType<typeof getDatabase>;
+try {
+  db = getDatabase();
+  console.log('[Startup] Phase 1-2: Database ready');
+} catch (err: any) {
+  console.error('[Startup] FATAL: Database initialization failed:', err.message);
+  // Show error in Electron if possible, otherwise exit
+  try {
+    const { dialog } = require('electron');
+    dialog.showErrorBox('Database Error', 'Failed to initialize database:\n' + err.message + '\n\nThe application cannot continue.');
+  } catch {}
+  process.exit(1);
 }
 
-// Auto-detect players from filesystem after server init
+// ══════════════════════════════════════════════════════════════════════
+// PHASE 3: Initialize services (ONLY after database is confirmed ready)
+// ══════════════════════════════════════════════════════════════════════
+console.log('[Startup] Phase 3: Initializing services...');
+
+// 3a: Initialize active server
+try {
+  const active = activeServer.load();
+  if (active) {
+    setMinecraftDir(active.directory);
+    minecraftServer.loadServer(active.directory);
+    console.log(`[Server] Active: ${active.name} (${active.slug})`);
+  } else {
+    const count = db.prepare('SELECT COUNT(*) as c FROM servers').get() as any;
+    if (count.c === 0) {
+      const { v4 } = require('uuid');
+      const id = v4();
+      const portRow = db.prepare("SELECT value FROM server_config WHERE key = 'port'").get() as any;
+      const port = parseInt(portRow?.value || '25565');
+      const dir = getMinecraftDir();
+      db.prepare(`
+        INSERT INTO servers (id, name, slug, port, directory, status)
+        VALUES (?, 'My Server', 'my-server', ?, ?, 'stopped')
+      `).run(id, Number.isNaN(port) ? 25565 : port, dir);
+      db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('active_server_id', ?)").run(id);
+      activeServer.load();
+      setMinecraftDir(dir);
+      minecraftServer.loadServer(dir);
+      console.log(`[Server] Created default server at ${dir}`);
+    } else {
+      activeServer.load();
+    }
+  }
+} catch (err) {
+  console.error('[Startup] Failed to initialize active server:', err);
+}
+
+// 3b: Auto-detect players from filesystem
 try {
   const result = autoDetectPlayers();
   if (result.created > 0 || result.updated > 0) {
@@ -427,13 +453,12 @@ try {
   console.error('[Detection] Initial scan failed:', e);
 }
 
-// Auto-detect worlds from filesystem after server init
+// 3c: Auto-detect worlds from filesystem
 try {
   const detected = detectWorlds();
   if (detected.length > 0) {
     console.log(`[Worlds] ${detected.length} worlds auto-detected`);
   }
-  // Also sync from server directory
   const synced = syncWorldFromServerDir();
   if (synced) {
     console.log(`[Worlds] Synced server world: ${synced.name}`);
@@ -442,7 +467,12 @@ try {
   console.error('[Worlds] Initial scan failed:', e);
 }
 
-// Start server
+console.log('[Startup] Phase 3: Services initialized');
+
+// ══════════════════════════════════════════════════════════════════════
+// PHASE 4: Start HTTP server + Socket.IO (ONLY after all services init)
+// ══════════════════════════════════════════════════════════════════════
+console.log('[Startup] Phase 4: Starting HTTP server...');
 const portToUse = PORT;
 server.listen(portToUse, () => {
   console.log(`[Server] Running on port ${portToUse}`);
@@ -468,6 +498,7 @@ server.listen(portToUse, () => {
   ║  Socket:  ws://localhost:${PORT}          ║
   ╚══════════════════════════════════════════╝
   `);
+  console.log('[Startup] Phase 4: Server ready');
 });
 
 // Graceful shutdown
