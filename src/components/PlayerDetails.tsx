@@ -26,11 +26,7 @@ export default function PlayerDetails({ serverId, uuid, username, onClose }: Pla
   useEffect(() => {
     const fetchPlayerData = async () => {
       try {
-        const response = await fetch(`/api/server/${serverId}/player/${uuid}?username=${username}`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('mc_token')}` }
-        });
-        if (!response.ok) throw new Error('Failed to load player data');
-        const resData = await response.json();
+        const resData = await api.getPlayerDetails(serverId, uuid, username);
         setData(resData);
       } catch (err: any) {
         setError(err.message);

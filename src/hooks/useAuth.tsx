@@ -54,7 +54,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (permission: string) => {
       if (!user) return false;
       if (user.role === 'Owner') return true;
-      return true; // Simplified: actual permission check would need role lookup
+
+      const roleHierarchy: Record<string, number> = {
+        'Owner': 4,
+        'Admin': 3,
+        'Moderator': 2,
+        'Member': 1,
+        'Guest': 0,
+      };
+
+      const permissionLevels: Record<string, number> = {
+        'server.start': 2,
+        'server.stop': 2,
+        'server.restart': 2,
+        'server.manage': 3,
+        'server.delete': 4,
+        'console.send': 2,
+        'console.read': 1,
+        'backup.create': 2,
+        'backup.restore': 3,
+        'backup.delete': 3,
+        'world.manage': 2,
+        'player.kick': 2,
+        'player.ban': 3,
+        'player.op': 3,
+        'permissions.manage': 4,
+        'whitelist.manage': 2,
+        'plugin.install': 2,
+        'mod.install': 2,
+        'settings.change': 2,
+      };
+
+      const userLevel = roleHierarchy[user.role] ?? 0;
+      const requiredLevel = permissionLevels[permission] ?? 1;
+      return userLevel >= requiredLevel;
     },
     [user]
   );

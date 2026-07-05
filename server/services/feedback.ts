@@ -840,10 +840,11 @@ export const feedbackService = {
     try {
       const db = getDatabase();
       const nid = uuidv4();
+      const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value || null;
       db.prepare(`
-        INSERT INTO notifications (id, title, message, type, created_at)
-        VALUES (?, ?, ?, ?, ?)
-      `).run(nid, `Feedback: ${ticketTitle}`, message, type, new Date().toISOString());
+        INSERT INTO notifications (id, server_id, title, message, type, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(nid, activeId, `Feedback: ${ticketTitle}`, message, type, new Date().toISOString());
       try {
         getIO().emit('notification:new', { id: nid, title: ticketTitle, message, type });
       } catch {}

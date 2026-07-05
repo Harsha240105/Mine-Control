@@ -66,7 +66,7 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
     const startDownload = (urlToDownload: string) => {
       const reqClient = urlToDownload.startsWith('https') ? https : http;
       const req = reqClient.get(urlToDownload, {
-        headers: { 'User-Agent': 'MineControl-OS/1.0.52 (contact@minecontrol.dev)' }
+        headers: { 'User-Agent': 'MineControl-OS/1.0.71 (contact@minecontrol.dev)' }
       }, (response: any) => {
         if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
           let newUrl = response.headers.location;
@@ -129,7 +129,7 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
     if (downloadUrl.startsWith('modrinth:')) {
       const slug = downloadUrl.split(':')[1];
       const apiReq = https.get(`https://api.modrinth.com/v2/project/${slug}/version`, {
-        headers: { 'User-Agent': 'MineControl-OS/1.0.52 (contact@minecontrol.dev)' }
+        headers: { 'User-Agent': 'MineControl-OS/1.0.71 (contact@minecontrol.dev)' }
       }, (modrinthRes: any) => {
         let data = '';
         modrinthRes.on('data', (c: string) => data += c);

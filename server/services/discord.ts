@@ -384,7 +384,7 @@ class DiscordService {
     const truncated = error.split('\n').length > MAX_CRASH_LINES;
 
     const db = getDatabase();
-    const count = (db.prepare("SELECT COUNT(*) as c FROM audit_log WHERE event_type = 'crash' AND timestamp > datetime('now', '-1 day')").get() as any)?.c || 0;
+    const count = (db.prepare("SELECT COUNT(*) as c FROM audit_log WHERE action = 'crash' AND timestamp > datetime('now', '-1 day')").get() as any)?.c || 0;
     const autoRestart = server.autoRestart;
 
     await this.sendEmbed({

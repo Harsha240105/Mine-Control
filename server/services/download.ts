@@ -191,7 +191,7 @@ export async function getPufferfishVersions(): Promise<string[]> {
 
 export async function httpsGet(url: string, timeoutMs = 15000, headers?: Record<string, string>): Promise<string> {
   return new Promise((resolve, reject) => {
-    const options = { headers: { 'User-Agent': 'MineControl-OS/1.0.70 (contact@minecontrol.dev)', ...headers } };
+    const options = { headers: { 'User-Agent': 'MineControl-OS/1.0.71 (contact@minecontrol.dev)', ...headers } };
     const req = https.get(url, options, (resp) => {
       if (resp.statusCode && resp.statusCode >= 400) {
         req.destroy();
@@ -239,7 +239,7 @@ function downloadOnce(url: string, destPath: string, timeoutMs: number): Promise
       const client = requestUrl.startsWith('https') ? https : http;
       const options = {
         headers: {
-          'User-Agent': 'MineControl-OS/1.0.70 (contact@minecontrol.dev)'
+          'User-Agent': 'MineControl-OS/1.0.71 (contact@minecontrol.dev)'
         }
       };
       const req = client.get(requestUrl, options, (resp: any) => {

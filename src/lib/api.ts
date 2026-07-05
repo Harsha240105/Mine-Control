@@ -258,6 +258,8 @@ export const api = {
   // Players
   getPlayers: () => request<any[]>('/players'),
   getPlayer: (id: string) => request<any>(`/players/${id}`),
+  getPlayerDetails: (serverId: string, uuid: string, username: string) =>
+    request<any>(`/analytics/${serverId}/player/${uuid}?username=${username}`),
   addPlayer: (data: any) =>
     request<any>('/players', { method: 'POST', body: JSON.stringify(data) }),
   updatePlayer: (id: string, data: any) =>

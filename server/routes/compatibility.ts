@@ -977,7 +977,7 @@ function statusMessage(status: string): string {
 
 function httpsText(url: string): Promise<string> {
   return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'MineControl-OS/1.0.18' } }, (response) => {
+    https.get(url, { headers: { 'User-Agent': 'MineControl-OS/1.0.71' } }, (response) => {
       if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
         response.resume();
         httpsText(new URL(response.headers.location, url).toString()).then(resolve).catch(reject);
@@ -1005,7 +1005,7 @@ function downloadFile(url: string, destination: string, expectedSha256?: string)
   return new Promise((resolve, reject) => {
     const start = (targetUrl: string) => {
       const file = fs.createWriteStream(tempPath);
-      https.get(targetUrl, { headers: { 'User-Agent': 'MineControl-OS/1.0.27 (contact@minecontrol.dev)' } }, (response) => {
+      https.get(targetUrl, { headers: { 'User-Agent': 'MineControl-OS/1.0.71 (contact@minecontrol.dev)' } }, (response) => {
         if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
           file.close();
           fs.rmSync(tempPath, { force: true });

@@ -75,7 +75,7 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
     const startDownload = (urlToDownload: string) => {
       const reqClient = urlToDownload.startsWith('https') ? https : http;
       const req = reqClient.get(urlToDownload, {
-        headers: { 'User-Agent': 'MineControl-OS/1.0.52 (contact@minecontrol.dev)' }
+        headers: { 'User-Agent': 'MineControl-OS/1.0.71 (contact@minecontrol.dev)' }
       }, (response: any) => {
         if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
           let newUrl = response.headers.location;

@@ -1,11 +1,32 @@
 import { Request, Response, NextFunction } from 'express';
 import { getDatabase } from '../database';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 
-const JWT_SECRET = process.env.JWT_SECRET || (() => {
-  console.warn('[Auth] WARNING: Using default JWT secret. Set JWT_SECRET env var for production.');
-  return 'minecontrol-os-secret-key-2024';
-})();
+function getJWTSecret(): string {
+  const envSecret = process.env.JWT_SECRET;
+  if (envSecret) return envSecret;
+
+  const db = getDatabase();
+  const row = db.prepare("SELECT value FROM server_config WHERE key = 'jwt_secret'").get() as any;
+  if (row?.value) return row.value;
+
+  const newSecret = crypto.randomBytes(48).toString('base64');
+  db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('jwt_secret', ?)").run(newSecret);
+  return newSecret;
+}
+
+let _jwtSecret: string | null = null;
+function getJWTSecretCached(): string {
+  if (!_jwtSecret) _jwtSecret = getJWTSecret();
+  return _jwtSecret;
+}
+
+export const JWT_SECRET = 'USE_CACHED_FUNCTION';
+
+export function getJwtSecret(): string {
+  return getJWTSecretCached();
+}
 
 export interface AuthRequest extends Request {
   user?: {
@@ -17,11 +38,11 @@ export interface AuthRequest extends Request {
 }
 
 export function generateToken(user: { id: string; username: string; role: string }): string {
-  return jwt.sign(user, JWT_SECRET, { expiresIn: '24h' });
+  return jwt.sign(user, getJwtSecret(), { expiresIn: '24h' });
 }
 
 export function verifyToken(token: string): any {
-  return jwt.verify(token, JWT_SECRET);
+  return jwt.verify(token, getJwtSecret());
 }
 
 export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {

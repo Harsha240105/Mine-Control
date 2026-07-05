@@ -735,7 +735,7 @@ export class ImportService {
     try {
       const players = this.analyzePlayers(targetWorldDir);
       const insertPlayer = db.prepare(`
-        INSERT OR REPLACE INTO players (id, server_id, username, uuid, xp_level, health, food_level, dimension, pos_x, pos_y, pos_z, death_count, play_time)
+        INSERT OR REPLACE INTO players (id, server_id, username, uuid, xp_level, health, food_level, dimension, pos_x, pos_y, pos_z, death_count, playtime)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const p of players) {

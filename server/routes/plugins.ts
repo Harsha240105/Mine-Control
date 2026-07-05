@@ -69,7 +69,7 @@ router.post('/install', authMiddleware, requirePermission('plugin.manage'), (req
       if (requestUrl.startsWith('modrinth:')) {
         const slug = requestUrl.split(':')[1];
         const apiReq = https.get(`https://api.modrinth.com/v2/project/${slug}/version`, {
-          headers: { 'User-Agent': 'MineControl-OS/1.0.30 (contact@minecontrol.dev)' }
+          headers: { 'User-Agent': 'MineControl-OS/1.0.71 (contact@minecontrol.dev)' }
         }, (modrinthRes: any) => {
           let data = '';
           modrinthRes.on('data', (c: string) => data += c);

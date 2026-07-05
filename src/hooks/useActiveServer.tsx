@@ -52,11 +52,14 @@ export function ActiveServerProvider({ children }: { children: React.ReactNode }
     setLoading(true);
     try {
       await api.selectServer(id);
-      window.location.reload();
+      await refresh();
+      window.dispatchEvent(new CustomEvent('server-switched', { detail: { serverId: id } }));
     } catch {
+      // ignore
+    } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refresh]);
 
   return (
     <ActiveServerContext.Provider value={{ server, servers, loading, refresh, selectServer }}>
