@@ -43,8 +43,10 @@ class DiscordService {
       this._textChannelName = '';
       this._voiceChannelName = '';
 
-      // Resolve guild/channel names
+      // Resolve guild/channel names - prefer configured guild
+      const configuredGuildId = this._guildId;
       for (const g of this.client.guilds.cache.values()) {
+        if (configuredGuildId && g.id !== configuredGuildId) continue;
         this._guildId = g.id;
         this._guildName = g.name;
         if (this._textChannelId && g.channels.cache.has(this._textChannelId)) {
@@ -55,7 +57,7 @@ class DiscordService {
           const ch = g.channels.cache.get(this._voiceChannelId);
           this._voiceChannelName = ch?.name || '';
         }
-        break;
+        if (!configuredGuildId) break;
       }
 
       this._lastError = '';

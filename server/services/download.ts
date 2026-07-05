@@ -162,8 +162,7 @@ export function getSpigotVersions(): string[] {
     '1.15.1', '1.15.2', '1.16.1', '1.16.2', '1.16.3', '1.16.4', '1.16.5',
     '1.17', '1.17.1', '1.18', '1.18.1', '1.18.2', '1.19', '1.19.1',
     '1.19.2', '1.19.3', '1.19.4', '1.20', '1.20.1', '1.20.2', '1.20.3',
-    '1.20.4', '1.20.5', '1.20.6', '1.21', '1.21.1', '1.21.3', '1.21.4',
-    '1.21.5', '1.21.6', '1.21.7', '1.21.8', '1.21.9', '1.21.10', '1.21.11'
+    '1.20.4', '1.20.5', '1.20.6', '1.21', '1.21.1', '1.21.3', '1.21.4'
   ];
 }
 
@@ -192,7 +191,7 @@ export async function getPufferfishVersions(): Promise<string[]> {
 
 export async function httpsGet(url: string, timeoutMs = 15000, headers?: Record<string, string>): Promise<string> {
   return new Promise((resolve, reject) => {
-    const options = { headers: { 'User-Agent': 'MineControl-OS/1.0.56 (contact@minecontrol.dev)', ...headers } };
+    const options = { headers: { 'User-Agent': 'MineControl-OS/1.0.70 (contact@minecontrol.dev)', ...headers } };
     const req = https.get(url, options, (resp) => {
       if (resp.statusCode && resp.statusCode >= 400) {
         req.destroy();
@@ -240,7 +239,7 @@ function downloadOnce(url: string, destPath: string, timeoutMs: number): Promise
       const client = requestUrl.startsWith('https') ? https : http;
       const options = {
         headers: {
-          'User-Agent': 'MineControl-OS/1.0.52 (contact@minecontrol.dev)'
+          'User-Agent': 'MineControl-OS/1.0.70 (contact@minecontrol.dev)'
         }
       };
       const req = client.get(requestUrl, options, (resp: any) => {

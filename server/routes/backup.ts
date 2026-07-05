@@ -89,7 +89,7 @@ router.post('/schedule', authMiddleware, requirePermission('backup.create'), (re
 });
 
 // ── Backup stats for dashboard ──
-router.get('/status', (req, res) => { res.json({ active: backupService.isBackupActive }); });
+router.get('/status', authMiddleware, (req: AuthRequest, res) => { res.json({ active: backupService.isBackupActive }); });
 
 router.get('/stats', authMiddleware, (_req: AuthRequest, res) => {
   try {
@@ -214,81 +214,6 @@ router.delete('/:id', authMiddleware, requirePermission('backup.create'), (req: 
   try {
     backupService.deleteBackup(req.params.id);
     res.json({ success: true });
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-// ── Backup settings ──
-router.get('/settings', authMiddleware, (_req: AuthRequest, res) => {
-  try {
-    const db = getDatabase();
-    const getVal = (key: string, def: any = null) => {
-      const row = db.prepare("SELECT value FROM server_config WHERE key = ?").get(`backup_${key}`) as any;
-      return row ? row.value : def;
-    };
-    res.json({
-      customFolder: getVal('customFolder', ''),
-      customFolderEnabled: getVal('customFolderEnabled') === 'true',
-      saveToBoth: getVal('saveToBoth') === 'true',
-      autoBackup: getVal('autoBackup') === 'true',
-      autoOnCreate: getVal('autoOnCreate') === 'true',
-      autoOnMigration: getVal('autoOnMigration') === 'true',
-      autoOnVersionChange: getVal('autoOnVersionChange') === 'true',
-      autoOnWorldImport: getVal('autoOnWorldImport') === 'true',
-      autoOnRestore: getVal('autoOnRestore') === 'true',
-      autoOnWorldDelete: getVal('autoOnWorldDelete') === 'true',
-      autoOnConfigChange: getVal('autoOnConfigChange') === 'true',
-    });
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-router.post('/settings', authMiddleware, (req: AuthRequest, res) => {
-  try {
-    const db = getDatabase();
-    const upsert = (key: string, value: string) => {
-      db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)").run(`backup_${key}`, value);
-    };
-    const allowed = ['customFolder', 'customFolderEnabled', 'saveToBoth', 'autoBackup',
-      'autoOnCreate', 'autoOnMigration', 'autoOnVersionChange', 'autoOnWorldImport',
-      'autoOnRestore', 'autoOnWorldDelete', 'autoOnConfigChange'];
-    for (const key of allowed) {
-      if (req.body[key] !== undefined) upsert(key, String(req.body[key]));
-    }
-    emitToAll('backup:settings-updated');
-    res.json({ success: true });
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-// ── Backup schedule ──
-router.get('/schedule', authMiddleware, (_req: AuthRequest, res) => {
-  try {
-    const schedule = backupService.getSchedule();
-    res.json(schedule || { frequency: 'daily', enabled: false, time_of_day: '03:00', day_of_week: 0, day_of_month: 1, max_backups: 0, max_storage_mb: 0, max_age_days: 0 });
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-router.post('/schedule', authMiddleware, requirePermission('backup.create'), (req: AuthRequest, res) => {
-  try {
-    const schedule = backupService.updateSchedule(req.body);
-    res.json(schedule);
-  } catch (error: any) {
-    res.status(400).json({ error: error.message });
-  }
-});
-
-// ── Backup stats for dashboard ──
-router.get('/stats', authMiddleware, (_req: AuthRequest, res) => {
-  try {
-    const stats = backupService.getStorageStats();
-    const log = backupService.getBackupLog();
-    res.json({ ...stats, recentBackups: log.slice(0, 5) });
   } catch (error: any) {
     res.status(400).json({ error: error.message });
   }

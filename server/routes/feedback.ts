@@ -167,19 +167,27 @@ router.post('/:id/sync', authMiddleware, (req: AuthRequest, res) => {
   res.json(ticket);
 });
 
-router.get('/attachment-file', (req, res) => {
+router.get('/attachment-file', authMiddleware, (req: AuthRequest, res) => {
   const filePath = req.query.path as string;
-  if (!filePath || !fs.existsSync(filePath)) {
+  if (!filePath) {
+    return res.status(400).json({ error: 'Path parameter is required' });
+  }
+  const resolved = path.resolve(filePath);
+  const feedbackDir = path.resolve(path.join(__dirname, '../../data/feedback'));
+  if (!resolved.startsWith(feedbackDir)) {
+    return res.status(403).json({ error: 'Access denied: path must be within the feedback attachments directory' });
+  }
+  if (!fs.existsSync(resolved)) {
     return res.status(404).json({ error: 'File not found' });
   }
-  const ext = path.extname(filePath).toLowerCase();
+  const ext = path.extname(resolved).toLowerCase();
   const mimeMap: Record<string, string> = {
     '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
     '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
   };
   const mime = mimeMap[ext] || 'application/octet-stream';
   res.setHeader('Content-Type', mime);
-  res.sendFile(filePath);
+  res.sendFile(resolved);
 });
 
 router.post('/sync-from-github', authMiddleware, async (_req: AuthRequest, res) => {

@@ -651,6 +651,7 @@ export function repairWorld(name: string): { success: boolean; repairs: string[]
           const header = Buffer.alloc(4096);
           fs.readSync(fd, header, 0, 4096, 0);
           // Validate header entries
+          let headerModified = false;
           for (let i = 0; i < 1024; i++) {
             const offset = header.readUInt32BE(i * 4);
             if (offset !== 0) {
@@ -658,8 +659,12 @@ export function repairWorld(name: string): { success: boolean; repairs: string[]
               const sectorCount = offset & 0xff;
               if (sectorOffset < 2 || sectorCount === 0 || sectorCount > 255) {
                 header.writeUInt32BE(0, i * 4);
+                headerModified = true;
               }
             }
+          }
+          if (headerModified) {
+            fs.writeSync(fd, header, 0, 4096, 0);
           }
           fs.closeSync(fd);
         } catch (e) {

@@ -16,13 +16,13 @@ import { connectionManager } from '../services/connectionManager';
 import { firewallManager } from '../services/firewallManager';
 import { JavaManager } from '../services/JavaManager';
 import {
-  cacheGet, cacheSet, httpsGet, downloadFile, isPaperAvailable,
+  httpsGet, isPaperAvailable,
   downloadPaperVersion, downloadFabricVersion, downloadPurpurVersion,
   downloadForgeVersion, downloadNeoForgeVersion, downloadVanillaVersion, downloadVersion,
   downloadQuiltVersion, downloadSpigotVersion, downloadFoliaVersion,
   getPaperVersions, getNeoForgeVersions, getQuiltVersions, getSpigotVersions,
   getFoliaVersions, getPufferfishVersions, fetchWithCache,
-  MojangVersion, PAPER_API, MOJANG_MANIFEST, FABRIC_API, FORGE_API, PURPUR_API, NEOFORGE_API, QUILT_API
+  MojangVersion, MOJANG_MANIFEST, FABRIC_API, FORGE_API, PURPUR_API
 } from '../services/download';
 import { emitToAll } from '../socketManager';
 

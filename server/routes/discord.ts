@@ -13,7 +13,7 @@ router.get('/', authMiddleware, (req: AuthRequest, res) => {
 
   const row = db.prepare('SELECT * FROM discord_config WHERE server_id = ?').get(activeId) as any;
   const config = row ? {
-    botToken: row.bot_token || '',
+    botToken: row.bot_token ? '••••••••' : '',
     guildId: row.guild_id || '',
     textChannelId: row.text_channel_id || '',
     voiceChannelId: row.voice_channel_id || '',

@@ -545,4 +545,49 @@ router.get('/stats/summary', authMiddleware, (_req: AuthRequest, res) => {
   });
 });
 
+// ── Upload world ZIP (alias for import/zip) ──
+router.post('/upload', authMiddleware, requirePermission('world.manage'), upload.single('worldFile'), async (req: AuthRequest, res) => {
+  await autoBackupIfEnabled('World upload', 'autoOnWorldImport');
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const worldName = sanitizeWorldName(req.body.worldName || path.basename(req.file.originalname, '.zip'));
+    const finalName = await importWorldFromZip(req.file.path, worldName);
+
+    try { fs.unlinkSync(req.file.path); } catch {}
+
+    const db = getDatabase();
+    const worldPath = path.join(WORLDS_DIR, finalName);
+    const info = getWorldInfo(worldPath);
+    const lvl = readLevelDat(worldPath);
+    const now = new Date().toISOString();
+    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+
+    const world: any = {
+      name: finalName,
+      seed: String(lvl.seed || ''),
+      gamemode: lvl.gamemode !== undefined ? ['survival', 'creative', 'adventure', 'spectator'][lvl.gamemode] || 'survival' : 'survival',
+      difficulty: lvl.difficulty !== undefined ? ['peaceful', 'easy', 'normal', 'hard'][lvl.difficulty] || 'normal' : 'normal',
+      folder_path: worldPath,
+      server_id: activeId || null,
+      version: lvl.version || '1.21',
+      chunk_count: info.chunkCount || 0,
+      size_bytes: info.sizeBytes || 0,
+      last_played: now,
+      created_at: now,
+      updated_at: now,
+    };
+
+    const cols = Object.keys(world);
+    const vals = cols.map(c => (world as any)[c]);
+    db.prepare(`INSERT INTO worlds (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`).run(...vals);
+
+    emitToAll('world:created', { name: finalName });
+    res.json({ success: true, name: finalName, path: worldPath });
+  } catch (err: any) {
+    if (req.file) try { fs.unlinkSync(req.file.path); } catch {}
+    res.status(400).json({ error: err.message });
+  }
+});
+
 export default router;

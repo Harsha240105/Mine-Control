@@ -110,6 +110,7 @@ export class BackupService {
     const inc = { worlds: true, players: true, plugins: true, mods: true, config: true, resourcepacks: true, ...options.includes };
 
     const mcDir = getMinecraftDir();
+    const worldNames: string[] = [];
 
     // Calculate original size before compression
     let originalSize = 0;
@@ -123,6 +124,7 @@ export class BackupService {
           const sz = getFolderSize(wp);
           originalSize += sz;
           manifest[`worlds/${w.name}`] = sz;
+          worldNames.push(w.name);
         }
       }
       if (inc.players) {
@@ -142,10 +144,12 @@ export class BackupService {
     } catch {}
 
     return new Promise((resolve, reject) => {
+      this.isBackupActive = true;
       const output = fs.createWriteStream(filePath);
       const archive = archiver('zip', { zlib: { level: 9 } });
 
       output.on('close', async () => {
+        this.isBackupActive = false;
         const compressedBytes = fs.statSync(filePath).size;
         const compressedSize = formatSize(compressedBytes);
         const ratio = originalSize > 0 ? parseFloat((compressedBytes / originalSize).toFixed(4)) : 0;
@@ -155,7 +159,7 @@ export class BackupService {
         const backup = {
           id, server_id: serverId, name, reason, type: options.type || 'manual',
           size: compressedSize, created_at: new Date().toISOString(),
-          worlds: '[]', encrypted: options.encrypted ? 1 : 0, path: filePath,
+          worlds: JSON.stringify(worldNames), encrypted: options.encrypted ? 1 : 0, path: filePath,
           minecraft_version: meta.version, server_software: meta.software,
           original_size: formatSize(originalSize), compressed_size: compressedSize,
           compression_ratio: ratio, restore_count: 0, export_status: 'none',
@@ -175,6 +179,7 @@ export class BackupService {
       });
 
       archive.on('error', (err) => {
+        this.isBackupActive = false;
         eventBus.emit('backup:failed', { name, reason, error: err.message, type: options.type || 'manual' });
         reject(err);
       });
@@ -566,8 +571,9 @@ export class BackupService {
     if (filters?.search) { sql += ' AND (name LIKE ? OR reason LIKE ?)'; params.push(`%${filters.search}%`, `%${filters.search}%`); }
     if (filters?.type) { sql += ' AND type = ?'; params.push(filters.type); }
 
-    const sort = filters?.sort || 'created_at';
-    const order = filters?.order || 'DESC';
+    const allowedSorts = ['created_at', 'name', 'size', 'type', 'reason'] as const;
+    const sort = (filters?.sort && allowedSorts.includes(filters.sort as any)) ? filters.sort : 'created_at';
+    const order = (filters?.order === 'ASC' || filters?.order === 'DESC') ? filters.order : 'DESC';
     sql += ` ORDER BY ${sort} ${order}`;
 
     const backups = db.prepare(sql).all(...params) as any[];
