@@ -1,11 +1,36 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { v4 as uuidv4 } from 'uuid';
 import { resolvePath } from './paths';
 
 const DB_PATH = resolvePath('data', 'minecontrol.db');
+
+console.log(`[DB] Database path: ${DB_PATH}`);
+
+// Clean stale WAL/SHM files if the main database file does not exist.
+// Orphaned WAL files can cause silent replay of old data into a fresh database.
+function cleanStaleWalFiles() {
+  try {
+    const mainExists = fs.existsSync(DB_PATH);
+    if (!mainExists) {
+      const walPath = DB_PATH + '-wal';
+      const shmPath = DB_PATH + '-shm';
+      if (fs.existsSync(walPath)) {
+        fs.unlinkSync(walPath);
+        console.log(`[DB] Cleaned stale WAL file: ${walPath}`);
+      }
+      if (fs.existsSync(shmPath)) {
+        fs.unlinkSync(shmPath);
+        console.log(`[DB] Cleaned stale SHM file: ${shmPath}`);
+      }
+    }
+  } catch (e) {
+    // Non-fatal; worst case SQLite handles orphaned WAL files
+  }
+}
 
 let db: Database.Database;
 let dbReady = false;
@@ -18,6 +43,7 @@ export function getDatabase(): Database.Database {
       if (!fs.existsSync(dataDir)) {
         fs.mkdirSync(dataDir, { recursive: true });
       }
+      cleanStaleWalFiles();
       db = new Database(DB_PATH);
       db.pragma('journal_mode = WAL');
       db.pragma('foreign_keys = ON');
@@ -72,7 +98,12 @@ function initializeSchema() {
         role TEXT NOT NULL DEFAULT 'owner',
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         last_login TEXT,
-        session_token TEXT
+        session_token TEXT,
+        totp_secret TEXT DEFAULT '',
+        totp_enabled INTEGER DEFAULT 0,
+        totp_recovery_codes TEXT DEFAULT '',
+        failed_login_attempts INTEGER DEFAULT 0,
+        locked_until TEXT
       );
 
       CREATE TABLE IF NOT EXISTS players (
@@ -217,6 +248,7 @@ function initializeSchema() {
         expires_at TEXT NOT NULL,
         FOREIGN KEY (user_id) REFERENCES users(id)
       );
+      CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at);
 
       CREATE TABLE IF NOT EXISTS chat_log (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -292,6 +324,8 @@ function initializeSchema() {
         pvp INTEGER NOT NULL DEFAULT 1,
         maxPlayers INTEGER NOT NULL DEFAULT 4,
         viewDistance INTEGER NOT NULL DEFAULT 10,
+        simulationDistance INTEGER DEFAULT 0,
+        jvm_flags TEXT DEFAULT '',
         onlineMode INTEGER NOT NULL DEFAULT 0,
         autoRestart INTEGER NOT NULL DEFAULT 1,
         autoBackup INTEGER NOT NULL DEFAULT 1,
@@ -1046,6 +1080,8 @@ function initializeSchema() {
           encrypted_data TEXT NOT NULL,
           iv TEXT NOT NULL,
           auth_tag TEXT NOT NULL,
+          salt TEXT DEFAULT '',
+          key_version INTEGER NOT NULL DEFAULT 0,
           created_at TEXT NOT NULL DEFAULT (datetime('now')),
           updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
@@ -1419,10 +1455,282 @@ function initializeSchema() {
     }
   }
 
+  if (currentVersion < 19) {
+    try {
+      // Add server_id to remaining tables that still lack isolation
+      const tables19 = new Set((db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as any[]).map(r => r.name));
+
+      if (tables19.has('whitelist')) {
+        const col19 = db.prepare("PRAGMA table_info('whitelist')").all().map((r: any) => r.name);
+        if (!col19.includes('server_id')) db.exec("ALTER TABLE whitelist ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE");
+        if (!col19.includes('uuid')) db.exec("ALTER TABLE whitelist ADD COLUMN uuid TEXT DEFAULT ''");
+        db.exec("CREATE INDEX IF NOT EXISTS idx_whitelist_server_id ON whitelist(server_id)");
+      }
+
+      if (tables19.has('players')) {
+        const playerCols19 = db.prepare("PRAGMA table_info('players')").all().map((r: any) => r.name);
+        if (!playerCols19.includes('server_id')) db.exec("ALTER TABLE players ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE SET NULL");
+        db.exec("CREATE INDEX IF NOT EXISTS idx_players_server_id ON players(server_id)");
+      }
+
+      if (tables19.has('player_history')) {
+        const phCols19 = db.prepare("PRAGMA table_info('player_history')").all().map((r: any) => r.name);
+        if (!phCols19.includes('server_id')) db.exec("ALTER TABLE player_history ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE");
+        db.exec("CREATE INDEX IF NOT EXISTS idx_player_history_server_id ON player_history(server_id)");
+      }
+
+      if (tables19.has('claims')) {
+        const claimCols19 = db.prepare("PRAGMA table_info('claims')").all().map((r: any) => r.name);
+        if (!claimCols19.includes('server_id')) db.exec("ALTER TABLE claims ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE");
+        db.exec("CREATE INDEX IF NOT EXISTS idx_claims_server_id ON claims(server_id)");
+      }
+
+      if (tables19.has('build_tags')) {
+        const btCols19 = db.prepare("PRAGMA table_info('build_tags')").all().map((r: any) => r.name);
+        if (!btCols19.includes('server_id')) db.exec("ALTER TABLE build_tags ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE");
+        db.exec("CREATE INDEX IF NOT EXISTS idx_build_tags_server_id ON build_tags(server_id)");
+      }
+
+      if (tables19.has('system_stats')) {
+        const ssCols19 = db.prepare("PRAGMA table_info('system_stats')").all().map((r: any) => r.name);
+        if (!ssCols19.includes('server_id')) db.exec("ALTER TABLE system_stats ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE");
+        db.exec("CREATE INDEX IF NOT EXISTS idx_system_stats_server_id ON system_stats(server_id)");
+      }
+
+      if (tables19.has('audit_log')) {
+        const alCols19 = db.prepare("PRAGMA table_info('audit_log')").all().map((r: any) => r.name);
+        if (!alCols19.includes('server_id')) db.exec("ALTER TABLE audit_log ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE");
+        db.exec("CREATE INDEX IF NOT EXISTS idx_audit_log_server_id ON audit_log(server_id)");
+      }
+
+      // Add server_id to worlds that may have missed v4 migration
+      if (tables19.has('worlds')) {
+        const wCols19 = db.prepare("PRAGMA table_info('worlds')").all().map((r: any) => r.name);
+        if (!wCols19.includes('server_id')) db.exec("ALTER TABLE worlds ADD COLUMN server_id TEXT REFERENCES servers(id) ON DELETE CASCADE");
+        db.exec("CREATE INDEX IF NOT EXISTS idx_worlds_server_id ON worlds(server_id)");
+      }
+
+      db.prepare('INSERT INTO schema_version (version) VALUES (19)').run();
+      console.log('[DB] Migration v19: Added server_id to whitelist, players, player_history, claims, build_tags, system_stats, audit_log');
+    } catch (err) {
+      console.error('[DB] Migration v19 failed:', (err as Error).message);
+      try { db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (19)').run(); } catch {}
+    }
+  }
+
+  if (currentVersion < 20) {
+    try {
+      const ecCols = db.prepare("PRAGMA table_info('encrypted_credentials')").all().map((r: any) => r.name);
+      if (!ecCols.includes('salt')) db.exec("ALTER TABLE encrypted_credentials ADD COLUMN salt TEXT DEFAULT ''");
+      if (!ecCols.includes('key_version')) db.exec("ALTER TABLE encrypted_credentials ADD COLUMN key_version INTEGER NOT NULL DEFAULT 0");
+
+      // Generate machine salt if not present
+      const hasMachineSalt = db.prepare("SELECT COUNT(*) as c FROM server_config WHERE key = 'encryption_machine_salt'").get() as any;
+      if (hasMachineSalt.c === 0) {
+        const machineSalt = crypto.randomBytes(16).toString('hex');
+        db.prepare("INSERT OR IGNORE INTO server_config (key, value) VALUES ('encryption_machine_salt', ?)").run(machineSalt);
+      }
+
+      // Add index on sessions.expires_at for cleanup performance
+      db.exec("CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions(expires_at)");
+
+      db.prepare('INSERT INTO schema_version (version) VALUES (20)').run();
+      console.log('[DB] Migration v20: Added salt/key_version to encrypted_credentials, machine salt, sessions index');
+    } catch (err) {
+      console.error('[DB] Migration v20 failed:', (err as Error).message);
+      try { db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (20)').run(); } catch {}
+    }
+  }
+
+  // Migration v21: Discord chat bridge + command prefix columns
+  if (currentVersion < 21) {
+    try {
+      const dcCols = db.prepare("PRAGMA table_info('discord_config')").all().map((r: any) => r.name);
+      if (!dcCols.includes('chat_bridge_enabled')) db.exec("ALTER TABLE discord_config ADD COLUMN chat_bridge_enabled INTEGER DEFAULT 0");
+      if (!dcCols.includes('bridge_forward_discord_to_minecraft')) db.exec("ALTER TABLE discord_config ADD COLUMN bridge_forward_discord_to_minecraft INTEGER DEFAULT 0");
+      if (!dcCols.includes('command_prefix')) db.exec("ALTER TABLE discord_config ADD COLUMN command_prefix TEXT DEFAULT '!'");
+      if (!dcCols.includes('allowed_role_ids')) db.exec("ALTER TABLE discord_config ADD COLUMN allowed_role_ids TEXT DEFAULT ''");
+
+      db.prepare('INSERT INTO schema_version (version) VALUES (21)').run();
+      console.log('[DB] Migration v21: Added Discord bridge/command columns');
+    } catch (err) {
+      console.error('[DB] Migration v21 failed:', (err as Error).message);
+      try { db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (21)').run(); } catch {}
+    }
+  }
+
+  // Migration v22: Performance tuning — add jvm_flags, simulationDistance
+  if (currentVersion < 22) {
+    try {
+      const sCols = db.prepare("PRAGMA table_info('servers')").all().map((r: any) => r.name);
+      if (!sCols.includes('jvm_flags')) db.exec("ALTER TABLE servers ADD COLUMN jvm_flags TEXT DEFAULT ''");
+      if (!sCols.includes('simulationDistance')) db.exec("ALTER TABLE servers ADD COLUMN simulationDistance INTEGER DEFAULT 0");
+
+      db.prepare('INSERT INTO schema_version (version) VALUES (22)').run();
+      console.log('[DB] Migration v22: Added jvm_flags, simulationDistance to servers');
+    } catch (err) {
+      console.error('[DB] Migration v22 failed:', (err as Error).message);
+      try { db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (22)').run(); } catch {}
+    }
+  }
+
+  // Migration v23: Security & Access — 2FA, lockout, IP whitelist
+  if (currentVersion < 23) {
+    try {
+      const uCols = db.prepare("PRAGMA table_info('users')").all().map((r: any) => r.name);
+      if (!uCols.includes('totp_secret')) db.exec("ALTER TABLE users ADD COLUMN totp_secret TEXT DEFAULT ''");
+      if (!uCols.includes('totp_enabled')) db.exec("ALTER TABLE users ADD COLUMN totp_enabled INTEGER DEFAULT 0");
+      if (!uCols.includes('failed_login_attempts')) db.exec("ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER DEFAULT 0");
+      if (!uCols.includes('locked_until')) db.exec("ALTER TABLE users ADD COLUMN locked_until TEXT");
+      if (!uCols.includes('totp_recovery_codes')) db.exec("ALTER TABLE users ADD COLUMN totp_recovery_codes TEXT DEFAULT ''");
+
+      db.exec(`CREATE TABLE IF NOT EXISTS ip_whitelist (
+        id TEXT PRIMARY KEY, server_id TEXT, ip_address TEXT NOT NULL,
+        description TEXT DEFAULT '', created_by TEXT DEFAULT '',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(server_id, ip_address)
+      )`);
+
+      db.prepare('INSERT INTO schema_version (version) VALUES (23)').run();
+      console.log('[DB] Migration v23: Added 2FA, lockout columns, ip_whitelist table');
+    } catch (err) {
+      console.error('[DB] Migration v23 failed:', (err as Error).message);
+      try { db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (23)').run(); } catch {}
+    }
+  }
+
   // CRITICAL: Validate all required tables exist. Create any missing ones.
   // This is a safety net for fresh installs where migrations may have failed.
   ensureAllTablesExist();
 
+  // Comprehensive column repair: for tables that have had columns added via
+  // migrations (v1-v23), verify every expected column exists and add any that
+  // are missing. This covers cases where the schema_version was already past a
+  // migration when it was introduced (e.g. an old database restored from WAL).
+  const schemaVersion = (db.prepare('SELECT MAX(version) as v FROM schema_version').get() as any)?.v || 0;
+  console.log(`[DB] Schema version: ${schemaVersion}`);
+
+  // Known column additions per table (sourced from all migration ALTER TABLE statements)
+  const expectedColumns: Record<string, Record<string, string>> = {
+
+    // v4: worlds table expansion
+    worlds: {
+      server_id: 'TEXT REFERENCES servers(id) ON DELETE CASCADE',
+      seed: 'TEXT',
+      version: "TEXT DEFAULT ''",
+      software: "TEXT DEFAULT ''",
+      folder_path: "TEXT DEFAULT ''",
+      chunk_count: 'INTEGER DEFAULT 0',
+      optimization_status: "TEXT DEFAULT 'none'",
+      repair_status: "TEXT DEFAULT 'none'",
+      last_played: 'TEXT',
+      dimension_count: 'INTEGER DEFAULT 1',
+      last_optimized: 'TEXT',
+      last_repaired: 'TEXT',
+      generate_structures: 'INTEGER DEFAULT 1',
+      bonus_chest: 'INTEGER DEFAULT 0',
+      world_type: "TEXT DEFAULT 'default'",
+      hardcore: 'INTEGER DEFAULT 0',
+      simulation_distance: 'INTEGER DEFAULT 10',
+      view_distance: 'INTEGER DEFAULT 10',
+      player_count: 'INTEGER DEFAULT 0',
+      backup_size: "TEXT DEFAULT '0 B'",
+      region_size: "TEXT DEFAULT '0 B'",
+      playerdata_size: "TEXT DEFAULT '0 B'",
+      stats_size: "TEXT DEFAULT '0 B'",
+      loaded_chunks: 'INTEGER DEFAULT 0',
+    },
+
+    // v23: 2FA columns on users
+    users: {
+      totp_secret: "TEXT DEFAULT ''",
+      totp_enabled: 'INTEGER DEFAULT 0',
+      totp_recovery_codes: "TEXT DEFAULT ''",
+      failed_login_attempts: 'INTEGER DEFAULT 0',
+      locked_until: 'TEXT',
+    },
+
+    // v21: Discord bridge columns
+    discord_config: {
+      server_id: 'TEXT REFERENCES servers(id) ON DELETE CASCADE',
+      chat_bridge_enabled: 'INTEGER DEFAULT 0',
+      bridge_forward_discord_to_minecraft: 'INTEGER DEFAULT 0',
+      command_prefix: "TEXT DEFAULT '!'",
+      allowed_role_ids: "TEXT DEFAULT ''",
+    },
+
+    // v22: Performance columns on servers
+    servers: {
+      jvm_flags: "TEXT DEFAULT ''",
+      simulationDistance: 'INTEGER DEFAULT 0',
+      playit_enabled: 'INTEGER DEFAULT 0',
+      playit_address: "TEXT DEFAULT ''",
+      javaVersion: "TEXT DEFAULT ''",
+      javaVendor: "TEXT DEFAULT ''",
+      javaHome: "TEXT DEFAULT ''",
+    },
+
+    // v19: server_id added to multiple tables
+    whitelist: { server_id: 'TEXT REFERENCES servers(id) ON DELETE CASCADE' },
+    player_history: { server_id: 'TEXT REFERENCES servers(id) ON DELETE CASCADE' },
+    claims: { server_id: 'TEXT REFERENCES servers(id) ON DELETE CASCADE' },
+    build_tags: { server_id: 'TEXT REFERENCES servers(id) ON DELETE CASCADE' },
+    system_stats: { server_id: 'TEXT REFERENCES servers(id) ON DELETE CASCADE' },
+    audit_log: { server_id: 'TEXT REFERENCES servers(id) ON DELETE CASCADE' },
+  };
+
+  let repairCount = 0;
+  for (const [tableName, columns] of Object.entries(expectedColumns)) {
+    try {
+      const existing = db.prepare(`SELECT COUNT(*) as c FROM sqlite_master WHERE type='table' AND name=?`).get(tableName) as any;
+      if (!existing.c) continue; // table not created yet
+      const colNames = new Set(
+        (db.prepare(`PRAGMA table_info('${tableName}')`).all() as any[]).map((r: any) => r.name)
+      );
+      for (const [colName, colDef] of Object.entries(columns)) {
+        if (!colNames.has(colName)) {
+          db.exec(`ALTER TABLE "${tableName}" ADD COLUMN "${colName}" ${colDef}`);
+          console.log(`[DB] Repair: Added missing column ${tableName}.${colName}`);
+          repairCount++;
+        }
+      }
+    } catch (e) {
+      // Skip tables that don't exist
+    }
+  }
+
+  if (repairCount > 0) {
+    console.log(`[DB] Schema repair complete: ${repairCount} missing column(s) added`);
+  }
+
+  // Database diagnostics
+  printDatabaseDiagnostics();
+}
+
+function printDatabaseDiagnostics() {
+  try {
+    const version = (db.prepare('SELECT MAX(version) as v FROM schema_version').get() as any)?.v || 0;
+    const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as any[]).map((r: any) => r.name);
+    const tableCount = tables.length;
+    const userCount = (db.prepare('SELECT COUNT(*) as c FROM users').get() as any)?.c || 0;
+    const serverCount = (db.prepare('SELECT COUNT(*) as c FROM servers').get() as any)?.c || 0;
+    const healthIssues: string[] = [];
+
+    // Check for tables that exist in schema but have known issues
+    for (const tbl of ['worlds', 'users', 'servers', 'discord_config']) {
+      if (!tables.includes(tbl)) {
+        healthIssues.push(`Missing table: ${tbl}`);
+      }
+    }
+
+    console.log('[DB] ═══════════════════════════════════════');
+    console.log(`[DB]  Database:  ${DB_PATH}`);
+    console.log(`[DB]  Schema v${version}  |  Tables: ${tableCount}  |  Users: ${userCount}  |  Servers: ${serverCount}`);
+    console.log(`[DB]  Health:    ${healthIssues.length === 0 ? 'OK' : healthIssues.join('; ')}`);
+    console.log('[DB] ═══════════════════════════════════════');
+  } catch (e) {
+    console.error('[DB] Diagnostics error:', (e as Error).message);
+  }
 }
 
 function ensureAllTablesExist() {
@@ -1430,7 +1738,10 @@ function ensureAllTablesExist() {
     users: `CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'owner', created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      last_login TEXT, session_token TEXT
+      last_login TEXT, session_token TEXT,
+      totp_secret TEXT DEFAULT '', totp_enabled INTEGER DEFAULT 0,
+      totp_recovery_codes TEXT DEFAULT '',
+      failed_login_attempts INTEGER DEFAULT 0, locked_until TEXT
     )`,
     players: `CREATE TABLE IF NOT EXISTS players (
       id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, uuid TEXT UNIQUE NOT NULL,
@@ -1443,7 +1754,9 @@ function ensureAllTablesExist() {
       world_name TEXT DEFAULT 'world', death_count INTEGER DEFAULT 0, kills INTEGER DEFAULT 0,
       first_join TEXT, last_disconnect TEXT, inventory TEXT DEFAULT '[]',
       armor TEXT DEFAULT '[]', ender_chest TEXT DEFAULT '[]', advancements TEXT DEFAULT '{}',
-      statistics TEXT DEFAULT '{}'
+      statistics TEXT DEFAULT '{}', approval_status TEXT NOT NULL DEFAULT 'approved',
+      trusted INTEGER NOT NULL DEFAULT 1, last_ip TEXT DEFAULT '', ops INTEGER NOT NULL DEFAULT 0,
+      server_id TEXT
     )`,
     roles: `CREATE TABLE IF NOT EXISTS roles (
       name TEXT PRIMARY KEY, level INTEGER NOT NULL DEFAULT 0,
@@ -1451,7 +1764,7 @@ function ensureAllTablesExist() {
     )`,
     whitelist: `CREATE TABLE IF NOT EXISTS whitelist (
       id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, uuid TEXT,
-      added_by TEXT, added_at TEXT NOT NULL DEFAULT (datetime('now'))
+      added_by TEXT, added_at TEXT NOT NULL DEFAULT (datetime('now')), server_id TEXT
     )`,
     banned_players: `CREATE TABLE IF NOT EXISTS banned_players (
       id TEXT PRIMARY KEY, username TEXT NOT NULL, uuid TEXT, reason TEXT,
@@ -1493,7 +1806,7 @@ function ensureAllTablesExist() {
     )`,
     system_stats: `CREATE TABLE IF NOT EXISTS system_stats (
       id INTEGER PRIMARY KEY AUTOINCREMENT, cpu REAL NOT NULL, ram REAL NOT NULL,
-      tps REAL NOT NULL, players INTEGER NOT NULL, timestamp INTEGER NOT NULL
+      tps REAL NOT NULL, players INTEGER NOT NULL, timestamp INTEGER NOT NULL, server_id TEXT
     )`,
     sessions: `CREATE TABLE IF NOT EXISTS sessions (
       id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token TEXT UNIQUE NOT NULL,
@@ -1506,20 +1819,20 @@ function ensureAllTablesExist() {
     )`,
     audit_log: `CREATE TABLE IF NOT EXISTS audit_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, username TEXT,
-      details TEXT, ip TEXT, timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+      details TEXT, ip TEXT, timestamp TEXT NOT NULL DEFAULT (datetime('now')), server_id TEXT
     )`,
     claims: `CREATE TABLE IF NOT EXISTS claims (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, owner TEXT NOT NULL,
       world TEXT NOT NULL DEFAULT 'world', x1 INTEGER NOT NULL DEFAULT 0,
       z1 INTEGER NOT NULL DEFAULT 0, x2 INTEGER NOT NULL DEFAULT 0,
       z2 INTEGER NOT NULL DEFAULT 0, color TEXT NOT NULL DEFAULT '#ff5555',
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), server_id TEXT
     )`,
     build_tags: `CREATE TABLE IF NOT EXISTS build_tags (
       id TEXT PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL DEFAULT 'base',
       world TEXT NOT NULL DEFAULT 'world', x REAL NOT NULL DEFAULT 0,
       y REAL NOT NULL DEFAULT 0, z REAL NOT NULL DEFAULT 0, owner TEXT,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), server_id TEXT
     )`,
     github_issues: `CREATE TABLE IF NOT EXISTS github_issues (
       id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT,
@@ -1537,6 +1850,7 @@ function ensureAllTablesExist() {
       motd TEXT NOT NULL DEFAULT '', difficulty TEXT NOT NULL DEFAULT 'normal',
       gamemode TEXT NOT NULL DEFAULT 'survival', pvp INTEGER NOT NULL DEFAULT 1,
       maxPlayers INTEGER NOT NULL DEFAULT 4, viewDistance INTEGER NOT NULL DEFAULT 10,
+      simulationDistance INTEGER DEFAULT 0, jvm_flags TEXT DEFAULT '',
       onlineMode INTEGER NOT NULL DEFAULT 1, autoRestart INTEGER NOT NULL DEFAULT 1,
       autoBackup INTEGER NOT NULL DEFAULT 1, whitelistEnabled INTEGER NOT NULL DEFAULT 0,
       status TEXT NOT NULL DEFAULT 'stopped', created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -1553,134 +1867,232 @@ function ensureAllTablesExist() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     feedback_tickets: `CREATE TABLE IF NOT EXISTS feedback_tickets (
-      id TEXT PRIMARY KEY, user_id TEXT, username TEXT, type TEXT NOT NULL DEFAULT 'bug',
-      title TEXT NOT NULL, description TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open',
-      priority TEXT NOT NULL DEFAULT 'medium', created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      updated_at TEXT
+      id TEXT PRIMARY KEY, ticket_id TEXT UNIQUE NOT NULL,
+      issue_type TEXT NOT NULL DEFAULT 'general' CHECK(issue_type IN ('bug','feature','performance','crash','general')),
+      summary TEXT NOT NULL DEFAULT '', description TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','pending','in_review','resolved','closed','rejected')),
+      username TEXT NOT NULL, server_id TEXT, server_name TEXT DEFAULT '',
+      world_name TEXT DEFAULT '', player_count INTEGER DEFAULT 0,
+      minecraft_version TEXT DEFAULT '', server_software TEXT DEFAULT '',
+      connected_plugins TEXT DEFAULT '[]', connected_mods TEXT DEFAULT '[]',
+      connection_mode TEXT DEFAULT '', diagnostic_data TEXT,
+      diagnostic_sanitized INTEGER NOT NULL DEFAULT 1,
+      screenshot_paths TEXT DEFAULT '[]', attachment_paths TEXT DEFAULT '[]',
+      log_snapshots TEXT DEFAULT '{}', error_stack_trace TEXT DEFAULT '',
+      github_url TEXT, issue_tracker_url TEXT DEFAULT '', issue_tracker_id TEXT DEFAULT '',
+      sync_status TEXT NOT NULL DEFAULT 'local' CHECK(sync_status IN ('local','pending','synced','failed')),
+      sync_retries INTEGER NOT NULL DEFAULT 0, sync_last_attempt TEXT, sync_error TEXT DEFAULT '',
+      votes INTEGER NOT NULL DEFAULT 0,
+      priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('low','normal','high','critical')),
+      last_status_change_by TEXT DEFAULT '', last_status_change_at TEXT,
+      developer_notes TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     ui_state: `CREATE TABLE IF NOT EXISTS ui_state (
       key TEXT PRIMARY KEY, value TEXT NOT NULL
     )`,
     player_history: `CREATE TABLE IF NOT EXISTS player_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT, player_id TEXT NOT NULL,
-      event_type TEXT NOT NULL, event_data TEXT, timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+      event_type TEXT NOT NULL, event_data TEXT, timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+      server_id TEXT
     )`,
     world_dimensions: `CREATE TABLE IF NOT EXISTS world_dimensions (
       id INTEGER PRIMARY KEY AUTOINCREMENT, world_name TEXT NOT NULL,
-      dimension TEXT NOT NULL, size TEXT, explored REAL DEFAULT 0
+      dimension_name TEXT NOT NULL DEFAULT 'minecraft:overworld',
+      display_name TEXT NOT NULL DEFAULT 'Overworld', size TEXT DEFAULT '0 B',
+      chunk_count INTEGER DEFAULT 0, player_count INTEGER DEFAULT 0, last_activity TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (world_name) REFERENCES worlds(name) ON DELETE CASCADE,
+      UNIQUE(world_name, dimension_name)
     )`,
     backup_schedule: `CREATE TABLE IF NOT EXISTS backup_schedule (
-      id TEXT PRIMARY KEY, server_id TEXT, name TEXT NOT NULL, cron TEXT NOT NULL,
-      enabled INTEGER NOT NULL DEFAULT 1, last_run TEXT
+      id INTEGER PRIMARY KEY AUTOINCREMENT, server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      frequency TEXT NOT NULL DEFAULT 'daily', enabled INTEGER NOT NULL DEFAULT 0,
+      next_run TEXT, last_run TEXT, time_of_day TEXT DEFAULT '03:00',
+      day_of_week INTEGER DEFAULT 0, day_of_month INTEGER DEFAULT 1,
+      max_backups INTEGER DEFAULT 0, max_storage_mb INTEGER DEFAULT 0, max_age_days INTEGER DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(server_id)
     )`,
     connection_diagnostics: `CREATE TABLE IF NOT EXISTS connection_diagnostics (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, server_id TEXT, check_type TEXT NOT NULL,
-      status TEXT NOT NULL, message TEXT, timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+      id INTEGER PRIMARY KEY AUTOINCREMENT, server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+      local_address TEXT DEFAULT '', lan_address TEXT DEFAULT '', public_ip TEXT DEFAULT '',
+      playit_address TEXT DEFAULT '', port INTEGER DEFAULT 25565,
+      server_running INTEGER DEFAULT 0, firewall_active INTEGER DEFAULT 0,
+      firewall_rule_exists INTEGER DEFAULT 0, lan_reachable INTEGER DEFAULT 0,
+      playit_active INTEGER DEFAULT 0, playit_latency INTEGER,
+      local_ping_ok INTEGER DEFAULT 0, local_ping_latency INTEGER,
+      tcp_port_open INTEGER DEFAULT 0, java_process_running INTEGER DEFAULT 0,
+      recommended_method TEXT DEFAULT 'localhost', diagnostics_json TEXT DEFAULT '{}'
     )`,
     connection_config: `CREATE TABLE IF NOT EXISTS connection_config (
-      key TEXT PRIMARY KEY, value TEXT NOT NULL
+      id INTEGER PRIMARY KEY AUTOINCREMENT, server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      preferred_mode TEXT DEFAULT 'auto', last_successful_method TEXT DEFAULT '',
+      last_diagnostics_at TEXT, UNIQUE(server_id)
     )`,
     discord_config: `CREATE TABLE IF NOT EXISTS discord_config (
-      key TEXT PRIMARY KEY, value TEXT NOT NULL
+      id INTEGER PRIMARY KEY AUTOINCREMENT, server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      bot_token TEXT DEFAULT '', guild_id TEXT DEFAULT '', text_channel_id TEXT DEFAULT '',
+      voice_channel_id TEXT DEFAULT '', auto_reconnect INTEGER DEFAULT 1,
+      notify_server_start INTEGER DEFAULT 1, notify_server_stop INTEGER DEFAULT 1,
+      notify_server_crash INTEGER DEFAULT 1, notify_server_restart INTEGER DEFAULT 1,
+      notify_backup_created INTEGER DEFAULT 1, notify_backup_restored INTEGER DEFAULT 1,
+      notify_backup_failed INTEGER DEFAULT 1, notify_player_join INTEGER DEFAULT 0,
+      notify_player_left INTEGER DEFAULT 0, notify_player_kicked INTEGER DEFAULT 0,
+      notify_player_banned INTEGER DEFAULT 0, notify_player_unbanned INTEGER DEFAULT 1,
+      notify_player_approved INTEGER DEFAULT 1, notify_whitelist_updated INTEGER DEFAULT 1,
+      notify_software_changed INTEGER DEFAULT 1, notify_version_changed INTEGER DEFAULT 1,
+      notify_update_available INTEGER DEFAULT 1,
+      chat_bridge_enabled INTEGER DEFAULT 0, bridge_forward_discord_to_minecraft INTEGER DEFAULT 0,
+      command_prefix TEXT DEFAULT '!', allowed_role_ids TEXT DEFAULT '',
+      bot_status TEXT DEFAULT 'disconnected',
+      last_connected_at TEXT, last_error TEXT DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(server_id)
     )`,
     discord_notifications: `CREATE TABLE IF NOT EXISTS discord_notifications (
-      id TEXT PRIMARY KEY, server_id TEXT, type TEXT NOT NULL, channel_id TEXT,
-      enabled INTEGER NOT NULL DEFAULT 1
+      id INTEGER PRIMARY KEY AUTOINCREMENT, server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      event_type TEXT NOT NULL, title TEXT NOT NULL, content TEXT DEFAULT '',
+      sent_at TEXT NOT NULL DEFAULT (datetime('now')), success INTEGER DEFAULT 1,
+      error TEXT DEFAULT ''
     )`,
     ticket_history: `CREATE TABLE IF NOT EXISTS ticket_history (
-      id TEXT PRIMARY KEY, ticket_id TEXT NOT NULL, action TEXT NOT NULL,
-      user_id TEXT, details TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      id INTEGER PRIMARY KEY AUTOINCREMENT, ticket_id TEXT NOT NULL,
+      field TEXT NOT NULL, old_value TEXT DEFAULT '', new_value TEXT DEFAULT '',
+      changed_by TEXT NOT NULL DEFAULT 'system', note TEXT DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (ticket_id) REFERENCES feedback_tickets(id) ON DELETE CASCADE
     )`,
     ticket_attachments: `CREATE TABLE IF NOT EXISTS ticket_attachments (
-      id TEXT PRIMARY KEY, ticket_id TEXT NOT NULL, filename TEXT NOT NULL,
-      path TEXT NOT NULL, size INTEGER, uploaded_at TEXT NOT NULL DEFAULT (datetime('now'))
+      id TEXT PRIMARY KEY, ticket_id TEXT NOT NULL,
+      file_name TEXT NOT NULL, file_path TEXT NOT NULL,
+      file_size INTEGER NOT NULL DEFAULT 0, mime_type TEXT DEFAULT '',
+      type TEXT NOT NULL DEFAULT 'other' CHECK(type IN ('screenshot','log','crash_report','diagnostic','other')),
+      uploaded_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (ticket_id) REFERENCES feedback_tickets(id) ON DELETE CASCADE
     )`,
     sync_queue: `CREATE TABLE IF NOT EXISTS sync_queue (
-      id TEXT PRIMARY KEY, action TEXT NOT NULL, data TEXT,
-      status TEXT NOT NULL DEFAULT 'pending', created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      id TEXT PRIMARY KEY, ticket_id TEXT NOT NULL,
+      action TEXT NOT NULL DEFAULT 'create' CHECK(action IN ('create','update','sync')),
+      payload TEXT NOT NULL DEFAULT '{}',
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','processing','completed','failed')),
+      retries INTEGER NOT NULL DEFAULT 0, max_retries INTEGER NOT NULL DEFAULT 10,
+      error TEXT DEFAULT '', created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      last_attempt TEXT, completed_at TEXT,
+      FOREIGN KEY (ticket_id) REFERENCES feedback_tickets(id) ON DELETE CASCADE
     )`,
     issue_tracker_config: `CREATE TABLE IF NOT EXISTS issue_tracker_config (
-      key TEXT PRIMARY KEY, value TEXT NOT NULL
+      id INTEGER PRIMARY KEY AUTOINCREMENT, server_id TEXT NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      provider TEXT NOT NULL DEFAULT 'github' CHECK(provider IN ('github','gitlab','jira','custom')),
+      url TEXT NOT NULL DEFAULT '', api_token TEXT DEFAULT '',
+      repository TEXT DEFAULT '', project_key TEXT DEFAULT '',
+      enabled INTEGER NOT NULL DEFAULT 0, auto_sync INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(server_id)
     )`,
     guide_preferences: `CREATE TABLE IF NOT EXISTS guide_preferences (
-      user_id TEXT PRIMARY KEY, preferences TEXT NOT NULL DEFAULT '{}'
+      id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL DEFAULT 'default',
+      key TEXT NOT NULL, value TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(user_id, key)
     )`,
     guide_bookmarks: `CREATE TABLE IF NOT EXISTS guide_bookmarks (
-      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, article_id TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL DEFAULT 'default',
+      section_id TEXT NOT NULL, article_id TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL, url TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(user_id, section_id, article_id)
     )`,
     guide_recently_viewed: `CREATE TABLE IF NOT EXISTS guide_recently_viewed (
-      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, article_id TEXT NOT NULL,
+      id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL DEFAULT 'default',
+      section_id TEXT NOT NULL, article_id TEXT NOT NULL, title TEXT NOT NULL,
       viewed_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     guide_tutorial_progress: `CREATE TABLE IF NOT EXISTS guide_tutorial_progress (
-      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, tutorial_id TEXT NOT NULL,
-      step INTEGER NOT NULL DEFAULT 0, completed INTEGER NOT NULL DEFAULT 0
+      id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL DEFAULT 'default',
+      tutorial_id TEXT NOT NULL, step_index INTEGER NOT NULL DEFAULT 0,
+      completed INTEGER NOT NULL DEFAULT 0, started_at TEXT NOT NULL DEFAULT (datetime('now')),
+      completed_at TEXT, UNIQUE(user_id, tutorial_id)
     )`,
     guide_search_history: `CREATE TABLE IF NOT EXISTS guide_search_history (
-      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, query TEXT NOT NULL,
+      id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT NOT NULL DEFAULT 'default',
+      query TEXT NOT NULL, result_count INTEGER NOT NULL DEFAULT 0,
       searched_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     privacy_preferences: `CREATE TABLE IF NOT EXISTS privacy_preferences (
-      user_id TEXT PRIMARY KEY, data_collection INTEGER NOT NULL DEFAULT 1,
-      crash_reports INTEGER NOT NULL DEFAULT 1, usage_stats INTEGER NOT NULL DEFAULT 1
+      id INTEGER PRIMARY KEY AUTOINCREMENT, key TEXT NOT NULL UNIQUE,
+      value TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     feature_permissions: `CREATE TABLE IF NOT EXISTS feature_permissions (
-      feature TEXT PRIMARY KEY, enabled INTEGER NOT NULL DEFAULT 1,
-      min_role TEXT NOT NULL DEFAULT 'Member'
+      id INTEGER PRIMARY KEY AUTOINCREMENT, feature_key TEXT NOT NULL UNIQUE,
+      enabled INTEGER NOT NULL DEFAULT 1, label TEXT NOT NULL DEFAULT '',
+      description TEXT DEFAULT '', updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     security_checks: `CREATE TABLE IF NOT EXISTS security_checks (
-      id TEXT PRIMARY KEY, check_name TEXT NOT NULL, status TEXT NOT NULL,
-      details TEXT, last_checked TEXT
+      id INTEGER PRIMARY KEY AUTOINCREMENT, check_type TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pass','fail','warn','pending')),
+      detail TEXT DEFAULT '', score_impact INTEGER NOT NULL DEFAULT 0,
+      checked_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     encrypted_credentials: `CREATE TABLE IF NOT EXISTS encrypted_credentials (
-      key TEXT PRIMARY KEY, encrypted_value TEXT NOT NULL, iv TEXT NOT NULL,
-      auth_tag TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      id INTEGER PRIMARY KEY AUTOINCREMENT, credential_key TEXT NOT NULL UNIQUE,
+      encrypted_data TEXT NOT NULL, iv TEXT NOT NULL, auth_tag TEXT NOT NULL,
+      salt TEXT DEFAULT '', key_version INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     credential_metadata: `CREATE TABLE IF NOT EXISTS credential_metadata (
-      key TEXT PRIMARY KEY, description TEXT, last_rotated TEXT
+      id INTEGER PRIMARY KEY AUTOINCREMENT, credential_key TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL, has_value INTEGER NOT NULL DEFAULT 0,
+      source TEXT DEFAULT 'manual', last_updated TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     security_audit_log: `CREATE TABLE IF NOT EXISTS security_audit_log (
-      id TEXT PRIMARY KEY, action TEXT NOT NULL, user_id TEXT, details TEXT,
-      ip TEXT, timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+      id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL,
+      detail TEXT DEFAULT '', ip TEXT DEFAULT '',
+      timestamp TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     update_preferences: `CREATE TABLE IF NOT EXISTS update_preferences (
       key TEXT PRIMARY KEY, value TEXT NOT NULL
     )`,
     update_history: `CREATE TABLE IF NOT EXISTS update_history (
       id INTEGER PRIMARY KEY AUTOINCREMENT, version TEXT NOT NULL,
-      action TEXT NOT NULL, status TEXT NOT NULL, details TEXT,
-      timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+      action TEXT NOT NULL, previous_version TEXT, status TEXT NOT NULL,
+      details TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
     release_notes_cache: `CREATE TABLE IF NOT EXISTS release_notes_cache (
-      version TEXT PRIMARY KEY, notes TEXT NOT NULL, fetched_at TEXT NOT NULL DEFAULT (datetime('now'))
+      version TEXT PRIMARY KEY, release_date TEXT,
+      new_features TEXT, bug_fixes TEXT, improvements TEXT,
+      breaking_changes TEXT, known_issues TEXT, upgrade_notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
     update_migrations: `CREATE TABLE IF NOT EXISTS update_migrations (
       id INTEGER PRIMARY KEY AUTOINCREMENT, from_version TEXT, to_version TEXT,
-      status TEXT NOT NULL, result TEXT, details TEXT,
-      timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+      status TEXT, result TEXT, details TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
     uninstall_history: `CREATE TABLE IF NOT EXISTS uninstall_history (
-      id TEXT PRIMARY KEY, action TEXT NOT NULL, details TEXT,
-      timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+      id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL,
+      status TEXT NOT NULL, details TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )`,
     restore_state: `CREATE TABLE IF NOT EXISTS restore_state (
       key TEXT PRIMARY KEY, value TEXT NOT NULL
     )`,
     github_comments: `CREATE TABLE IF NOT EXISTS github_comments (
-      id TEXT PRIMARY KEY, issue_id TEXT NOT NULL, comment_id INTEGER NOT NULL,
-      body TEXT, author TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      id TEXT PRIMARY KEY, ticket_id TEXT NOT NULL,
+      github_comment_id INTEGER NOT NULL, author TEXT NOT NULL DEFAULT '',
+      body TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL DEFAULT '',
+      FOREIGN KEY (ticket_id) REFERENCES feedback_tickets(id) ON DELETE CASCADE
     )`,
-    history: `CREATE TABLE IF NOT EXISTS history (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL, details TEXT,
-      timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    marketplace_cache: `CREATE TABLE IF NOT EXISTS marketplace_cache (
+      key TEXT PRIMARY KEY, value TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
-    settings: `CREATE TABLE IF NOT EXISTS settings (
-      key TEXT PRIMARY KEY, value TEXT NOT NULL
-    )`,
-    logs: `CREATE TABLE IF NOT EXISTS logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT, level TEXT NOT NULL, message TEXT NOT NULL,
-      source TEXT, timestamp TEXT NOT NULL DEFAULT (datetime('now'))
+    ip_whitelist: `CREATE TABLE IF NOT EXISTS ip_whitelist (
+      id TEXT PRIMARY KEY, server_id TEXT, ip_address TEXT NOT NULL,
+      description TEXT DEFAULT '', created_by TEXT DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(server_id, ip_address)
     )`,
   };
 
@@ -1734,8 +2146,8 @@ function migrateDefaultServer() {
   }
 
   db.prepare(`
-    INSERT INTO servers (id, name, slug, port, directory, version, version_source, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, pvp, maxPlayers, viewDistance, onlineMode, autoRestart, autoBackup, whitelistEnabled, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped')
+    INSERT INTO servers (id, name, slug, port, directory, version, version_source, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, pvp, maxPlayers, viewDistance, simulationDistance, jvm_flags, onlineMode, autoRestart, autoBackup, whitelistEnabled, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped')
   `).run(
     id, name, slug,
     parseInt(config.port || '25565'),
@@ -1751,6 +2163,7 @@ function migrateDefaultServer() {
     config.pvp !== 'false' ? 1 : 0,
     parseInt(config.maxPlayers || '4'),
     parseInt(config.viewDistance || '10'),
+    0, '',
     config.onlineMode === 'true' ? 1 : 0,
     config.autoRestart !== 'false' ? 1 : 0,
     config.autoBackup !== 'false' ? 1 : 0,

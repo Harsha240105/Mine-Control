@@ -3,6 +3,7 @@ import path from 'path';
 import archiver from 'archiver';
 import unzipper from 'unzipper';
 import { getDatabase } from '../database';
+import { getActiveServerId } from '../db/repository/serverConfigRepository';
 import { resolveMinecraftDir } from '../paths';
 import { v4 as uuidv4 } from 'uuid';
 import { emitToAll } from '../socketManager';
@@ -193,7 +194,7 @@ export function detectWorlds(): any[] {
   if (!fs.existsSync(worldsDir)) return [];
 
   const db = getDatabase();
-  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+  const serverId = getActiveServerId();
   const detected: any[] = [];
 
   try {
@@ -209,7 +210,7 @@ export function detectWorlds(): any[] {
 
       if (!hasRegion && !hasLevelDat) continue;
 
-      const existing = db.prepare('SELECT name FROM worlds WHERE name = ?').get(e.name);
+      const existing = db.prepare('SELECT name FROM worlds WHERE name = ? AND (server_id = ? OR server_id IS NULL)').get(e.name, serverId);
       if (!existing) {
         const now = new Date().toISOString();
         const info = getWorldInfo(dirPath);
@@ -224,7 +225,7 @@ export function detectWorlds(): any[] {
           dimension_count: info.dimensions.length || 1,
           chunk_count: info.totalChunks,
         };
-        if (activeId) world.server_id = activeId;
+        if (serverId) world.server_id = serverId;
 
         const cols = Object.keys(world);
         const vals = Object.values(world);
@@ -256,7 +257,8 @@ export function syncWorldFromServerDir(): any | null {
 
   // If the world directory is already tracked, just update
   const db = getDatabase();
-  const existing = db.prepare('SELECT name FROM worlds WHERE name = ?').get(levelName) as any;
+  const serverId = getActiveServerId();
+  const existing = db.prepare('SELECT name FROM worlds WHERE name = ? AND (server_id = ? OR server_id IS NULL)').get(levelName, serverId) as any;
 
   if (!existing) {
     // Symlink or copy the server world into tracked worlds
@@ -267,7 +269,6 @@ export function syncWorldFromServerDir(): any | null {
 
     const now = new Date().toISOString();
     const info = getWorldInfo(trackedPath);
-    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
 
     const world: any = {
       name: levelName,
@@ -280,7 +281,7 @@ export function syncWorldFromServerDir(): any | null {
       dimension_count: Math.max(info.dimensions.length, 1),
       chunk_count: info.totalChunks,
     };
-    if (activeId) world.server_id = activeId;
+    if (serverId) world.server_id = serverId;
 
     const cols = Object.keys(world);
     const vals = Object.values(world);
@@ -689,7 +690,10 @@ export function repairWorld(name: string): { success: boolean; repairs: string[]
 
 export function getPlayerCountForWorld(worldName: string): number {
   const db = getDatabase();
-  const row = db.prepare("SELECT COUNT(*) as c FROM players WHERE world_name = ? AND status = 'online'").get(worldName) as any;
+  const sid = getActiveServerId();
+  const row = sid
+    ? db.prepare("SELECT COUNT(*) as c FROM players WHERE world_name = ? AND status = 'online' AND (server_id = ? OR server_id IS NULL)").get(worldName, sid)
+    : db.prepare("SELECT COUNT(*) as c FROM players WHERE world_name = ? AND status = 'online'").get(worldName) as any;
   return row?.c || 0;
 }
 
@@ -708,7 +712,8 @@ export function updateWorldFromServerProperties(name: string): void {
     const viewDistance = content.match(/^view-distance=(.*)$/m)?.[1]?.trim() || '10';
     const simDistance = content.match(/^simulation-distance=(.*)$/m)?.[1]?.trim() || '10';
 
-    db.prepare('UPDATE worlds SET gamemode = ?, difficulty = ?, seed = ?, view_distance = ?, simulation_distance = ?, folder_path = ? WHERE name = ?')
-      .run(gamemode, difficulty, seed, parseInt(viewDistance), parseInt(simDistance), path.join(getWorldsDir(), name), name);
+    const sid = getActiveServerId();
+    db.prepare('UPDATE worlds SET gamemode = ?, difficulty = ?, seed = ?, view_distance = ?, simulation_distance = ?, folder_path = ? WHERE name = ? AND (server_id = ? OR server_id IS NULL)')
+      .run(gamemode, difficulty, seed, parseInt(viewDistance), parseInt(simDistance), path.join(getWorldsDir(), name), name, sid);
   } catch {}
 }

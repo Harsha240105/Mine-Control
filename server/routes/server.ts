@@ -8,6 +8,7 @@ import net from 'net';
 import { minecraftServer } from '../services/minecraftServer';
 import { authMiddleware, requirePermission, AuthRequest } from '../middleware/auth';
 import { getDatabase } from '../database';
+import { getActiveServerId } from '../db/repository/serverConfigRepository';
 import { resolveMinecraftDir } from '../paths';
 import { autoBackupIfEnabled } from '../services/backup';
 import { validateServer, getConnectionWizardData } from '../services/connectionValidator';
@@ -264,24 +265,115 @@ router.get('/health', (_req, res) => {
   res.json({ status: 'ok', uptime: process.uptime(), timestamp: Date.now() });
 });
 
+router.get('/health/checks', authMiddleware, async (_req: AuthRequest, res) => {
+  const db = getDatabase();
+  const serverId = getActiveServerId();
+  const checks: { component: string; status: 'pass' | 'warn' | 'fail'; message: string }[] = [];
+
+  try { db.prepare('SELECT 1').get(); checks.push({ component: 'database', status: 'pass', message: 'Database connected' }); }
+  catch { checks.push({ component: 'database', status: 'fail', message: 'Database unavailable' }); }
+
+  const mcDir = resolveMinecraftDir();
+  try {
+    if (fs.existsSync(path.join(mcDir, 'server.jar')) || fs.existsSync(mcDir) && fs.readdirSync(mcDir).some(f => f.endsWith('.jar') && !f.includes('-installer')))
+      checks.push({ component: 'server_jar', status: 'pass', message: 'Server jar present' });
+    else
+      checks.push({ component: 'server_jar', status: 'warn', message: 'No server jar found' });
+  } catch { checks.push({ component: 'server_jar', status: 'warn', message: 'Cannot verify server jar' }); }
+
+  try {
+    const allJavas = await JavaManager.scan();
+    const required = JavaManager.getRequiredJavaVersion('1.21');
+    const found = allJavas.some(j => j.majorVersion >= required);
+    checks.push({ component: 'java', status: found ? 'pass' : 'warn', message: found ? `Java ${required}+ available` : `Java ${required}+ not found` });
+  } catch { checks.push({ component: 'java', status: 'warn', message: 'Java check unavailable' }); }
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const sock = new net.Socket();
+      sock.setTimeout(2000);
+      sock.on('connect', () => { sock.destroy(); resolve(); });
+      sock.on('error', () => { sock.destroy(); reject(); });
+      sock.on('timeout', () => { sock.destroy(); reject(); });
+      sock.connect(53, '8.8.8.8');
+    });
+    checks.push({ component: 'internet', status: 'pass', message: 'Internet reachable' });
+  } catch { checks.push({ component: 'internet', status: 'warn', message: 'No internet connectivity' }); }
+
+  checks.push({ component: 'server_process', status: minecraftServer.isRunning ? 'pass' : 'warn', message: minecraftServer.isRunning ? 'Server running' : 'Server stopped' });
+
+  if (serverId) {
+    const recentCrashes = db.prepare("SELECT COUNT(*) as c FROM crash_reports WHERE server_id = ? AND created_at > datetime('now', '-1 hour')").get(serverId) as any;
+    if (recentCrashes?.c > 0) checks.push({ component: 'stability', status: 'warn', message: `${recentCrashes.c} crash(es) in last hour` });
+    else checks.push({ component: 'stability', status: 'pass', message: 'No recent crashes' });
+  } else {
+    checks.push({ component: 'stability', status: 'pass', message: 'No server selected' });
+  }
+
+  const overall = checks.every(c => c.status === 'pass') ? 'pass' : checks.some(c => c.status === 'fail') ? 'fail' : 'warn';
+  res.json({ status: overall, checks, timestamp: Date.now() });
+});
+
+// Real-time metrics endpoint (lightweight, auth not required for monitoring tools)
+router.get('/metrics', async (_req, res) => {
+  const serverId = getActiveServerId();
+  const db = getDatabase();
+  const running = minecraftServer.isRunning;
+  let latestStats: any = null;
+  if (serverId) {
+    latestStats = db.prepare('SELECT * FROM system_stats WHERE server_id = ? ORDER BY timestamp DESC LIMIT 1').get(serverId);
+  }
+
+  const onlinePlayers = serverId
+    ? (db.prepare('SELECT COUNT(*) as count FROM players WHERE status = ? AND (server_id = ? OR server_id IS NULL)').get('online', serverId) as any)
+    : (db.prepare('SELECT COUNT(*) as count FROM players WHERE status = ?').get('online') as any);
+
+  res.json({
+    server: {
+      running,
+      state: minecraftServer.state,
+      tps: running ? (latestStats?.tps || minecraftServer.currentTps) : null,
+      cpu: running ? (latestStats?.cpu ?? null) : null,
+      ram: running ? (latestStats?.ram ?? null) : null,
+      players: running ? (onlinePlayers?.count || 0) : null,
+      uptime: running ? minecraftServer.uptime : null,
+      port: minecraftServer.getConfig()?.port || 25565,
+    },
+    system: {
+      cpu: os.loadavg ? os.loadavg()[0] : null,
+      ramTotal: os.totalmem(),
+      ramFree: os.freemem(),
+      platform: os.platform(),
+      hostname: os.hostname(),
+    },
+    process: {
+      uptime: process.uptime(),
+      memory: process.memoryUsage(),
+      version: process.version,
+    },
+    timestamp: Date.now(),
+  });
+});
+
 router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
   const db = getDatabase();
-  const onlinePlayers = db.prepare('SELECT COUNT(*) as count FROM players WHERE status = ?').get('online') as any;
-  const totalPlayers = db.prepare('SELECT COUNT(*) as count FROM players').get() as any;
+  const serverId = getActiveServerId();
+  const onlinePlayers = db.prepare('SELECT COUNT(*) as count FROM players WHERE status = ? AND (server_id = ? OR server_id IS NULL)').get('online', serverId) as any;
+  const totalPlayers = db.prepare('SELECT COUNT(*) as count FROM players WHERE server_id = ? OR server_id IS NULL').get(serverId) as any;
 
-  const latestStats = db.prepare('SELECT * FROM system_stats ORDER BY timestamp DESC LIMIT 1').get() as any;
+  const latestStats = serverId
+    ? db.prepare('SELECT * FROM system_stats WHERE server_id = ? ORDER BY timestamp DESC LIMIT 1').get(serverId) as any
+    : db.prepare('SELECT * FROM system_stats ORDER BY timestamp DESC LIMIT 1').get() as any;
 
   const config = minecraftServer.getConfig();
   const mcMaxRam = parseInt(config.maxRam) * 1024 || 8192;
 
-  // Read server details from servers table
-  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
   let serverVersion = 'Unknown';
   let serverSoftware = '';
   let serverNameFromDb = '';
   let serverPortFromDb = 0;
-  if (activeId) {
-    const srv = db.prepare('SELECT name, port, version, version_source FROM servers WHERE id = ?').get(activeId) as any;
+  if (serverId) {
+    const srv = db.prepare('SELECT name, port, version, version_source FROM servers WHERE id = ?').get(serverId) as any;
     if (srv) {
       serverNameFromDb = srv.name || '';
       serverPortFromDb = srv.port || 0;
@@ -303,7 +395,7 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
   const state = minecraftServer.state;
   const running = minecraftServer.isRunning;
   const status = {
-    serverId: activeId,
+    serverId: serverId,
     state,
     running,
     starting: minecraftServer.isStarting,
@@ -321,7 +413,7 @@ router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
     ramTotal: mcMaxRam,
     systemRamTotal: cachedSysStats.systemRamTotal,
     systemRamUsed: cachedSysStats.systemRamUsed,
-    tps: running ? (latestStats?.tps || 20) : null,
+    tps: running ? (latestStats?.tps || minecraftServer.currentTps) : null,
     diskTotal: cachedSysStats.diskTotal,
     diskUsed: cachedSysStats.diskUsed,
     mcDirSize: cachedSysStats.mcDirSize,
@@ -1170,11 +1262,11 @@ router.get('/versions', authMiddleware, async (_req: AuthRequest, res) => {
   const db = getDatabase();
 
   // Read current version
-  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+  const serverId = getActiveServerId();
   let currentVersion = 'unknown';
   let currentSource = 'unknown';
-  if (activeId) {
-    const server = db.prepare('SELECT version, version_source, jarFile FROM servers WHERE id = ?').get(activeId) as any;
+  if (serverId) {
+    const server = db.prepare('SELECT version, version_source, jarFile FROM servers WHERE id = ?').get(serverId) as any;
     if (server?.version) {
       currentVersion = server.version;
       currentSource = server.version_source || 'unknown';
@@ -1514,8 +1606,8 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
     }
 
     const db = getDatabase();
-    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
-    if (activeId) {
+    const serverId = getActiveServerId();
+    if (serverId) {
       let sourceName = 'Mojang';
       if (usePaper) sourceName = 'PaperMC';
       else if (useFabric) sourceName = 'Fabric';
@@ -1526,7 +1618,7 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
       else if (useSpigot) sourceName = 'Spigot';
       else if (useFolia) sourceName = 'Folia';
       else if (usePufferfish) sourceName = 'Pufferfish';
-      db.prepare("UPDATE servers SET version = ?, version_source = ?, updated_at = datetime('now') WHERE id = ?").run(version, sourceName, activeId);
+      db.prepare("UPDATE servers SET version = ?, version_source = ?, updated_at = datetime('now') WHERE id = ?").run(version, sourceName, serverId);
     }
     let displaySource = 'Vanilla';
     if (usePaper) displaySource = 'Paper';

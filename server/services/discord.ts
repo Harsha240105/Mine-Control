@@ -1,6 +1,7 @@
-import { Client, GatewayIntentBits, TextChannel, VoiceChannel, ChannelType } from 'discord.js';
+import { Client, GatewayIntentBits, TextChannel, VoiceChannel, ChannelType, Message } from 'discord.js';
 import { minecraftServer } from './minecraftServer';
 import { getDatabase } from '../database';
+import { getActiveServerId } from '../db/repository/serverConfigRepository';
 import { activeServer } from '../activeServer';
 import { eventBus } from './eventBus';
 import { emitToAll } from '../socketManager';
@@ -67,6 +68,28 @@ class DiscordService {
       this._ready = true;
     });
 
+    // Message listener for chat bridge and commands
+    this.client.on('messageCreate', async (message: Message) => {
+      if (message.author.bot) return;
+      if (message.channel.id !== this._textChannelId) return;
+      if (!this._ready) return;
+
+      const cfg = this.loadConfig();
+      const prefix = cfg.commandPrefix || '!';
+
+      // Check if message starts with prefix (command)
+      if (message.content.startsWith(prefix)) {
+        await this.handleCommand(message, prefix, cfg);
+        return;
+      }
+
+      // Forward Discord messages to Minecraft if bridge enabled
+      if (cfg.bridgeForwardDiscordToMinecraft && minecraftServer.isRunning) {
+        const sender = message.author.displayName || message.author.username;
+        minecraftServer.sendCommand(`tellraw @a {"text":"[Discord] ${sender}: ${message.content}","color":"blue"}`).catch(() => {});
+      }
+    });
+
     this.client.on('disconnect', () => {
       this._connected = false;
       this._connecting = false;
@@ -95,7 +118,10 @@ class DiscordService {
       if (this._connected && this.client.user) {
         try {
           const db = require('../database').getDatabase();
-          const p = db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online'").get();
+          const sid = getActiveServerId();
+        const p = sid
+          ? db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online' AND (server_id = ? OR server_id IS NULL)").get(sid)
+          : db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online'").get();
           const online = p ? p.c : 0;
           this.client.user.setActivity(`with ${online} players`, { type: 0 }); // 0 = Playing
         } catch {}
@@ -306,20 +332,145 @@ class DiscordService {
     };
   }
 
+  // --- Command Handling ---
+
+  private async handleCommand(message: Message, prefix: string, cfg: any) {
+    const args = message.content.slice(prefix.length).trim().split(/ +/);
+    const command = args.shift()?.toLowerCase();
+
+    if (!command) return;
+
+    // Role check
+    if (cfg.allowedRoleIds) {
+      const allowedIds = cfg.allowedRoleIds.split(',').map((s: string) => s.trim()).filter(Boolean);
+      if (allowedIds.length > 0 && message.member) {
+        const hasRole = message.member.roles.cache.some((r: any) => allowedIds.includes(r.id));
+        if (!hasRole) {
+          await message.reply('❌ You do not have permission to use bot commands.');
+          return;
+        }
+      }
+    }
+
+    switch (command) {
+      case 'players':
+      case 'list':
+        await this.handlePlayersCommand(message);
+        break;
+      case 'status':
+        await this.handleStatusCommand(message);
+        break;
+      case 'tps':
+        await this.handleTpsCommand(message);
+        break;
+      case 'command':
+      case 'cmd':
+        await this.handleConsoleCommand(message, args);
+        break;
+      case 'help':
+        await this.handleHelpCommand(message, prefix);
+        break;
+      default:
+        await message.reply(`Unknown command. Try \`${prefix}help\`.`);
+    }
+  }
+
+  private async handlePlayersCommand(message: Message) {
+    const db = getDatabase();
+    const serverId = getActiveServerId();
+    if (!serverId) { await message.reply('No server selected.'); return; }
+    const players = db.prepare("SELECT username, playtime FROM players WHERE server_id = ? AND status = 'online' ORDER BY playtime DESC").all(serverId) as any[];
+    const count = players.length;
+    if (count === 0) {
+      await message.reply('📭 No players online.');
+      return;
+    }
+    const list = players.map((p: any, i: number) => `${i + 1}. **${p.username}** (${Math.round(p.playtime / 60)}min)`).join('\n');
+    await message.reply(`👥 **${count} player(s) online:**\n${list}`);
+  }
+
+  private async handleStatusCommand(message: Message) {
+    const serverId = getActiveServerId();
+    const db = getDatabase();
+    const running = minecraftServer.isRunning;
+    const config = minecraftServer.getConfig();
+    const port = config?.port || 25565;
+    const tps = minecraftServer.currentTps;
+    const uptime = minecraftServer.uptime;
+    const d = Math.floor(uptime / 86400);
+    const h = Math.floor((uptime % 86400) / 3600);
+    const m = Math.floor((uptime % 3600) / 60);
+    const online = serverId
+      ? (db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online' AND (server_id = ? OR server_id IS NULL)").get(serverId) as any)?.c || 0
+      : 0;
+    const serverRow = serverId ? db.prepare('SELECT name, version, version_source FROM servers WHERE id = ?').get(serverId) as any : null;
+    await message.reply(
+      `**${serverRow?.name || 'Minecraft Server'}**\n` +
+      `State: ${running ? '🟢 Running' : '🔴 Stopped'} | Port: ${port}\n` +
+      `TPS: ${running ? tps.toFixed(1) : 'N/A'} | Players: ${online}\n` +
+      `Uptime: ${d}d ${h}h ${m}m\n` +
+      `Version: ${serverRow?.version_source || ''} ${serverRow?.version || ''}`
+    );
+  }
+
+  private async handleTpsCommand(message: Message) {
+    if (!minecraftServer.isRunning) { await message.reply('Server is not running.'); return; }
+    const tps = minecraftServer.currentTps;
+    const color = tps >= 19 ? '🟢' : tps >= 15 ? '🟡' : '🔴';
+    await message.reply(`${color} Current TPS: **${tps.toFixed(1)}**`);
+  }
+
+  private async handleConsoleCommand(message: Message, args: string[]) {
+    if (!minecraftServer.isRunning) { await message.reply('Server is not running.'); return; }
+    const cmd = args.join(' ');
+    if (!cmd) { await message.reply('Usage: `!command <console command>`'); return; }
+    await minecraftServer.sendCommand(cmd);
+    await message.reply(`✅ Sent command: \`/${cmd}\``);
+  }
+
+  private async handleHelpCommand(message: Message, prefix: string) {
+    await message.reply(
+      `**Bot Commands:**\n` +
+      `\`${prefix}players\` — List online players\n` +
+      `\`${prefix}status\` — Server status\n` +
+      `\`${prefix}tps\` — Current TPS\n` +
+      `\`${prefix}command <cmd>\` — Run console command\n` +
+      `\`${prefix}help\` — This message`
+    );
+  }
+
+  // --- Chat Bridge (forward Minecraft chat to Discord) ---
+
+  async sendChatMessage(username: string, message: string) {
+    if (!this._connected || !this._textChannelId) return;
+    const cfg = this.loadConfig();
+    if (!cfg.chatBridgeEnabled) return;
+    await this.sendEmbed({
+      title: `💬 ${username}`,
+      description: message,
+      color: 0x5865f2,
+      footer: 'Minecraft Chat',
+      timestamp: true,
+    });
+  }
+
   // --- Notification Builders ---
 
   private getServerInfo(): any {
     const db = getDatabase();
-    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
-    if (!activeId) return { name: 'MineControl OS', port: 25565, version: '', version_source: 'Minecraft', autoRestart: false };
-    return db.prepare('SELECT * FROM servers WHERE id = ?').get(activeId) || { name: 'MineControl OS', port: 25565, version: '', version_source: 'Minecraft', autoRestart: false };
+    const serverId = getActiveServerId();
+    if (!serverId) return { name: 'MineControl OS', port: 25565, version: '', version_source: 'Minecraft', autoRestart: false };
+    return db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId) || { name: 'MineControl OS', port: 25565, version: '', version_source: 'Minecraft', autoRestart: false };
   }
 
   async notifyServerStarted() {
     if (!this.shouldNotify('notify_server_start')) return;
     const server = this.getServerInfo();
     const db = getDatabase();
-    const players = db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online'").get() as any;
+    const sid = getActiveServerId();
+    const players = sid
+      ? db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online' AND (server_id = ? OR server_id IS NULL)").get(sid)
+      : db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online'").get() as any;
     const online = players?.c || 0;
 
     let voiceLine = '';
@@ -404,7 +555,10 @@ class DiscordService {
     if (!this.shouldNotify('notify_player_join')) return;
     const db = getDatabase();
     const now = new Date().toISOString();
-    const players = db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online'").get() as any;
+    const sid = getActiveServerId();
+    const players = sid
+      ? db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online' AND (server_id = ? OR server_id IS NULL)").get(sid)
+      : db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online'").get() as any;
     const online = players?.c || 0;
 
     await this.sendEmbed({
@@ -422,7 +576,10 @@ class DiscordService {
   async notifyPlayerLeft(username: string) {
     if (!this.shouldNotify('notify_player_left')) return;
     const db = getDatabase();
-    const players = db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online'").get() as any;
+    const sid = getActiveServerId();
+    const players = sid
+      ? db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online' AND (server_id = ? OR server_id IS NULL)").get(sid)
+      : db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online'").get() as any;
     const online = players?.c || 0;
 
     await this.sendEmbed({
@@ -591,36 +748,40 @@ class DiscordService {
 
   private loadConfig() {
     const db = getDatabase();
-    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
-    if (!activeId) return { botToken: '', textChannelId: '', voiceChannelId: '', autoReconnect: true };
+    const serverId = getActiveServerId();
+    if (!serverId) return { botToken: '', textChannelId: '', voiceChannelId: '', autoReconnect: true, chatBridgeEnabled: false, bridgeForwardDiscordToMinecraft: false, commandPrefix: '!', allowedRoleIds: '' };
 
-    const row = db.prepare('SELECT * FROM discord_config WHERE server_id = ?').get(activeId) as any;
-    if (!row) return { botToken: '', textChannelId: '', voiceChannelId: '', autoReconnect: true };
+    const row = db.prepare('SELECT * FROM discord_config WHERE server_id = ?').get(serverId) as any;
+    if (!row) return { botToken: '', textChannelId: '', voiceChannelId: '', autoReconnect: true, chatBridgeEnabled: false, bridgeForwardDiscordToMinecraft: false, commandPrefix: '!', allowedRoleIds: '' };
 
     return {
       botToken: row.bot_token || '',
       textChannelId: row.text_channel_id || '',
       voiceChannelId: row.voice_channel_id || '',
       autoReconnect: !!row.auto_reconnect,
+      chatBridgeEnabled: !!row.chat_bridge_enabled,
+      bridgeForwardDiscordToMinecraft: !!row.bridge_forward_discord_to_minecraft,
+      commandPrefix: row.command_prefix || '!',
+      allowedRoleIds: row.allowed_role_ids || '',
     };
   }
 
   private persistStatus(status: string) {
     const db = getDatabase();
-    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
-    if (!activeId) return;
+    const serverId = getActiveServerId();
+    if (!serverId) return;
 
     db.prepare(`
       UPDATE discord_config SET bot_status = ?, last_error = ?, updated_at = datetime('now')
       WHERE server_id = ?
-    `).run(status, this._lastError, activeId);
+    `).run(status, this._lastError, serverId);
   }
 
   private shouldNotify(key: string): boolean {
     const db = getDatabase();
-    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
-    if (!activeId) return false;
-    const row = db.prepare(`SELECT ${key} FROM discord_config WHERE server_id = ?`).get(activeId) as any;
+    const serverId = getActiveServerId();
+    if (!serverId) return false;
+    const row = db.prepare(`SELECT ${key} FROM discord_config WHERE server_id = ?`).get(serverId) as any;
     return row ? !!row[key] : false;
   }
 
@@ -649,6 +810,9 @@ class DiscordService {
     this.hook('server:crashed', (err: string) => this.notifyServerCrashed(err));
     this.hook('player:join', (username: string) => this.notifyPlayerJoined(username));
     this.hook('player:leave', (username: string) => this.notifyPlayerLeft(username));
+
+    // Chat bridge: forward Minecraft chat to Discord
+    this.hook('player:chat', (username: string, message: string) => this.sendChatMessage(username, message));
 
     // Backup events via event bus
     this.hookBus('backup:created', (data: any) => this.notifyBackupCreated(data));

@@ -8,6 +8,7 @@ import { emitToAll } from '../socketManager';
 import { activeServer } from '../activeServer';
 import { minecraftServer } from './minecraftServer';
 import { eventBus } from './eventBus';
+import { getActiveServerId } from '../db/repository/serverConfigRepository';
 
 const BACKUP_DIR = () => resolveMinecraftDir('backups');
 const WORLDS_DIR = () => resolveMinecraftDir('worlds');
@@ -15,14 +16,6 @@ const TEMP_DIR = () => path.join(BACKUP_DIR(), '.temp_restore');
 const ENC_KEY = process.env.BACKUP_KEY || 'minecontrol-os-secure-key-2024';
 
 const configFiles = ['server.properties', 'eula.txt', 'whitelist.json', 'ops.json', 'banned-players.json', 'banned-ips.json', 'usercache.json'];
-
-function getActiveServerId(): string | null {
-  try {
-    const db = getDatabase();
-    const row = db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any;
-    return row?.value || null;
-  } catch { return null; }
-}
 
 function getServerMeta(): { version: string; software: string } {
   try {

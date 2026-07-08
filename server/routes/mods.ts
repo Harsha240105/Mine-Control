@@ -5,13 +5,9 @@ import { getDatabase } from '../database';
 import { authMiddleware, requirePermission, AuthRequest } from '../middleware/auth';
 import { resolveMinecraftDir } from '../paths';
 import { emitToAll } from '../socketManager';
+import { getActiveServerId } from '../db/repository/serverConfigRepository';
 
 const router = Router();
-
-function getActiveServerId(): string | null {
-  const db = getDatabase();
-  return (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value || null;
-}
 
 function getModsDir(): string {
   return resolveMinecraftDir('mods');
@@ -204,7 +200,8 @@ router.delete('/:name', authMiddleware, requirePermission('plugin.manage'), (req
   }
 
   const db = getDatabase();
-  db.prepare('DELETE FROM mods WHERE name = ?').run(req.params.name);
+  const serverId = getActiveServerId();
+  db.prepare('DELETE FROM mods WHERE name = ? AND server_id = ?').run(req.params.name, serverId);
 
   emitToAll('mod:removed', { name: req.params.name });
   res.json({ success: true });
@@ -213,14 +210,15 @@ router.delete('/:name', authMiddleware, requirePermission('plugin.manage'), (req
 router.post('/:name/toggle', authMiddleware, requirePermission('plugin.manage'), (req: AuthRequest, res) => {
   const MODS_DIR = getModsDir();
   const db = getDatabase();
-  const mod = db.prepare('SELECT * FROM mods WHERE name = ?').get(req.params.name) as any;
+  const serverId = getActiveServerId();
+  const mod = db.prepare('SELECT * FROM mods WHERE name = ? AND (server_id = ? OR server_id IS NULL)').get(req.params.name, serverId) as any;
 
   if (!mod) {
     return res.status(404).json({ error: 'Mod not found' });
   }
 
   const newState = mod.enabled ? 0 : 1;
-  db.prepare('UPDATE mods SET enabled = ? WHERE name = ?').run(newState, req.params.name);
+  db.prepare('UPDATE mods SET enabled = ? WHERE name = ? AND server_id = ?').run(newState, req.params.name, serverId);
 
   const jarPath = path.join(MODS_DIR, `${req.params.name}.jar`);
   const disabledPath = path.join(MODS_DIR, `${req.params.name}.jar.disabled`);

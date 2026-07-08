@@ -8,6 +8,7 @@ import unzipper from 'unzipper';
 import { getDatabase } from '../database';
 import { resolveMinecraftDir, setMinecraftDir } from '../paths';
 import { JavaManager, JavaVersion } from './JavaManager';
+import { buildJvmArgs, autoTune } from './performanceTuner';
 
 export enum ServerState {
   STOPPED = 'stopped',
@@ -68,6 +69,7 @@ class MinecraftServerManager extends EventEmitter {
 
   get isRunning(): boolean { return this._state === ServerState.RUNNING; }
   get isStarting(): boolean { return this._state === ServerState.STARTING; }
+  get currentTps(): number { return this._currentTps; }
 
   private setState(newState: ServerState) {
     const prev = this._state;
@@ -77,10 +79,11 @@ class MinecraftServerManager extends EventEmitter {
     }
     // Update database server status
     try {
-      const db = getDatabase();
-      const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+      const { getActiveServerId } = require('../db/repository/serverConfigRepository');
+      const { updateServerStatus } = require('../db/repository/serverRepository');
+      const activeId = getActiveServerId();
       if (activeId) {
-        db.prepare("UPDATE servers SET status = ?, updated_at = datetime('now') WHERE id = ?").run(newState, activeId);
+        updateServerStatus(activeId, newState);
       }
     } catch (e) { /* ignore */ }
     this.emit('server:state', newState, prev);
@@ -95,13 +98,14 @@ class MinecraftServerManager extends EventEmitter {
     this.ensureDirectories();
     // Persist server state to database on load
     try {
-      const { getDatabase } = require('../database');
-      const activeId = (getDatabase().prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+      const { getActiveServerId } = require('../db/repository/serverConfigRepository');
+      const { updateServerStatus } = require('../db/repository/serverRepository');
+      const { getServerById } = require('../db/repository/serverRepository');
+      const activeId = getActiveServerId();
       if (activeId) {
-        const db = getDatabase();
-        const savedState = db.prepare('SELECT status FROM servers WHERE id = ?').get(activeId) as any;
+        const savedState = getServerById(activeId);
         if (savedState && (savedState.status === 'running' || savedState.status === 'starting')) {
-          db.prepare("UPDATE servers SET status = 'stopped', updated_at = datetime('now') WHERE id = ?").run(activeId);
+          updateServerStatus(activeId, 'stopped');
           this.emit('server:output', '[MineControl] Previous server session ended. Server state reset to stopped.\n');
         }
       }
@@ -640,10 +644,10 @@ class MinecraftServerManager extends EventEmitter {
     this._lastJavaInfo = { path: javaPath, version: javaVersion, majorVersion: javaMajor, source: 'MANAGED', vendor: javaVendor, javaHome };
     try {
       const db = getDatabase();
-      const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
-      if (activeId) {
+      const serverId = this.getServerIdFromDb();
+      if (serverId) {
         db.prepare("UPDATE servers SET javaPath = ?, javaVersion = ?, javaVendor = ?, javaHome = ?, updated_at = datetime('now') WHERE id = ?")
-          .run(javaPath, `${javaMajor}.0.0`, javaVendor, javaHome, activeId);
+          .run(javaPath, `${javaMajor}.0.0`, javaVendor, javaHome, serverId);
       }
     } catch {}
   }
@@ -731,7 +735,7 @@ class MinecraftServerManager extends EventEmitter {
       this.appendStartupLog('Syncing server configuration...');
       this.syncServerProperties(config);
 
-      // Phase 5: Memory check
+      // Phase 5: Memory check + auto tune
       const totalMem = Math.round(os.totalmem() / 1024 / 1024 / 1024);
       const maxRamNum = parseInt(config.maxRam || '8');
       if (maxRamNum > totalMem) {
@@ -741,6 +745,23 @@ class MinecraftServerManager extends EventEmitter {
       }
       this.appendStartupLog(`Memory: ${config.minRam} min / ${config.maxRam} max`);
 
+      // Auto-calculate view-distance and simulation-distance if not set
+      if (!config.simulationDistance || config.simulationDistance === 0) {
+        const tune = autoTune(maxRamNum);
+        const simDist = tune.recommendedSimulationDistance;
+        this.updateConfig('simulationDistance', String(simDist));
+        config.simulationDistance = simDist;
+        this.appendStartupLog(`Auto-tuned simulation-distance: ${simDist}`);
+      }
+
+      // Build JVM args using performance tuner
+      const jvmArgs = buildJvmArgs({
+        minRam: config.minRam,
+        maxRam: config.maxRam,
+        jvmFlags: config.jvmFlags,
+      });
+      this.appendStartupLog(`JVM flags: ${jvmArgs.join(' ')}`);
+
       // All checks passed — spawn with absolute java executable
       this.appendStartupLog(`Launching: "${javaPath}"`);
 
@@ -749,27 +770,7 @@ class MinecraftServerManager extends EventEmitter {
       this.logStream = fs.createWriteStream(logPath, { flags: 'a' });
 
       const javaArgs = [
-        `-Xms${config.minRam}`,
-        `-Xmx${config.maxRam}`,
-        '-XX:+UseG1GC',
-        '-XX:+ParallelRefProcEnabled',
-        '-XX:MaxGCPauseMillis=200',
-        '-XX:+UnlockExperimentalVMOptions',
-        '-XX:+DisableExplicitGC',
-        '-XX:+AlwaysPreTouch',
-        '-XX:G1NewSizePercent=30',
-        '-XX:G1MaxNewSizePercent=40',
-        '-XX:G1HeapRegionSize=8M',
-        '-XX:G1ReservePercent=20',
-        '-XX:G1HeapWastePercent=5',
-        '-XX:G1MixedGCCountTarget=4',
-        '-XX:InitiatingHeapOccupancyPercent=15',
-        '-XX:G1MixedGCLiveThresholdPercent=90',
-        '-XX:G1RSetUpdatingPauseTimePercent=5',
-        '-XX:SurvivorRatio=32',
-        '-XX:+PerfDisableSharedMem',
-        '-XX:MaxTenuringThreshold=1',
-        '-Dfile.encoding=UTF-8',
+        ...jvmArgs,
         '-jar',
         jarPath,
         '--nogui',
@@ -1060,7 +1061,7 @@ class MinecraftServerManager extends EventEmitter {
 
     for (const line of lines) {
       this.outputBuffer.push(line);
-      if (this.outputBuffer.length > 100) {
+      if (this.outputBuffer.length > 1000) {
         this.outputBuffer.shift();
       }
       this.emit('server:output', line + '\n');
@@ -1136,7 +1137,9 @@ class MinecraftServerManager extends EventEmitter {
   private updatePlayerStatus(username: string, status: string) {
     try {
       const db = getDatabase();
-      const player = db.prepare('SELECT * FROM players WHERE username = ?').get(username) as any;
+      const { getActiveServerId } = require('../db/repository/serverConfigRepository');
+      const serverId = getActiveServerId();
+      const player = db.prepare('SELECT * FROM players WHERE username = ? AND (server_id = ? OR server_id IS NULL)').get(username, serverId) as any;
       const now = new Date().toISOString();
       if (player) {
         const updates: string[] = ['status = ?', 'last_login = ?'];
@@ -1157,8 +1160,8 @@ class MinecraftServerManager extends EventEmitter {
         const lastLogin = player.last_login ? new Date(player.last_login).getTime() : Date.now();
         const timeDiff = Math.floor((Date.now() - lastLogin) / 1000);
         values.push(status === 'offline' ? Math.min(timeDiff, 86400) : 0);
-        values.push(player.id || username);
-        db.prepare(`UPDATE players SET ${updates.join(', ')} WHERE id = ? OR username = ?`).run(...values);
+        values.push(player.id || username, serverId);
+        db.prepare(`UPDATE players SET ${updates.join(', ')} WHERE (id = ? OR username = ?) AND server_id = ?`).run(...values);
       } else {
         // Auto-register unknown player — lookup real UUID from usercache
         let realUuid: string | undefined;
@@ -1173,8 +1176,8 @@ class MinecraftServerManager extends EventEmitter {
         const id = require('uuid').v4();
         const uuid = realUuid || id;
         db.prepare(
-          'INSERT INTO players (id, username, uuid, status, last_login, first_join, join_date) VALUES (?, ?, ?, ?, ?, ?, ?)'
-        ).run(id, username, uuid, 'online', now, now, now);
+          'INSERT INTO players (id, username, uuid, status, last_login, first_join, join_date, server_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(id, username, uuid, 'online', now, now, now, serverId);
         // Run enrichment after creating record with correct UUID
         if (realUuid) {
           this.enrichPlayerData(username, { uuid: realUuid, username });
@@ -1316,9 +1319,9 @@ class MinecraftServerManager extends EventEmitter {
   private logChat(username: string, message: string) {
     try {
       const db = getDatabase();
-      const player = db.prepare('SELECT uuid FROM players WHERE username = ?').get(username) as any;
-      db.prepare('INSERT INTO chat_log (username, uuid, message) VALUES (?, ?, ?)')
-        .run(username, player?.uuid || null, message);
+      const player = db.prepare('SELECT uuid FROM players WHERE username = ? AND (server_id = ? OR server_id IS NULL)').get(username, this.getServerIdFromDb()) as any;
+      db.prepare('INSERT INTO chat_log (username, uuid, message, server_id) VALUES (?, ?, ?, ?)')
+        .run(username, player?.uuid || null, message, this.getServerIdFromDb());
     } catch (e) {
       // ignore
     }
@@ -1420,8 +1423,15 @@ class MinecraftServerManager extends EventEmitter {
         // Store stats in database
         try {
           const db = getDatabase();
-          db.prepare('INSERT INTO system_stats (cpu, ram, tps, players, timestamp) VALUES (?, ?, ?, ?, ?)')
-            .run(statsData.cpu, statsData.ram, statsData.tps, statsData.players, Date.now());
+          const { getActiveServerId } = require('../db/repository/serverConfigRepository');
+          const sid = getActiveServerId();
+          if (sid) {
+            db.prepare('INSERT INTO system_stats (cpu, ram, tps, players, timestamp, server_id) VALUES (?, ?, ?, ?, ?, ?)')
+              .run(statsData.cpu, statsData.ram, statsData.tps, statsData.players, Date.now(), sid);
+          } else {
+            db.prepare('INSERT INTO system_stats (cpu, ram, tps, players, timestamp) VALUES (?, ?, ?, ?, ?)')
+              .run(statsData.cpu, statsData.ram, statsData.tps, statsData.players, Date.now());
+          }
         } catch (e) {
           // ignore
         }
@@ -1434,19 +1444,32 @@ class MinecraftServerManager extends EventEmitter {
   private getOnlinePlayersCount(): number {
     try {
       const db = getDatabase();
-      const count = db.prepare('SELECT COUNT(*) as count FROM players WHERE status = ?').get('online') as any;
+      const serverId = this.getServerIdFromDb();
+      const count = serverId
+        ? db.prepare('SELECT COUNT(*) as count FROM players WHERE status = ? AND (server_id = ? OR server_id IS NULL)').get('online', serverId) as any
+        : db.prepare('SELECT COUNT(*) as count FROM players WHERE status = ?').get('online') as any;
       return count?.count || 0;
     } catch {
       return 0;
     }
   }
 
+  private getServerIdFromDb(): string | null {
+    try {
+      const db = getDatabase();
+      const { getActiveServerId } = require('../db/repository/serverConfigRepository');
+      return getActiveServerId();
+    } catch {
+      return null;
+    }
+  }
+
   getConfig() {
     const db = getDatabase();
-    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+    const serverId = this.getServerIdFromDb();
     let server: any = null;
-    if (activeId) {
-      server = db.prepare('SELECT * FROM servers WHERE id = ?').get(activeId) as any;
+    if (serverId) {
+      server = db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId) as any;
     }
 
     const rows = db.prepare('SELECT key, value FROM server_config').all() as any[];
@@ -1484,6 +1507,8 @@ class MinecraftServerManager extends EventEmitter {
         backupEncryption: false,
         whitelistEnabled: !!server.whitelistEnabled,
         viewDistance: server.viewDistance || 10,
+        simulationDistance: server.simulationDistance || 0,
+        jvmFlags: server.jvm_flags || '',
         motd: server.motd || '§bMineControl OS §7- §fMinecraft Server',
         difficulty: server.difficulty || 'normal',
         gamemode: server.gamemode || 'survival',
@@ -1530,8 +1555,8 @@ class MinecraftServerManager extends EventEmitter {
     const propsKeys = ['port', 'onlineMode', 'serverIp'];
     const shouldSyncProps = propsKeys.includes(key);
     const prevConfig = shouldSyncProps ? this.getConfig() : null;
-    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
-    if (activeId) {
+    const serverId = this.getServerIdFromDb();
+    if (serverId) {
       // Map common keys to server columns
       const columnMap: Record<string, string> = {
         javaPath: 'javaPath',
@@ -1549,6 +1574,8 @@ class MinecraftServerManager extends EventEmitter {
         pvp: 'pvp',
         maxPlayers: 'maxPlayers',
         viewDistance: 'viewDistance',
+        simulationDistance: 'simulationDistance',
+        jvmFlags: 'jvm_flags',
         onlineMode: 'onlineMode',
         autoRestart: 'autoRestart',
         autoBackup: 'autoBackup',
@@ -1560,7 +1587,7 @@ class MinecraftServerManager extends EventEmitter {
         if (['pvp', 'onlineMode', 'autoRestart', 'autoBackup', 'whitelistEnabled'].includes(col)) {
           val = value === 'true' || value === '1' ? '1' : '0';
         }
-        db.prepare(`UPDATE servers SET ${col} = ?, updated_at = datetime('now') WHERE id = ?`).run(val, activeId);
+        db.prepare(`UPDATE servers SET ${col} = ?, updated_at = datetime('now') WHERE id = ?`).run(val, serverId);
         return;
       }
     }

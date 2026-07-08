@@ -8,6 +8,7 @@ import https from 'https';
 import { mcPing, mcPingWithProxy, getProxyProtocolHint } from './mcPing';
 import { minecraftServer } from './minecraftServer';
 import { getDatabase } from '../database';
+import { getActiveServerId } from '../db/repository/serverConfigRepository';
 import { resolveMinecraftDir } from '../paths';
 import { firewallManager } from './firewallManager';
 
@@ -243,7 +244,8 @@ export async function validateServer(port?: number): Promise<ValidationResult> {
               result.playit = { status: 'fail', message: `Playit.gg tunnel resolves but Minecraft is not responding through it. The tunnel likely has proxy-protocol enabled. Your server software supports it — enable proxy-protocol in your server config (e.g., paper.yml: settings.proxy-protocol: true).` };
             } else {
               // Local server rejects proxy-protocol — it won't work with this tunnel
-              const versionSource = ((db.prepare("SELECT version_source FROM servers WHERE id = (SELECT value FROM server_config WHERE key = 'active_server_id')").get() as any)?.version_source) || 'Unknown';
+              const sid = getActiveServerId();
+              const versionSource = sid ? ((db.prepare("SELECT version_source FROM servers WHERE id = ?").get(sid) as any)?.version_source) || 'Unknown' : 'Unknown';
               const hint = getProxyProtocolHint(versionSource);
               result.playit = { status: 'fail', message: `Playit.gg tunnel resolves but Minecraft is not responding through it. The tunnel has proxy-protocol-v1 enabled, which ${versionSource} does not support. ${hint}` };
             }

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { getDatabase } from '../database';
+import { getActiveServerId } from '../db/repository/serverConfigRepository';
 import { resolveMinecraftDir } from '../paths';
 import { v4 as uuidv4 } from 'uuid';
 import { emitToAll } from '../socketManager';
@@ -102,6 +103,7 @@ export function scanBannedPlayersFile(): { username: string; uuid?: string; reas
 
 export function autoDetectPlayers(): { created: number; updated: number } {
   const db = getDatabase();
+  const serverId = getActiveServerId();
   const serverDir = getServerDir();
   let created = 0;
   let updated = 0;
@@ -110,18 +112,18 @@ export function autoDetectPlayers(): { created: number; updated: number } {
   const detected = scanPlayerDataFiles();
   for (const entry of detected) {
     if (!entry.uuid) continue;
-    const existing = db.prepare('SELECT id FROM players WHERE uuid = ?').get(entry.uuid) as any;
+    const existing = db.prepare('SELECT id FROM players WHERE uuid = ? AND (server_id = ? OR server_id IS NULL)').get(entry.uuid, serverId) as any;
     if (!existing) {
       const id = uuidv4();
       const now = new Date().toISOString();
       db.prepare(
-        'INSERT INTO players (id, username, uuid, role, status, join_date, approval_status, trusted, ops) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(id, entry.username || `Player-${entry.uuid.slice(0, 8)}`, entry.uuid, 'Member', 'offline', now, 'approved', 1, 0);
+        'INSERT INTO players (id, username, uuid, role, status, join_date, approval_status, trusted, ops, server_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(id, entry.username || `Player-${entry.uuid.slice(0, 8)}`, entry.uuid, 'Member', 'offline', now, 'approved', 1, 0, serverId);
       created++;
     } else if (entry.username) {
-      const player = db.prepare('SELECT username FROM players WHERE uuid = ?').get(entry.uuid) as any;
+      const player = db.prepare('SELECT username FROM players WHERE uuid = ? AND (server_id = ? OR server_id IS NULL)').get(entry.uuid, serverId) as any;
       if (player && (!player.username || player.username.startsWith('Player-'))) {
-        db.prepare('UPDATE players SET username = ? WHERE uuid = ?').run(entry.username, entry.uuid);
+        db.prepare('UPDATE players SET username = ? WHERE uuid = ? AND (server_id = ? OR server_id IS NULL)').run(entry.username, entry.uuid, serverId);
         updated++;
       }
     }
@@ -130,21 +132,21 @@ export function autoDetectPlayers(): { created: number; updated: number } {
   // 2. Sync whitelist.json
   const whitelistEntries = scanWhitelistFile();
   for (const entry of whitelistEntries) {
-    const existing = db.prepare('SELECT id FROM whitelist WHERE username = ?').get(entry.username) as any;
+    const existing = db.prepare('SELECT id FROM whitelist WHERE username = ? AND server_id = ?').get(entry.username, serverId) as any;
     if (!existing) {
       const whitelistId = uuidv4();
       db.prepare(
-        'INSERT INTO whitelist (id, username, uuid, added_by, added_at) VALUES (?, ?, ?, ?, ?)'
-      ).run(whitelistId, entry.username, entry.uuid || null, 'auto-detect', new Date().toISOString());
+        'INSERT INTO whitelist (id, username, uuid, added_by, added_at, server_id) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(whitelistId, entry.username, entry.uuid || null, 'auto-detect', new Date().toISOString(), serverId);
     }
     // Ensure player record exists
-    const playerExists = db.prepare('SELECT id FROM players WHERE username = ?').get(entry.username) as any;
+    const playerExists = db.prepare('SELECT id FROM players WHERE username = ? AND (server_id = ? OR server_id IS NULL)').get(entry.username, serverId) as any;
     if (!playerExists) {
       const id = uuidv4();
       const now = new Date().toISOString();
       db.prepare(
-        'INSERT INTO players (id, username, uuid, role, status, join_date, approval_status, trusted, ops) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(id, entry.username, entry.uuid || '', 'Member', 'offline', now, 'approved', 1, 0);
+        'INSERT INTO players (id, username, uuid, role, status, join_date, approval_status, trusted, ops, server_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(id, entry.username, entry.uuid || '', 'Member', 'offline', now, 'approved', 1, 0, serverId);
       created++;
     }
   }
@@ -152,15 +154,15 @@ export function autoDetectPlayers(): { created: number; updated: number } {
   // 3. Sync ops.json
   const opsEntries = scanOpsFile();
   for (const entry of opsEntries) {
-    db.prepare('UPDATE players SET ops = 1 WHERE username = ?').run(entry.username);
+    db.prepare('UPDATE players SET ops = 1 WHERE username = ? AND (server_id = ? OR server_id IS NULL)').run(entry.username, serverId);
     // Ensure player record
-    const playerExists = db.prepare('SELECT id FROM players WHERE username = ?').get(entry.username) as any;
+    const playerExists = db.prepare('SELECT id FROM players WHERE username = ? AND (server_id = ? OR server_id IS NULL)').get(entry.username, serverId) as any;
     if (!playerExists) {
       const id = uuidv4();
       const now = new Date().toISOString();
       db.prepare(
-        'INSERT INTO players (id, username, uuid, role, status, join_date, approval_status, trusted, ops) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-      ).run(id, entry.username, entry.uuid || '', 'Member', 'offline', now, 'approved', 1, 1);
+        'INSERT INTO players (id, username, uuid, role, status, join_date, approval_status, trusted, ops, server_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+      ).run(id, entry.username, entry.uuid || '', 'Member', 'offline', now, 'approved', 1, 1, serverId);
       created++;
     }
   }
@@ -168,12 +170,12 @@ export function autoDetectPlayers(): { created: number; updated: number } {
   // 4. Sync banned-players.json
   const bannedEntries = scanBannedPlayersFile();
   for (const entry of bannedEntries) {
-    db.prepare('UPDATE players SET status = ? WHERE username = ?').run('banned', entry.username);
-    const existing = db.prepare('SELECT id FROM banned_players WHERE username = ?').get(entry.username) as any;
+    db.prepare('UPDATE players SET status = ? WHERE username = ? AND (server_id = ? OR server_id IS NULL)').run('banned', entry.username, serverId);
+    const existing = db.prepare('SELECT id FROM banned_players WHERE username = ? AND server_id = ?').get(entry.username, serverId) as any;
     if (!existing) {
       db.prepare(
-        'INSERT INTO banned_players (id, username, uuid, reason, banned_by, banned_at) VALUES (?, ?, ?, ?, ?, ?)'
-      ).run(uuidv4(), entry.username, entry.uuid || null, entry.reason || 'Banned', 'auto-detect', new Date().toISOString());
+        'INSERT INTO banned_players (id, username, uuid, reason, banned_by, banned_at, server_id) VALUES (?, ?, ?, ?, ?, ?, ?)'
+      ).run(uuidv4(), entry.username, entry.uuid || null, entry.reason || 'Banned', 'auto-detect', new Date().toISOString(), serverId);
     }
   }
 

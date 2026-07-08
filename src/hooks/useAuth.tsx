@@ -10,7 +10,7 @@ interface User {
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, totpToken?: string) => Promise<{ require2FA?: boolean; userId?: string } | void>;
   logout: () => void;
   isOwner: boolean;
   hasPermission: (permission: string) => boolean;
@@ -36,8 +36,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(async (username: string, password: string) => {
+  const login = useCallback(async (username: string, password: string, totpToken?: string) => {
     const result = await api.login(username, password);
+    if ((result as any).require2FA) {
+      return { require2FA: true, userId: (result as any).userId };
+    }
     localStorage.setItem('mc_token', result.token);
     setUser(result.user);
   }, []);

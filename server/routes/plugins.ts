@@ -5,13 +5,9 @@ import { getDatabase } from '../database';
 import { authMiddleware, requirePermission, AuthRequest } from '../middleware/auth';
 import { resolveMinecraftDir } from '../paths';
 import { emitToAll } from '../socketManager';
+import { getActiveServerId } from '../db/repository/serverConfigRepository';
 
 const router = Router();
-
-function getActiveServerId(): string | null {
-  const db = getDatabase();
-  return (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value || null;
-}
 
 function getPluginsDir(): string {
   return resolveMinecraftDir('plugins');
@@ -185,7 +181,8 @@ router.delete('/:name', authMiddleware, requirePermission('plugin.manage'), (req
   }
 
   const db = getDatabase();
-  db.prepare('DELETE FROM plugins WHERE name = ?').run(req.params.name);
+  const serverId = getActiveServerId();
+  db.prepare('DELETE FROM plugins WHERE name = ? AND server_id = ?').run(req.params.name, serverId);
 
   emitToAll('plugin:removed', { name: req.params.name });
   res.json({ success: true });
@@ -194,14 +191,15 @@ router.delete('/:name', authMiddleware, requirePermission('plugin.manage'), (req
 router.post('/:name/toggle', authMiddleware, requirePermission('plugin.manage'), (req: AuthRequest, res) => {
   const PLUGINS_DIR = getPluginsDir();
   const db = getDatabase();
-  const plugin = db.prepare('SELECT * FROM plugins WHERE name = ?').get(req.params.name) as any;
+  const serverId = getActiveServerId();
+  const plugin = db.prepare('SELECT * FROM plugins WHERE name = ? AND (server_id = ? OR server_id IS NULL)').get(req.params.name, serverId) as any;
 
   if (!plugin) {
     return res.status(404).json({ error: 'Plugin not found' });
   }
 
   const newState = plugin.enabled ? 0 : 1;
-  db.prepare('UPDATE plugins SET enabled = ? WHERE name = ?').run(newState, req.params.name);
+  db.prepare('UPDATE plugins SET enabled = ? WHERE name = ? AND server_id = ?').run(newState, req.params.name, serverId);
 
   // Rename jar to disable/enable (add .disabled suffix)
   const jarPath = path.join(PLUGINS_DIR, `${req.params.name}.jar`);

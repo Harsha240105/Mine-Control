@@ -1,17 +1,17 @@
 import express from 'express';
 import { AuthRequest, authMiddleware, requirePermission } from '../middleware/auth';
 import { getDatabase } from '../database';
+import { getActiveServerId } from '../db/repository/serverConfigRepository';
 import { discordService } from '../services/discord';
 
 const router = express.Router();
 
 // Get full Discord configuration + bot status
 router.get('/', authMiddleware, (req: AuthRequest, res) => {
-  const db = getDatabase();
-  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+  const activeId = getActiveServerId();
   if (!activeId) return res.json({ configured: false, error: 'No active server' });
 
-  const row = db.prepare('SELECT * FROM discord_config WHERE server_id = ?').get(activeId) as any;
+  const row = getDatabase().prepare('SELECT * FROM discord_config WHERE server_id = ?').get(activeId) as any;
   const config = row ? {
     botToken: row.bot_token ? '••••••••' : '',
     guildId: row.guild_id || '',
@@ -35,6 +35,10 @@ router.get('/', authMiddleware, (req: AuthRequest, res) => {
     notify_software_changed: !!row.notify_software_changed,
     notify_version_changed: !!row.notify_version_changed,
     notify_update_available: !!row.notify_update_available,
+    chat_bridge_enabled: !!row.chat_bridge_enabled,
+    bridge_forward_discord_to_minecraft: !!row.bridge_forward_discord_to_minecraft,
+    command_prefix: row.command_prefix || '!',
+    allowed_role_ids: row.allowed_role_ids || '',
     botStatus: row.bot_status || 'disconnected',
     lastConnectedAt: row.last_connected_at,
     lastError: row.last_error || '',
@@ -46,7 +50,7 @@ router.get('/', authMiddleware, (req: AuthRequest, res) => {
 // Save Discord configuration
 router.post('/', authMiddleware, requirePermission('settings.edit'), async (req: AuthRequest, res) => {
   const db = getDatabase();
-  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+  const activeId = getActiveServerId();
   if (!activeId) return res.status(400).json({ error: 'No active server' });
 
   const existing = db.prepare('SELECT id FROM discord_config WHERE server_id = ?').get(activeId);
@@ -58,6 +62,7 @@ router.post('/', authMiddleware, requirePermission('settings.edit'), async (req:
     'notify_player_join', 'notify_player_left', 'notify_player_kicked',
     'notify_player_banned', 'notify_player_unbanned', 'notify_player_approved',
     'notify_whitelist_updated', 'notify_software_changed', 'notify_version_changed', 'notify_update_available',
+    'chat_bridge_enabled', 'bridge_forward_discord_to_minecraft', 'command_prefix', 'allowed_role_ids',
   ];
 
   const updateFields: string[] = [];
@@ -104,11 +109,10 @@ router.post('/', authMiddleware, requirePermission('settings.edit'), async (req:
 
 // Connect Discord bot
 router.post('/connect', authMiddleware, requirePermission('settings.edit'), async (req: AuthRequest, res) => {
-  const db = getDatabase();
-  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+  const activeId = getActiveServerId();
   if (!activeId) return res.status(400).json({ error: 'No active server' });
 
-  const row = db.prepare('SELECT * FROM discord_config WHERE server_id = ?').get(activeId) as any;
+  const row = getDatabase().prepare('SELECT * FROM discord_config WHERE server_id = ?').get(activeId) as any;
   if (!row || !row.bot_token || !row.text_channel_id) {
     return res.status(400).json({ success: false, error: 'Discord not configured. Save bot token and channel ID first.' });
   }
@@ -152,12 +156,11 @@ router.get('/permissions', authMiddleware, async (_req: AuthRequest, res) => {
 
 // Get notification history
 router.get('/history', authMiddleware, (req: AuthRequest, res) => {
-  const db = getDatabase();
-  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+  const activeId = getActiveServerId();
   if (!activeId) return res.json([]);
 
   const limit = parseInt(req.query.limit as string) || 20;
-  const history = db.prepare('SELECT * FROM discord_notifications WHERE server_id = ? ORDER BY sent_at DESC LIMIT ?').all(activeId, limit);
+  const history = getDatabase().prepare('SELECT * FROM discord_notifications WHERE server_id = ? ORDER BY sent_at DESC LIMIT ?').all(activeId, limit);
   res.json(history);
 });
 

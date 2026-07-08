@@ -36,6 +36,9 @@ import Feedback from './pages/Feedback';
 import Privacy from './pages/Privacy';
 import Updates from './pages/Updates';
 import Uninstall from './pages/Uninstall';
+import PerformanceSettings from './pages/PerformanceSettings';
+import SecuritySettings from './pages/SecuritySettings';
+import AdminUsers from './pages/AdminUsers';
 import AutoUpdater from './components/AutoUpdater';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -127,6 +130,9 @@ export default function App() {
             <Route path="uninstall" element={<Uninstall />} />
             <Route path="settings" element={<Settings />} />
             <Route path="settings/github" element={<GitHubConfig />} />
+            <Route path="settings/performance" element={<PerformanceSettings />} />
+            <Route path="settings/security" element={<SecuritySettings />} />
+            <Route path="admin/users" element={<AdminUsers />} />
             <Route path="github/diagnostics" element={<GitHubDiagnostics />} />
           </Route>
         </Routes>

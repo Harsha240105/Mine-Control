@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import multer from 'multer';
 import { getDatabase } from '../database';
+import { getActiveServerId } from '../db/repository/serverConfigRepository';
 import { authMiddleware, requirePermission, AuthRequest } from '../middleware/auth';
 import { v4 as uuidv4 } from 'uuid';
 import { resolveMinecraftDir } from '../paths';
@@ -79,15 +80,16 @@ router.get('/', authMiddleware, (req: AuthRequest, res) => {
 // ── Single world details ──
 router.get('/:name', authMiddleware, (req: AuthRequest, res) => {
   const db = getDatabase();
-  const world = db.prepare('SELECT * FROM worlds WHERE name = ?').get(sanitizeWorldName(req.params.name)) as any;
+  const serverId = getActiveServerId();
+  const world = db.prepare('SELECT * FROM worlds WHERE name = ? AND (server_id = ? OR server_id IS NULL)').get(sanitizeWorldName(req.params.name), serverId) as any;
   if (!world) return res.status(404).json({ error: 'World not found' });
 
   const worldPath = world.folder_path || path.join(WORLDS_DIR, world.name);
   const info = getWorldInfo(worldPath);
   const lvl = readLevelDat(worldPath);
   const dims = db.prepare('SELECT * FROM world_dimensions WHERE world_name = ? ORDER BY id').all(world.name);
-  const players = db.prepare("SELECT id, username, uuid, status, dimension, pos_x, pos_y, pos_z FROM players WHERE world_name = ?").all(world.name);
-  const backups = db.prepare("SELECT id, name, size, created_at, type FROM backups WHERE worlds LIKE ? ORDER BY created_at DESC LIMIT 5").all(`%${world.name}%`);
+  const players = db.prepare("SELECT id, username, uuid, status, dimension, pos_x, pos_y, pos_z FROM players WHERE world_name = ? AND (server_id = ? OR server_id IS NULL)").all(world.name, serverId);
+  const backups = db.prepare("SELECT id, name, size, created_at, type FROM backups WHERE worlds LIKE ? AND (server_id = ? OR server_id IS NULL) ORDER BY created_at DESC LIMIT 5").all(`%${world.name}%`, serverId);
 
   res.json({
     ...world,
@@ -115,7 +117,8 @@ router.post('/', authMiddleware, requirePermission('world.manage'), async (req: 
   name = sanitizeWorldName(String(name));
 
   const db = getDatabase();
-  const existing = db.prepare('SELECT name FROM worlds WHERE name = ?').get(name);
+  const serverId = getActiveServerId();
+  const existing = db.prepare('SELECT name FROM worlds WHERE name = ? AND (server_id = ? OR server_id IS NULL)').get(name, serverId);
   if (existing) return res.status(400).json({ error: 'World already exists' });
 
   // Create world directory
@@ -129,8 +132,6 @@ router.post('/', authMiddleware, requirePermission('world.manage'), async (req: 
   const info = getWorldInfo(worldPath);
   const lvl = readLevelDat(worldPath);
   const now = new Date().toISOString();
-
-  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
 
   const world: any = {
     name,
@@ -150,7 +151,7 @@ router.post('/', authMiddleware, requirePermission('world.manage'), async (req: 
     view_distance: viewDistance || 10,
     version: lvl.version || '',
   };
-  if (activeId) world.server_id = activeId;
+  if (serverId) world.server_id = serverId;
 
   const cols = Object.keys(world);
   const vals = Object.values(world);
@@ -164,15 +165,16 @@ router.post('/', authMiddleware, requirePermission('world.manage'), async (req: 
     ).run(name, dim.dimension, dim.displayName, dim.size || '0 B', dim.chunkCount || 0);
   }
 
-  emitToAll('world:created', { name, server_id: activeId });
+  emitToAll('world:created', { name, server_id: serverId });
   res.json({ ...world, size: formatBytes(info.totalSize), dimensions: dims });
 });
 
 // ── Update world settings ──
 router.put('/:name', authMiddleware, requirePermission('world.manage'), (req: AuthRequest, res) => {
   const db = getDatabase();
+  const serverId = getActiveServerId();
   const safeName = sanitizeWorldName(req.params.name);
-  const world = db.prepare('SELECT name FROM worlds WHERE name = ?').get(safeName);
+  const world = db.prepare('SELECT name FROM worlds WHERE name = ? AND (server_id = ? OR server_id IS NULL)').get(safeName, serverId);
   if (!world) return res.status(404).json({ error: 'World not found' });
 
   const allowedFields = ['gamemode', 'difficulty', 'seed', 'generate_structures', 'bonus_chest', 'world_type', 'hardcore', 'simulation_distance', 'view_distance'];
@@ -188,11 +190,11 @@ router.put('/:name', authMiddleware, requirePermission('world.manage'), (req: Au
 
   if (updates.length === 0) return res.status(400).json({ error: 'No fields to update' });
 
-  values.push(safeName);
-  db.prepare(`UPDATE worlds SET ${updates.join(', ')} WHERE name = ?`).run(...values);
+  values.push(safeName, serverId);
+  db.prepare(`UPDATE worlds SET ${updates.join(', ')} WHERE name = ? AND (server_id = ? OR server_id IS NULL)`).run(...values);
 
   emitToAll('world:updated', { name: safeName });
-  const updated = db.prepare('SELECT * FROM worlds WHERE name = ?').get(safeName);
+  const updated = db.prepare('SELECT * FROM worlds WHERE name = ? AND (server_id = ? OR server_id IS NULL)').get(safeName, serverId);
   res.json(updated);
 });
 
@@ -202,15 +204,16 @@ router.post('/:name/rename', authMiddleware, requirePermission('world.manage'), 
   if (!newName) return res.status(400).json({ error: 'New name is required' });
 
   const db = getDatabase();
+  const serverId = getActiveServerId();
   const safeOld = sanitizeWorldName(req.params.name);
   const safeNew = sanitizeWorldName(String(newName));
 
   if (safeOld === safeNew) return res.json({ success: true, name: safeNew });
 
-  const world = db.prepare('SELECT * FROM worlds WHERE name = ?').get(safeOld) as any;
+  const world = db.prepare('SELECT * FROM worlds WHERE name = ? AND (server_id = ? OR server_id IS NULL)').get(safeOld, serverId) as any;
   if (!world) return res.status(404).json({ error: 'World not found' });
 
-  const existing = db.prepare('SELECT name FROM worlds WHERE name = ?').get(safeNew);
+  const existing = db.prepare('SELECT name FROM worlds WHERE name = ? AND (server_id = ? OR server_id IS NULL)').get(safeNew, serverId);
   if (existing) return res.status(400).json({ error: 'World with new name already exists' });
 
   const oldPath = world.folder_path || path.join(WORLDS_DIR, safeOld);
@@ -220,9 +223,9 @@ router.post('/:name/rename', authMiddleware, requirePermission('world.manage'), 
     fs.renameSync(oldPath, newPath);
   }
 
-  db.prepare('UPDATE worlds SET name = ?, folder_path = ? WHERE name = ?').run(safeNew, newPath, safeOld);
+  db.prepare('UPDATE worlds SET name = ?, folder_path = ? WHERE name = ? AND (server_id = ? OR server_id IS NULL)').run(safeNew, newPath, safeOld, serverId);
   db.prepare('UPDATE world_dimensions SET world_name = ? WHERE world_name = ?').run(safeNew, safeOld);
-  db.prepare("UPDATE players SET world_name = ? WHERE world_name = ?").run(safeNew, safeOld);
+  db.prepare("UPDATE players SET world_name = ? WHERE world_name = ? AND (server_id = ? OR server_id IS NULL)").run(safeNew, safeOld, serverId);
 
   emitToAll('world:renamed', { oldName: safeOld, newName: safeNew });
   res.json({ success: true, name: safeNew });
@@ -233,7 +236,8 @@ router.delete('/:name', authMiddleware, requirePermission('world.manage'), async
   await autoBackupIfEnabled('World deletion: ' + req.params.name, 'autoOnWorldDelete');
   const safeName = sanitizeWorldName(req.params.name);
   const db = getDatabase();
-  const world = db.prepare('SELECT * FROM worlds WHERE name = ?').get(safeName) as any;
+  const serverId = getActiveServerId();
+  const world = db.prepare('SELECT * FROM worlds WHERE name = ? AND (server_id = ? OR server_id IS NULL)').get(safeName, serverId) as any;
   if (!world) return res.status(404).json({ error: 'World not found' });
 
   const worldPath = world.folder_path || path.join(WORLDS_DIR, safeName);
@@ -273,7 +277,7 @@ router.post('/:name/clone', authMiddleware, requirePermission('world.manage'), a
   }
 
   const now = new Date().toISOString();
-  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+  const serverId = getActiveServerId();
   const info = getWorldInfo(destPath);
 
   const world: any = {
@@ -294,7 +298,7 @@ router.post('/:name/clone', authMiddleware, requirePermission('world.manage'), a
     view_distance: sourceWorld.view_distance || 10,
     version: sourceWorld.version || '',
   };
-  if (activeId) world.server_id = activeId;
+  if (serverId) world.server_id = serverId;
 
   const cols = Object.keys(world);
   const vals = Object.values(world);
@@ -384,7 +388,7 @@ router.post('/import/zip', authMiddleware, requirePermission('world.manage'), up
     const info = getWorldInfo(worldPath);
     const lvl = readLevelDat(worldPath);
     const now = new Date().toISOString();
-    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+    const serverId = getActiveServerId();
 
     const world: any = {
       name: finalName,
@@ -399,7 +403,7 @@ router.post('/import/zip', authMiddleware, requirePermission('world.manage'), up
       version: lvl.version || '',
       hardcore: lvl.hardcore || 0,
     };
-    if (activeId) world.server_id = activeId;
+    if (serverId) world.server_id = serverId;
 
     const cols = Object.keys(world);
     const vals = Object.values(world);
@@ -412,7 +416,7 @@ router.post('/import/zip', authMiddleware, requirePermission('world.manage'), up
       ).run(finalName, dim.dimension, dim.displayName, dim.size || '0 B', dim.chunkCount || 0);
     }
 
-    emitToAll('world:created', { name: finalName, server_id: activeId });
+    emitToAll('world:created', { name: finalName, server_id: serverId });
     res.json({ success: true, name: finalName, size: formatBytes(info.totalSize) });
   } catch (err: any) {
     if (req.file) try { fs.unlinkSync(req.file.path); } catch {}
@@ -435,7 +439,7 @@ router.post('/import/folder', authMiddleware, requirePermission('world.manage'),
     const info = getWorldInfo(worldPath);
     const lvl = readLevelDat(worldPath);
     const now = new Date().toISOString();
-    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+    const serverId = getActiveServerId();
 
     const world: any = {
       name: finalName,
@@ -450,7 +454,7 @@ router.post('/import/folder', authMiddleware, requirePermission('world.manage'),
       version: lvl.version || '',
       hardcore: lvl.hardcore || 0,
     };
-    if (activeId) world.server_id = activeId;
+    if (serverId) world.server_id = serverId;
 
     const cols = Object.keys(world);
     const vals = Object.values(world);
@@ -462,7 +466,7 @@ router.post('/import/folder', authMiddleware, requirePermission('world.manage'),
       ).run(finalName, dim.dimension, dim.displayName, dim.size || '0 B', dim.chunkCount || 0);
     }
 
-    emitToAll('world:created', { name: finalName, server_id: activeId });
+    emitToAll('world:created', { name: finalName, server_id: serverId });
     res.json({ success: true, name: finalName, size: formatBytes(info.totalSize) });
   } catch (err: any) {
     res.status(400).json({ error: err.message });
@@ -472,10 +476,10 @@ router.post('/import/folder', authMiddleware, requirePermission('world.manage'),
 // ── Get current world info (from active server's level-name) ──
 router.get('/current/info', authMiddleware, (_req: AuthRequest, res) => {
   const db = getDatabase();
-  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
-  if (!activeId) return res.status(400).json({ error: 'No active server' });
+  const serverId = getActiveServerId();
+  if (!serverId) return res.status(400).json({ error: 'No active server' });
 
-  const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(activeId) as any;
+  const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId) as any;
   if (!server) return res.status(400).json({ error: 'Active server not found' });
 
   const levelName = (() => {
@@ -561,7 +565,7 @@ router.post('/upload', authMiddleware, requirePermission('world.manage'), upload
     const info = getWorldInfo(worldPath);
     const lvl = readLevelDat(worldPath);
     const now = new Date().toISOString();
-    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+    const serverId = getActiveServerId();
 
     const world: any = {
       name: finalName,
@@ -569,7 +573,7 @@ router.post('/upload', authMiddleware, requirePermission('world.manage'), upload
       gamemode: lvl.gamemode !== undefined ? ['survival', 'creative', 'adventure', 'spectator'][lvl.gamemode] || 'survival' : 'survival',
       difficulty: lvl.difficulty !== undefined ? ['peaceful', 'easy', 'normal', 'hard'][lvl.difficulty] || 'normal' : 'normal',
       folder_path: worldPath,
-      server_id: activeId || null,
+      server_id: serverId || null,
       version: lvl.version || '1.21',
       chunk_count: info.chunkCount || 0,
       size_bytes: info.sizeBytes || 0,

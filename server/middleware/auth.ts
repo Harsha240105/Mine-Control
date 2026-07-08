@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import { getDatabase } from '../database';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
+import { isWhitelisted, isWhitelistEnabled } from '../services/ipWhitelist';
 
 function getJWTSecret(): string {
   const envSecret = process.env.JWT_SECRET;
@@ -45,6 +46,48 @@ export function verifyToken(token: string): any {
   return jwt.verify(token, getJwtSecret());
 }
 
+const LOCKOUT_THRESHOLD = 5;
+const LOCKOUT_DURATION_MS = 15 * 60 * 1000;
+
+export function isAccountLocked(userId: string): { locked: boolean; remainingMs: number } {
+  const db = getDatabase();
+  const user = db.prepare('SELECT locked_until, failed_login_attempts FROM users WHERE id = ?').get(userId) as any;
+  if (!user) return { locked: false, remainingMs: 0 };
+
+  if (user.locked_until) {
+    const lockTime = new Date(user.locked_until).getTime();
+    const remaining = lockTime - Date.now();
+    if (remaining > 0) {
+      return { locked: true, remainingMs: remaining };
+    }
+    db.prepare("UPDATE users SET locked_until = NULL, failed_login_attempts = 0 WHERE id = ?").run(userId);
+  }
+
+  return { locked: false, remainingMs: 0 };
+}
+
+export function recordFailedLogin(userId: string): number {
+  const db = getDatabase();
+  const user = db.prepare('SELECT failed_login_attempts FROM users WHERE id = ?').get(userId) as any;
+  if (!user) return 0;
+
+  const attempts = (user.failed_login_attempts || 0) + 1;
+  if (attempts >= LOCKOUT_THRESHOLD) {
+    const lockedUntil = new Date(Date.now() + LOCKOUT_DURATION_MS).toISOString();
+    db.prepare('UPDATE users SET failed_login_attempts = ?, locked_until = ? WHERE id = ?')
+      .run(attempts, lockedUntil, userId);
+  } else {
+    db.prepare('UPDATE users SET failed_login_attempts = ? WHERE id = ?').run(attempts, userId);
+  }
+
+  return attempts;
+}
+
+export function clearFailedLogins(userId: string): void {
+  const db = getDatabase();
+  db.prepare("UPDATE users SET failed_login_attempts = 0, locked_until = NULL WHERE id = ?").run(userId);
+}
+
 export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -54,12 +97,38 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
   const token = authHeader.split(' ')[1];
   try {
     const decoded = verifyToken(token);
-    // Refresh role from database to keep in sync
+
     const db = getDatabase();
-    const userDb = db.prepare('SELECT role FROM users WHERE id = ?').get(decoded.id) as any;
+    const userDb = db.prepare('SELECT * FROM users WHERE id = ?').get(decoded.id) as any;
+    if (!userDb) {
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    // Check account lockout
+    const lockStatus = isAccountLocked(decoded.id);
+    if (lockStatus.locked) {
+      return res.status(423).json({
+        error: 'Account is temporarily locked due to too many failed login attempts',
+        retryAfter: Math.ceil(lockStatus.remainingMs / 1000),
+        code: 'ACCOUNT_LOCKED',
+      });
+    }
+
+    // Validate session token matches (prevents token reuse across sessions)
+    if (userDb.session_token && userDb.session_token !== token) {
+      return res.status(401).json({ error: 'Session has been replaced', code: 'SESSION_EXPIRED' });
+    }
+
+    // Check IP whitelist for this user's endpoint access
+    const ip = req.ip || req.socket.remoteAddress || '0.0.0.0';
+    if (isWhitelistEnabled() && !isWhitelisted(ip)) {
+      return res.status(403).json({ error: 'Access denied from this IP address', code: 'IP_NOT_WHITELISTED' });
+    }
+
     req.user = {
-      ...decoded,
-      role: userDb?.role || decoded.role,
+      id: decoded.id,
+      username: decoded.username,
+      role: userDb.role || decoded.role,
     };
     next();
   } catch (err) {
@@ -73,12 +142,10 @@ export function requirePermission(permission: string) {
       return res.status(401).json({ error: 'Not authenticated' });
     }
 
-    // Look up the user's actual role from the database (not from JWT)
     const db = getDatabase();
     const userDb = db.prepare('SELECT role FROM users WHERE id = ?').get(req.user.id) as any;
     const effectiveRole = userDb?.role || req.user.role;
 
-    // Owner has all permissions
     if (effectiveRole === 'Owner') {
       return next();
     }

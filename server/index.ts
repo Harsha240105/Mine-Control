@@ -13,6 +13,7 @@ import { rateLimiter, verifyToken } from './middleware/auth';
 import { getDatabase, closeDatabase } from './database';
 import { activeServer } from './activeServer';
 import { setIO } from './socketManager';
+import { getActiveServerId } from './db/repository/serverConfigRepository';
 import { minecraftServer } from './services/minecraftServer';
 import { backupService, autoBackupIfEnabled } from './services/backup';
 import { BASE_PATH, resolvePath, setMinecraftDir, getMinecraftDir } from './paths';
@@ -32,6 +33,7 @@ import buildRoutes from './routes/builds';
 import githubRoutes from './routes/github';
 import compatibilityRoutes from './routes/compatibility';
 import scheduleRoutes from './routes/schedules';
+import connectionRoutes from './routes/connection';
 import marketplaceRoutes from './routes/marketplace';
 import analyticsRoutes from './routes/analytics';
 import discordRoutes from './routes/discord';
@@ -42,6 +44,9 @@ import importRoutes from './routes/import';
 import guideRoutes from './routes/guide';
 import updateRoutes from './routes/updates';
 import uninstallRoutes from './routes/uninstall';
+import performanceRoutes from './routes/performance';
+import usersRoutes from './routes/users';
+import ipWhitelistRoutes from './routes/ipWhitelist';
 import { SchedulerService } from './services/scheduler';
 import { discordService } from './services/discord';
 import { feedbackService } from './services/feedback';
@@ -105,6 +110,7 @@ app.use('/api/github', githubRoutes);
 app.use('/api/compatibility', compatibilityRoutes);
 app.use('/api/schedules', scheduleRoutes);
 app.use('/api/marketplace', marketplaceRoutes);
+app.use('/api/connection', connectionRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/discord', discordRoutes);
 app.use('/api/feedback', feedbackRoutes);
@@ -114,6 +120,9 @@ app.use('/api/ui', uiRoutes);
 app.use('/api/guide', guideRoutes);
 app.use('/api/updates', updateRoutes);
 app.use('/api/uninstall', uninstallRoutes);
+app.use('/api/performance', performanceRoutes);
+app.use('/api/users', usersRoutes);
+app.use('/api/ip-whitelist', ipWhitelistRoutes);
 
 // API 404 handler (unknown API routes return JSON, not HTML)
 app.use('/api/*', (req, res) => {
@@ -166,34 +175,43 @@ if (clientPath) {
   });
 }
 
-// Helper: emit full player list
+// Helper: emit per-server player list
 function emitPlayersUpdate() {
   try {
     const db = getDatabase();
-    const players = db.prepare('SELECT * FROM players ORDER BY last_login DESC').all();
+    const sid = getActiveServerId();
+    const players = sid
+      ? db.prepare('SELECT * FROM players WHERE server_id = ? OR server_id IS NULL ORDER BY last_login DESC').all(sid)
+      : db.prepare('SELECT * FROM players ORDER BY last_login DESC').all();
     io.emit('players:update', players);
   } catch (e) {
     // ignore
   }
 }
 
-// Helper: emit full worlds list
+// Helper: emit per-server worlds list
 function emitWorldsUpdate() {
   try {
     const db = getDatabase();
-    const worlds = db.prepare('SELECT * FROM worlds ORDER BY created_at DESC').all();
+    const sid = getActiveServerId();
+    const worlds = sid
+      ? db.prepare('SELECT * FROM worlds WHERE server_id = ? OR server_id IS NULL ORDER BY created_at DESC').all(sid)
+      : db.prepare('SELECT * FROM worlds ORDER BY created_at DESC').all();
     io.emit('worlds:update', worlds);
   } catch (e) {
     // ignore
   }
 }
 
-// Helper: emit full server status
+// Helper: emit per-server status
 function emitServerUpdate() {
   try {
     const db = getDatabase();
     const config = minecraftServer.getConfig();
-    const onlinePlayers = db.prepare('SELECT COUNT(*) as count FROM players WHERE status = ?').get('online') as any;
+    const sid = getActiveServerId();
+    const onlinePlayers = sid
+      ? (db.prepare('SELECT COUNT(*) as count FROM players WHERE status = ? AND (server_id = ? OR server_id IS NULL)').get('online', sid) as any)
+      : (db.prepare('SELECT COUNT(*) as count FROM players WHERE status = ?').get('online') as any);
     io.emit('server:update', {
       serverId: activeServer.current?.id || null,
       running: minecraftServer.isRunning,
@@ -201,7 +219,7 @@ function emitServerUpdate() {
       state: minecraftServer.state,
       onlinePlayers: minecraftServer.isRunning ? (onlinePlayers?.count || 0) : null,
       maxPlayers: config?.maxPlayers || 4,
-      tps: 20.0,
+      tps: minecraftServer.currentTps,
     });
   } catch (e) {
     // ignore
@@ -345,6 +363,37 @@ cron.schedule('*/5 * * * *', () => {
   }
 });
 
+let lowTpsCount = 0;
+
+// Auto-diagnostics: health check and log every 5 minutes
+cron.schedule('*/5 * * * *', () => {
+  const db = getDatabase();
+  const sid = getActiveServerId();
+  if (!sid || !minecraftServer.isRunning) return;
+
+  const latest = db.prepare('SELECT * FROM system_stats WHERE server_id = ? ORDER BY timestamp DESC LIMIT 1').get(sid) as any;
+  if (!latest) return;
+
+  if (latest.tps > 0 && latest.tps < 15) {
+    lowTpsCount++;
+    if (lowTpsCount >= 3) {
+      io.emit('server:alert', { type: 'low_tps', tps: latest.tps, message: `Low TPS warning: ${latest.tps}. Check CPU/RAM usage.` });
+      try {
+        db.prepare("INSERT INTO audit_log (server_id, action, details, username, timestamp) VALUES (?, 'alert', ?, 'system', ?)")
+          .run(sid, JSON.stringify({ type: 'low_tps', tps: latest.tps, cpu: latest.cpu, ram: latest.ram }), new Date().toISOString());
+      } catch {}
+      lowTpsCount = 0;
+    }
+  } else {
+    lowTpsCount = 0;
+  }
+
+  try {
+    db.prepare("INSERT INTO audit_log (server_id, action, details, username, timestamp) VALUES (?, 'diagnostics', ?, 'system', ?)")
+      .run(sid, JSON.stringify({ tps: latest.tps, cpu: latest.cpu, ram: latest.ram, players: latest.players }), new Date().toISOString());
+  } catch {}
+});
+
 // Periodic connection status refresh (every 5 minutes)
 cron.schedule('*/5 * * * *', () => {
   connManager.emitConnectionUpdate().catch(() => {});
@@ -368,6 +417,14 @@ cron.schedule('0 0 * * 0', () => {
   const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
   db.prepare('DELETE FROM system_stats WHERE timestamp < ?').run(weekAgo);
   console.log('[Cron] Old stats cleaned');
+});
+
+// Cleanup old audit_log diagnostics (keep 30 days)
+cron.schedule('0 0 1 * *', () => {
+  const db = getDatabase();
+  const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  db.prepare("DELETE FROM audit_log WHERE action IN ('diagnostics', 'preflight', 'alert') AND timestamp < ?").run(monthAgo);
+  console.log('[Cron] Old diagnostics cleaned');
 });
 
 // Catch unhandled errors

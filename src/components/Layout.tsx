@@ -41,6 +41,8 @@ import {
   Radio,
   HelpCircle,
   Trash2,
+  Zap,
+  Lock,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
@@ -69,11 +71,14 @@ const navItems = [
 
 const bottomNavItems = [
   { path: '/java', label: 'Java', icon: Coffee },
+  { path: '/settings/performance', label: 'Performance', icon: Zap },
+  { path: '/settings/security', label: 'Security', icon: Lock },
   { path: '/github/diagnostics', label: 'GitHub Sync', icon: Github },
   { path: '/connection/wizard', label: 'Connect Wizard', icon: Radio },
   { path: '/diagnostics', label: 'Diagnostics', icon: Stethoscope },
   { path: '/guide', label: 'Guide', icon: BookOpen },
   { path: '/privacy', label: 'Privacy', icon: Shield },
+  { path: '/admin/users', label: 'Users', icon: Users },
   { path: '/updates', label: 'Updates', icon: RefreshCw },
   { path: '/uninstall', label: 'Uninstall', icon: Trash2 },
 ];

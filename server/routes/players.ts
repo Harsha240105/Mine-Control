@@ -8,13 +8,9 @@ import { emitToAll } from '../socketManager';
 import { autoDetectPlayers } from '../services/playerDetection';
 import { recordEvent, getPlayerHistory, getPlayerSessions, getPlayerTimeline, getRecentActivity, getRecentJoins } from '../services/playerHistory';
 import { resolveMinecraftDir } from '../paths';
+import { getActiveServerId } from '../db/repository/serverConfigRepository';
 
 const router = Router();
-
-function getActiveServerId(): string | null {
-  const db = getDatabase();
-  return (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value || null;
-}
 
 // ── Auto-detect players from filesystem ──
 router.post('/detect', authMiddleware, requirePermission('whitelist.manage'), (_req: AuthRequest, res) => {
@@ -25,9 +21,10 @@ router.post('/detect', authMiddleware, requirePermission('whitelist.manage'), (_
 // ── List all players ──
 router.get('/', authMiddleware, (req: AuthRequest, res) => {
   const db = getDatabase();
+  const serverId = getActiveServerId();
   const { status, approval, search } = req.query;
-  let sql = 'SELECT * FROM players WHERE 1=1';
-  const params: any[] = [];
+  let sql = 'SELECT * FROM players WHERE (server_id = ? OR server_id IS NULL)';
+  const params: any[] = [serverId];
 
   if (status && status !== 'all') {
     sql += ' AND status = ?';
@@ -91,14 +88,16 @@ router.get('/recent-joins', authMiddleware, (_req: AuthRequest, res) => {
 // ── Pending approval count ──
 router.get('/pending-count', authMiddleware, (_req: AuthRequest, res) => {
   const db = getDatabase();
-  const count = db.prepare("SELECT COUNT(*) as count FROM players WHERE approval_status = 'pending'").get() as any;
+  const serverId = getActiveServerId();
+  const count = db.prepare("SELECT COUNT(*) as count FROM players WHERE approval_status = 'pending' AND (server_id = ? OR server_id IS NULL)").get(serverId) as any;
   res.json({ count: count?.count || 0 });
 });
 
 // ── Single player ──
 router.get('/:id', authMiddleware, (req: AuthRequest, res) => {
   const db = getDatabase();
-  const player = db.prepare('SELECT * FROM players WHERE id = ? OR username = ?').get(req.params.id, req.params.id);
+  const serverId = getActiveServerId();
+  const player = db.prepare('SELECT * FROM players WHERE id = ? OR (username = ? AND (server_id = ? OR server_id IS NULL))').get(req.params.id, req.params.id, serverId);
   if (!player) {
     return res.status(404).json({ error: 'Player not found' });
   }
@@ -135,7 +134,8 @@ router.post('/', authMiddleware, requirePermission('whitelist.manage'), (req: Au
   }
 
   const db = getDatabase();
-  const existing = db.prepare('SELECT id FROM players WHERE username = ?').get(username);
+  const serverId = getActiveServerId();
+  const existing = db.prepare('SELECT id FROM players WHERE username = ? AND (server_id = ? OR server_id IS NULL)').get(username, serverId);
   if (existing) {
     return res.status(400).json({ error: 'Player already exists' });
   }
@@ -158,11 +158,12 @@ router.post('/', authMiddleware, requirePermission('whitelist.manage'), (req: Au
     trusted: 1,
     ops: 0,
     last_ip: '',
+    server_id: serverId,
   };
 
   db.prepare(
-    `INSERT INTO players (id, username, uuid, role, status, last_login, playtime, ip, join_date, muted, notes, approval_status, trusted, ops, last_ip)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO players (id, username, uuid, role, status, last_login, playtime, ip, join_date, muted, notes, approval_status, trusted, ops, last_ip, server_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(...Object.values(player));
 
   emitToAll('player:added', { id: playerId, username });
@@ -201,7 +202,7 @@ router.delete('/:id', authMiddleware, requirePermission('whitelist.manage'), (re
   }
 
   // Remove from whitelist too
-  db.prepare('DELETE FROM whitelist WHERE username = ?').run(player.username);
+  db.prepare('DELETE FROM whitelist WHERE username = ? AND server_id = ?').run(player.username, getActiveServerId());
   db.prepare('DELETE FROM players WHERE id = ?').run(req.params.id);
 
   emitToAll('player:removed', { id: req.params.id, username: player.username });
@@ -218,10 +219,11 @@ router.post('/:id/approve', authMiddleware, requirePermission('whitelist.manage'
   recordEvent(player.id, 'approved');
 
   // Add to whitelist
-  const existing = db.prepare('SELECT id FROM whitelist WHERE username = ?').get(player.username);
+  const serverId = getActiveServerId();
+  const existing = db.prepare('SELECT id FROM whitelist WHERE username = ? AND server_id = ?').get(player.username, serverId);
   if (!existing) {
-    db.prepare('INSERT INTO whitelist (id, username, uuid, added_by, added_at) VALUES (?, ?, ?, ?, ?)')
-      .run(uuidv4(), player.username, player.uuid, req.user?.username || 'system', new Date().toISOString());
+    db.prepare('INSERT INTO whitelist (id, username, uuid, added_by, added_at, server_id) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(uuidv4(), player.username, player.uuid, req.user?.username || 'system', new Date().toISOString(), serverId);
   }
 
   emitToAll('player:approved', { id: player.id, username: player.username });
@@ -299,14 +301,15 @@ router.post('/:id/deop', authMiddleware, requirePermission('permissions.manage')
 // ── Whitelist / Unwhitelist ──
 router.post('/:id/whitelist', authMiddleware, requirePermission('whitelist.manage'), (req: AuthRequest, res) => {
   const db = getDatabase();
+  const serverId = getActiveServerId();
   const player = db.prepare('SELECT * FROM players WHERE id = ? OR username = ?').get(req.params.id, req.params.id) as any;
   if (!player) return res.status(404).json({ error: 'Player not found' });
 
-  const existing = db.prepare('SELECT id FROM whitelist WHERE username = ?').get(player.username);
+  const existing = db.prepare('SELECT id FROM whitelist WHERE username = ? AND server_id = ?').get(player.username, serverId);
   if (existing) return res.status(400).json({ error: 'Player already in whitelist' });
 
-  db.prepare('INSERT INTO whitelist (id, username, uuid, added_by, added_at) VALUES (?, ?, ?, ?, ?)')
-    .run(uuidv4(), player.username, player.uuid, req.user?.username || 'system', new Date().toISOString());
+  db.prepare('INSERT INTO whitelist (id, username, uuid, added_by, added_at, server_id) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(uuidv4(), player.username, player.uuid, req.user?.username || 'system', new Date().toISOString(), serverId);
 
   recordEvent(player.id, 'whitelisted');
 
@@ -324,7 +327,7 @@ router.post('/:id/unwhitelist', authMiddleware, requirePermission('whitelist.man
   const player = db.prepare('SELECT * FROM players WHERE id = ? OR username = ?').get(req.params.id, req.params.id) as any;
   if (!player) return res.status(404).json({ error: 'Player not found' });
 
-  db.prepare('DELETE FROM whitelist WHERE username = ?').run(player.username);
+  db.prepare('DELETE FROM whitelist WHERE username = ? AND server_id = ?').run(player.username, getActiveServerId());
   recordEvent(player.id, 'unwhitelisted');
 
   const { minecraftServer } = require('../services/minecraftServer');
@@ -486,7 +489,8 @@ router.post('/:id/temp-ban', authMiddleware, requirePermission('player.ban'), (r
 // ── Whitelist (legacy routes) ──
 router.get('/whitelist/all', authMiddleware, (_req: AuthRequest, res) => {
   const db = getDatabase();
-  const whitelist = db.prepare('SELECT * FROM whitelist ORDER BY added_at DESC').all();
+  const serverId = getActiveServerId();
+  const whitelist = db.prepare('SELECT * FROM whitelist WHERE server_id = ? OR server_id IS NULL ORDER BY added_at DESC').all(serverId);
   res.json(whitelist);
 });
 
@@ -495,7 +499,8 @@ router.post('/whitelist', authMiddleware, requirePermission('whitelist.manage'),
   if (!username) return res.status(400).json({ error: 'Username is required' });
 
   const db = getDatabase();
-  const existing = db.prepare('SELECT id FROM whitelist WHERE username = ?').get(username);
+  const serverId = getActiveServerId();
+  const existing = db.prepare('SELECT id FROM whitelist WHERE username = ? AND server_id = ?').get(username, serverId);
   if (existing) return res.status(400).json({ error: 'Player already in whitelist' });
 
   const entry = {
@@ -504,19 +509,20 @@ router.post('/whitelist', authMiddleware, requirePermission('whitelist.manage'),
     uuid: uuid || null,
     added_by: req.user?.username || 'unknown',
     added_at: new Date().toISOString(),
+    server_id: serverId,
   };
 
-  db.prepare('INSERT INTO whitelist (id, username, uuid, added_by, added_at) VALUES (?, ?, ?, ?, ?)')
+  db.prepare('INSERT INTO whitelist (id, username, uuid, added_by, added_at, server_id) VALUES (?, ?, ?, ?, ?, ?)')
     .run(...Object.values(entry));
 
-  const playerExists = db.prepare('SELECT id FROM players WHERE username = ?').get(username);
+  const playerExists = db.prepare('SELECT id FROM players WHERE username = ? AND (server_id = ? OR server_id IS NULL)').get(username, serverId);
   if (!playerExists) {
     const playerId = uuidv4();
     const now = new Date().toISOString();
     db.prepare(
-      `INSERT INTO players (id, username, uuid, role, status, join_date, approval_status, trusted, ops)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-    ).run(playerId, username, uuid || '', 'Member', 'offline', now, 'approved', 1, 0);
+      `INSERT INTO players (id, username, uuid, role, status, join_date, approval_status, trusted, ops, server_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(playerId, username, uuid || '', 'Member', 'offline', now, 'approved', 1, 0, serverId);
   }
 
   const { minecraftServer } = require('../services/minecraftServer');
@@ -530,7 +536,7 @@ router.post('/whitelist', authMiddleware, requirePermission('whitelist.manage'),
 
 router.delete('/whitelist/:username', authMiddleware, requirePermission('whitelist.manage'), (req: AuthRequest, res) => {
   const db = getDatabase();
-  const result = db.prepare('DELETE FROM whitelist WHERE username = ?').run(req.params.username);
+  const result = db.prepare('DELETE FROM whitelist WHERE username = ? AND server_id = ?').run(req.params.username, getActiveServerId());
   if (result.changes === 0) return res.status(404).json({ error: 'Player not in whitelist' });
 
   const { minecraftServer } = require('../services/minecraftServer');
@@ -545,11 +551,12 @@ router.delete('/whitelist/:username', authMiddleware, requirePermission('whiteli
 // ── Export player data ──
 router.get('/:id/export', authMiddleware, (req: AuthRequest, res) => {
   const db = getDatabase();
-  const player = db.prepare('SELECT * FROM players WHERE id = ? OR username = ?').get(req.params.id, req.params.id) as any;
+  const serverId = getActiveServerId();
+  const player = db.prepare('SELECT * FROM players WHERE id = ? OR (username = ? AND (server_id = ? OR server_id IS NULL))').get(req.params.id, req.params.id, serverId) as any;
   if (!player) return res.status(404).json({ error: 'Player not found' });
 
-  const history = db.prepare('SELECT * FROM player_history WHERE player_id = ? ORDER BY timestamp ASC').all(player.id);
-  const whitelistEntry = db.prepare('SELECT * FROM whitelist WHERE username = ?').get(player.username);
+  const history = db.prepare('SELECT * FROM player_history WHERE player_id = ? AND (server_id = ? OR server_id IS NULL) ORDER BY timestamp ASC').all(player.id, serverId);
+  const whitelistEntry = db.prepare('SELECT * FROM whitelist WHERE username = ? AND server_id = ?').get(player.username, serverId);
 
   recordEvent(player.id, 'exported');
 
@@ -599,8 +606,9 @@ router.post('/import', authMiddleware, requirePermission('whitelist.manage'), (r
   if (!data || !data.player) return res.status(400).json({ error: 'Invalid import data' });
 
   const db = getDatabase();
+  const serverId = getActiveServerId();
   const p = data.player;
-  const existing = db.prepare('SELECT id FROM players WHERE uuid = ? OR username = ?').get(p.uuid, p.username) as any;
+  const existing = db.prepare('SELECT id FROM players WHERE uuid = ? OR (username = ? AND (server_id = ? OR server_id IS NULL))').get(p.uuid, p.username, serverId) as any;
 
   let playerId: string;
   if (existing) {
@@ -629,20 +637,20 @@ router.post('/import', authMiddleware, requirePermission('whitelist.manage'), (r
     db.prepare(
       `INSERT INTO players (id, username, uuid, role, status, join_date, first_join, playtime, muted, ops, approval_status, trusted,
         health, food_level, xp_level, xp_progress, dimension, pos_x, pos_y, pos_z, world_name, death_count, kills,
-        inventory, armor, ender_chest, advancements, statistics, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+        inventory, armor, ender_chest, advancements, statistics, notes, server_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(playerId, p.username, p.uuid || '', p.role || 'Member', 'offline', now, p.first_join || now,
       p.playtime || 0, p.muted || 0, p.ops || 0, p.approval_status || 'approved', p.trusted || 1,
       p.health || 20, p.food_level || 20, p.xp_level || 0, p.xp_progress || 0, p.dimension || '',
       p.pos_x || 0, p.pos_y || 0, p.pos_z || 0, p.world_name || 'world', p.death_count || 0, p.kills || 0,
-      p.inventory || '[]', p.armor || '[]', p.ender_chest || '[]', p.advancements || '{}', p.statistics || '{}', p.notes || '');
+      p.inventory || '[]', p.armor || '[]', p.ender_chest || '[]', p.advancements || '{}', p.statistics || '{}', p.notes || '', serverId);
   }
 
   // Import history
   if (data.history && Array.isArray(data.history)) {
     for (const event of data.history) {
-      db.prepare('INSERT INTO player_history (player_id, event_type, event_data, timestamp) VALUES (?, ?, ?, ?)')
-        .run(playerId, event.event_type, event.event_data, event.timestamp);
+      db.prepare('INSERT INTO player_history (player_id, event_type, event_data, timestamp, server_id) VALUES (?, ?, ?, ?, ?)')
+        .run(playerId, event.event_type, event.event_data, event.timestamp, serverId);
     }
   }
 
@@ -650,10 +658,10 @@ router.post('/import', authMiddleware, requirePermission('whitelist.manage'), (r
 
   // Add to whitelist if was whitelisted
   if (data.whitelist) {
-    const wlExists = db.prepare('SELECT id FROM whitelist WHERE username = ?').get(p.username);
+    const wlExists = db.prepare('SELECT id FROM whitelist WHERE username = ? AND server_id = ?').get(p.username, serverId);
     if (!wlExists) {
-      db.prepare('INSERT INTO whitelist (id, username, uuid, added_by, added_at) VALUES (?, ?, ?, ?, ?)')
-        .run(uuidv4(), p.username, p.uuid, 'import', new Date().toISOString());
+      db.prepare('INSERT INTO whitelist (id, username, uuid, added_by, added_at, server_id) VALUES (?, ?, ?, ?, ?, ?)')
+        .run(uuidv4(), p.username, p.uuid, 'import', new Date().toISOString(), serverId);
     }
   }
 
@@ -664,8 +672,9 @@ router.post('/import', authMiddleware, requirePermission('whitelist.manage'), (r
 // ── Export all players ──
 router.get('/export/all', authMiddleware, requirePermission('whitelist.manage'), (req: AuthRequest, res) => {
   const db = getDatabase();
-  const players = db.prepare('SELECT * FROM players').all() as any[];
-  const history = db.prepare('SELECT * FROM player_history ORDER BY timestamp ASC').all();
+  const serverId = getActiveServerId();
+  const players = db.prepare('SELECT * FROM players WHERE server_id = ? OR server_id IS NULL').all(serverId) as any[];
+  const history = db.prepare('SELECT * FROM player_history WHERE server_id = ? OR server_id IS NULL ORDER BY timestamp ASC').all(serverId);
 
   res.json({
     exportVersion: 1,

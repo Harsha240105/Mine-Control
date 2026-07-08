@@ -1,4 +1,5 @@
 import { getDatabase } from '../database';
+import { getActiveServerId } from '../db/repository/serverConfigRepository';
 import { v4 as uuidv4 } from 'uuid';
 import os from 'os';
 import fs from 'fs';
@@ -840,7 +841,7 @@ export const feedbackService = {
     try {
       const db = getDatabase();
       const nid = uuidv4();
-      const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value || null;
+      const activeId = getActiveServerId();
       db.prepare(`
         INSERT INTO notifications (id, server_id, title, message, type, created_at)
         VALUES (?, ?, ?, ?, ?, ?)

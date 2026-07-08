@@ -7,129 +7,58 @@
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/Latest_v1.0.70-rc.1-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/v1.1.3-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="MIT License"/>
   </a>
-  <a>
-    <img src="https://img.shields.io/badge/Android-Coming%20Soon-3DDC84?style=for-the-badge&logo=android&logoColor=white" alt="Android Coming Soon"/>
-  </a>
 </p>
-
----
-## 🚀 v1.0.70-rc.1: Stability + Persistence Release Candidate
-
-> ⚠️ **RELEASE CANDIDATE 1 (RC1)**
-> This version is currently in testing before being marked as Stable. We need users with different Windows setups to install it from GitHub and report any issues or edge cases.
-
-MineControl OS has undergone a massive stability and persistence audit to ensure a flawless experience for end-users right out of the box:
-- **Resilient Node Backend**: Eliminated all `process.exit()` calls and dangerous stream handling (e.g. `fs.createReadStream().pipe()`) to guarantee that the Electron backend never crashes unexpectedly.
-- **Robust ZIP & Backup Architecture**: Swapped to an asynchronous, non-blocking `tar.exe` process for backup creation, meaning the Event Loop remains unblocked and the UI stays perfectly responsive. Implemented `autodrain()` for extraction to eliminate catastrophic memory leaks.
-- **Data Symmetry**: Server Properties and settings now perfectly synchronize between the SQLite backend and the `server.properties` file bi-directionally.
-- **Automated Discord Fallbacks**: In the absence of a GitHub access token, in-app feedback automatically routes to a secure Discord webhook. Discord Rich Presence has also been refactored for stable initialization.
-- **Single-Step Server Wizard**: The multi-page wizard was completely flattened into a singular, scrolling form to prevent infinite logic loops for new users creating their first servers.
-- **Electron Lifecycle Integrity**: The app now actively checks for running world backups before quitting, presenting a warning to prevent fatal data corruption.
-- **Automated Validation**: Integrated `validate-release.js` into our CI/CD pipeline to automatically sanity-check the TypeScript build, stream error handlers, and dangerous exit codes before tagging a release.
-
-
-## Overview
-
-MineControl OS is an all-in-one Electron desktop application that wraps Paper, Fabric, NeoForge, Purpur, Vanilla, and 8 other server types into a polished management interface. It handles server lifecycle, software downloads, plugin/mod installation, world management, backups, player administration, Discord integration, and more — entirely offline by default.
-
-### Connection Modes
-
-| Mode | Setup | Players |
-|------|-------|---------|
-| **Same Laptop** | `localhost:25565` | Just you |
-| **LAN** | Auto-detected LAN IP | Friends on same network |
-| **Internet** | Playit.gg tunnel or port forwarding | Anyone |
-
-### Launcher Compatibility
-
-| Launcher | Online Mode (Premium) | Offline Mode (Cracked) |
-|----------|----------------------|----------------------|
-| **Official Minecraft Launcher** | ✓ Works | ✓ Works |
-| **TLauncher / Offline Launchers** | ✗ Blocked | ✓ Works |
-
-Select **Offline Mode** in the Compatibility Manager or set `online-mode=false` in server.properties to allow both official and TLauncher clients simultaneously.
-
-The app auto-detects your network environment and recommends the correct connection method.
 
 ---
 
 ## Features
 
-### Server Management
-- Create, import, switch between multiple servers with per-server isolation
-- One-click start/stop/restart with proper 5-state lifecycle (STOPPED → STARTING → RUNNING → STOPPING → FAILED)
-- Auto-restart on crash (max 3 attempts), port conflict detection, orphan process cleanup
-- EULA auto-accept, Java pre-check with cross-platform auto-detection
+### One-Click Server Creation
+Create a fully configured Minecraft server in one click — no manual downloads, no config editing, no terminal. Choose from Paper, Fabric, NeoForge, Forge, Quilt, Purpur, Vanilla, Spigot, Folia, Velocity, Waterfall, or BungeeCord. The app auto-downloads the correct server jar, generates `server.properties`, accepts EULA, creates a unique world seed, and starts the server.
 
-### Software Support (12 types)
-PaperMC, Purpur, Fabric, Quilt, Forge, NeoForge, Spigot, Folia, Vanilla, Velocity, Waterfall, BungeeCord — auto-download jars on creation, switch versions on demand.
+### Automatic Java Manager
+Auto-detects installed Java runtimes across your system. If Java 17+ is missing, downloads and configures a compatible JDK automatically — no manual installation required.
 
-### Plugins, Mods, Shaders & Resource Packs
-- Plugin marketplace: Modrinth, Hangar, SpigotMC, CurseForge, BukkitDev
-- Mod manager: Modrinth + CurseForge install, toggle, remove
-- Shader/resource pack manager: install from URL or upload `.zip`, toggle on/off
+### Performance Tuning
+Auto-generates optimal JVM flags based on your system's CPU cores and available RAM. Choose from four presets (Aikar's, Aggressive, Low-Memory, Vanilla) or write custom flags. View-distance and simulation-distance are calculated automatically. One-click YML optimization for Paper, Bukkit, Spigot, Pufferfish, and Purpur configurations.
 
-### Player Management
-- Auto-detection from `playerdata/`, `stats/`, `advancements/`, `usercache.json`
-- Role-based access (Owner / Admin / Moderator / Member / Guest)
-- Ban, kick, mute, temp-ban, whitelist, OP controls
-- Player history, sessions, deep analytics
+### Security & Access Control
+Two-factor authentication (TOTP) via authenticator apps with recovery codes. IP whitelist for per-server access control. Account lockout after 5 failed login attempts. Role-based permissions (Owner, Admin, Moderator, Member). Session management with token-based JWT authentication.
+
+### Multi-Server Isolation
+Create and switch between multiple servers with complete isolation — worlds, players, backups, plugins, mods, resource packs, Discord config, scheduler tasks, and chat logs are all separated per server. No cross-server data leakage.
+
+### Plugin, Mod, Shader & Resource Pack Management
+Search and install from Modrinth, Hangar, SpigotMC, CurseForge, and BukkitDev. One-click enable/disable, version compatibility checking, and removal.
 
 ### World Management
-- Create, clone, rename, delete, repair, optimize (Purpur region compression)
-- Export/import worlds as ZIP with full NBT metadata via `prismarine-nbt`
-- Directory traversal protection on all file operations
+Create, clone, rename, delete, repair, and optimize worlds. Import/export worlds as ZIP with full NBT metadata. Directory traversal protection on all file operations.
 
 ### Backup System
-- ZIP with archiver (level 9 compression), integrity verification
-- Restore with automatic pre-restore safety backup
-- Export/import portable backups, cleanup by age/size/count
-- Scheduled backups (configurable interval, default every 15 min)
+ZIP compression with integrity verification. Automatic pre-restore safety backups. Export/import portable backups. Scheduled backups with configurable interval. Cleanup by age, size, or count.
 
-### Connection & Networking
-- Connection Wizard with auto-detection for localhost, LAN, Playit.gg
-- Minecraft protocol ping for live status verification
-- Windows Firewall one-click rule add/remove via netsh
-- Compatibility Manager with launcher-specific indicators
-- 12-step Connection Validator with specific per-step failure messages
-- Smart `server.properties` sync: auto-fixes `server-ip` binding, `enforce-secure-profile` in offline mode
-- TCP port listening verification after "Done" event ensures real reachability
+### Player Management
+Auto-detection from playerdata, stats, advancements, and usercache.json. Role-based access. Ban, kick, mute, temp-ban, whitelist, and OP controls. Player history and session analytics.
+
+### Discord Integration
+Rich presence, server event notifications (start, stop, crash, backup, player join/leave), chat bridge between Discord and in-game chat, and command prefix configuration.
 
 ### Feedback & Issue Management
-- Local-first: no GitHub account required, everything stored in SQLite
-- 5 issue types with guided templates and automatic diagnostics collection
-- Screenshot support, credential masking, offline queue with auto-retry
-- Full lifecycle: Open → Pending → In Review → Resolved → Closed → Rejected
-- Issue tracker integration: GitHub, GitLab, Jira, Custom
-- Socket.IO real-time updates and Dashboard widget
+Local-first feedback system — no GitHub account required. Five issue types with guided templates and automatic diagnostics collection. Screenshot support with credential masking. Offline queue with auto-retry. Optional GitHub/GitLab/Jira integration.
 
-### Guide & Knowledge Center
-- 19 guides across 5 categories: Getting Started, Features, Troubleshooting, FAQ, Shortcuts
-- Server-side search with relevance ranking across 12 article types
-- Tip-of-the-day on Dashboard, Help button in sidebar footer
+### GitHub Synchronization
+Two-way sync between in-app settings and a GitHub repository. Track configuration changes, rollback on errors, and maintain version history.
 
-### Privacy, Security & Data Protection
-- 8-tab Privacy & Security Center with AES-256-GCM credential encryption
-- Machine-derived encryption key (no password needed, survives restarts)
-- 6 credential slots (Discord, Playit, GitHub, GitLab, Jira, Issue Tracker)
-- 10 feature permissions with per-feature toggles
-- 7 security checks with scoring, full data export, audit log
+### Connection Manager
+Connection Wizard with auto-detection for localhost, LAN, and Playit.gg tunneling. Minecraft protocol ping for live status verification. Windows Firewall one-click rule management. Compatibility Manager with launcher-specific indicators.
 
-### Update & Version Management
-- Check, download, install, rollback with pre-update backups
-- Rich release notes viewer, migration history tracking
-- Data preservation verification across 11 user data categories
-- Server-aware operations (warns if server is running)
-
-### Uninstall & Restore
-- Two uninstall modes: Keep Data (app binaries only) or Delete Everything
-- Existing installation auto-detection with one-click restore
-- Storage analysis with per-server breakdown
+### Update System
+Check, download, and install updates with pre-update backups. Rich release notes viewer. Migration history tracking. Data preservation across all updates.
 
 ---
 
@@ -151,9 +80,9 @@ PaperMC, Purpur, Fabric, Quilt, Forge, NeoForge, Spigot, Folia, Vanilla, Velocit
 | Windows 10/11 (x64) | [Download Installer](https://github.com/Harsha240105/Mine-Control/releases/latest) |
 | macOS (Intel) | [Download DMG](https://github.com/Harsha240105/Mine-Control/releases/latest) |
 | macOS (Apple Silicon) | [Download DMG](https://github.com/Harsha240105/Mine-Control/releases/latest) |
-| Linux | [Download AppImage](https://github.com/Harsha240105/Mine-Control/releases/latest) |
+| Linux (x64) | [Download AppImage](https://github.com/Harsha240105/Mine-Control/releases/latest) |
 
-The desktop app bundles everything — no Node.js, no separate backend.
+The desktop app bundles everything — no Node.js, no separate backend, no manual setup.
 
 ### Quick Start
 
@@ -172,26 +101,19 @@ The desktop app bundles everything — no Node.js, no separate backend.
 │                   Electron Window                        │
 │  ┌───────────────────────────────────────────────────┐  │
 │  │         React Frontend (Vite + Tailwind)          │  │
-│  │  ┌─────────────────────────────────────────────┐  │  │
-│  │  │  ActiveServerContext (global server state)  │  │  │
-│  │  │  AuthContext (JWT authentication)           │  │  │
-│  │  │  useSocket (Socket.IO client)               │  │  │
-│  │  └──────────────┬──────────────────────────────┘  │  │
-│  │                 │ HTTP (fetch) + Socket.IO         │  │
-│  └─────────────────┼─────────────────────────────────┘  │
-│                    │                                    │
-│  ┌─────────────────▼─────────────────────────────────┐  │
+│  │  ActiveServerContext | AuthContext | useSocket    │  │
+│  │              │ HTTP (fetch) + Socket.IO            │  │
+│  └──────────────┼────────────────────────────────────┘  │
+│                 │                                       │
+│  ┌──────────────▼────────────────────────────────────┐  │
 │  │         Express + Socket.IO Backend               │  │
-│  │  ┌─────────────────────────────────────────┐      │  │
-│  │  │  activeServer.ts (centralized singleton) │      │  │
-│  │  │  Express Router (25 route modules)      │      │  │
-│  │  │  Socket.IO (server state, players, chat)│      │  │
-│  │  │  socketManager.ts (IO for all routes)   │      │  │
-│  │  │  SQLite (better-sqlite3, WAL mode)      │      │  │
-│  │  │  MinecraftServerManager (process mgmt)  │      │  │
-│  │  └─────────────────────────────────────────┘      │  │
-│  │                      │ spawn                       │  │
-│  │  ┌───────────────────▼─────────────────────────┐  │  │
+│  │  activeServer.ts (centralized singleton)          │  │
+│  │  Express Router (30+ route modules)               │  │
+│  │  Socket.IO (server state, players, chat, console) │  │
+│  │  SQLite (better-sqlite3, WAL mode, v23 schema)   │  │
+│  │  MinecraftServerManager (process management)      │  │
+│  │              │ spawn                               │  │
+│  │  ┌───────────▼─────────────────────────────────┐  │  │
 │  │  │      Minecraft Java Process (Paper, etc.)   │  │  │
 │  │  └─────────────────────────────────────────────┘  │  │
 │  └───────────────────────────────────────────────────┘  │
@@ -207,41 +129,20 @@ The desktop app bundles everything — no Node.js, no separate backend.
 | Layer | Technology |
 |-------|-----------|
 | Desktop Shell | Electron 28 |
-| Frontend Framework | React 18 + TypeScript |
-| Build Tool | Vite 5 |
-| Styling | Tailwind CSS 3 |
-| Icons | Lucide React |
+| Frontend | React 18 + TypeScript + Vite 5 |
+| Styling | Tailwind CSS 3 + Lucide React |
 | Charts | Recharts |
-| Backend Framework | Express 4 + TypeScript |
+| Backend | Express 4 + TypeScript |
 | Real-time | Socket.IO 4 |
-| Database | SQLite via better-sqlite3 |
-| Minecraft Protocol | prismarine-nbt |
-| Discord Integration | discord.js 14 |
+| Database | SQLite via better-sqlite3 (WAL mode) |
 | Encryption | AES-256-GCM (Node crypto) |
+| 2FA | Speakeasy (TOTP) |
+| Discord | discord.js 14 |
 | Packaging | electron-builder 26 |
 
-### Active Server Architecture
+### Data Storage
 
-Starting in v1.0.52, the application uses a centralized **Active Server** model:
-
-```
-server/activeServer.ts (singleton EventEmitter)
-       │
-       ├── loaded from database on startup
-       ├── setActive() — switch active server
-       ├── clear() — unset active server
-       ├── updateStatus() — persist state changes
-       ├── getConfig() — full server configuration
-       └── emits 'changed' event
-```
-
-**Frontend**: `ActiveServerContext` wraps the authenticated route tree, providing `server`, `servers`, `refresh()`, and `selectServer()` to all pages.
-
-**Backend**: All 25 route modules access the active server through the `activeServer` singleton, with `socketManager.ts` bridging Socket.IO events for cross-module synchronization.
-
-### Local Storage Model
-
-All user data is stored in the platform-specific `userData` directory, separate from application binaries:
+All user data is stored separately from application binaries:
 
 | Platform | Path |
 |----------|------|
@@ -258,43 +159,15 @@ userData/
 │   └── <server-slug>/
 │       ├── server.jar
 │       ├── server.properties
-│       ├── eula.txt
-│       ├── ops.json / whitelist.json / banned-players.json / banned-ips.json / usercache.json
 │       ├── plugins/
 │       ├── worlds/
 │       ├── backups/
 │       ├── logs/
 │       └── config/
-├── downloads/              # Temporary download cache
 ├── java/                   # Auto-detected/installed JDKs
 ├── playit/                 # Playit.gg agent files
-├── temp/                   # Temporary extraction directory
-├── .uninstall/             # Uninstall state files
-├── .restored/              # Restore detection marker
-└── .install-stamp/         # Installation timestamp
+└── temp/                   # Temporary extraction directory
 ```
-
----
-
-## Authentication Modes
-
-MineControl OS supports two authentication modes:
-
-### Online Mode (Premium)
-```json
-{ "online-mode": true, "enforce-secure-profile": true }
-```
-- Official Minecraft Java: ✓ Ready
-- TLauncher / Offline: ✗ Blocked
-
-### Offline Mode (Private / LAN / Cracked)
-```json
-{ "online-mode": false, "enforce-secure-profile": false }
-```
-- Official Minecraft Java: ✓ Ready
-- TLauncher / Offline: ✓ Ready
-
-**Important:** Offline mode does not verify usernames — only use with trusted players.
 
 ---
 
@@ -314,131 +187,29 @@ npm run dev
 | `npm run dev` | Start development mode (frontend + backend) |
 | `npm run build` | Build frontend + backend for production |
 | `npm run build:desktop` | Build full desktop application |
+| `npm run build:desktop:win` | Build Windows installer |
 | `npm run typecheck` | Run TypeScript type checking |
-| `npm run lint` | Run ESLint |
-
-### Repository Structure
-
-```
-MineControl-OS/
-├── src/               # React frontend (28 pages, 29 routes, 255 API methods)
-│   ├── components/    # Reusable UI components
-│   ├── hooks/         # React hooks (useAuth, useSocket, useActiveServer, useNotifications)
-│   ├── lib/           # API client library
-│   ├── pages/         # 28 page components (29 routes)
-│   ├── App.tsx        # Root component with routing
-│   └── main.tsx       # Entry point
-├── server/            # Express + Socket.IO backend (25 routes, 21 services)
-│   ├── routes/        # 25 route modules
-│   ├── services/      # 21 services (Minecraft, backup, discord, etc.)
-│   ├── middleware/     # Auth middleware, async handler
-│   ├── activeServer.ts # Centralized active server singleton
-│   ├── database.ts    # SQLite v12 with full migration history
-│   ├── paths.ts       # Data directory resolution
-│   └── index.ts       # Server entry point
-├── electron/          # Electron main process
-│   ├── main.ts        # Window management, IPC, auto-updater, system tray
-│   ├── preload.ts     # Context bridge (deduplicated IPC listeners)
-│   └── migration.ts   # Data migration from legacy paths
-├── build/             # Build resources
-├── scripts/           # Utility shell scripts
-├── tests/             # Test files (future use)
-├── systemd/           # Linux systemd service files
-├── .github/           # CI/CD workflows and issue templates
-├── package.json       # App metadata and dependencies
-├── electron-builder.yml  # Desktop packaging configuration
-├── vite.config.ts     # Vite bundler configuration
-├── tsconfig*.json     # TypeScript configurations (client, server, electron)
-└── tailwind.config.js # Tailwind CSS configuration
-```
 
 ---
 
 ## FAQ
 
-**Q: Do I need port forwarding?**  
+**Q: Do I need port forwarding?**
 A: Not for localhost or LAN play. For internet play, use Playit.gg (no port forwarding required) or traditional port forwarding.
 
-**Q: Which Minecraft versions are supported?**  
+**Q: Which Minecraft versions are supported?**
 A: All versions supported by Paper, Fabric, NeoForge, or Vanilla (1.16.5 through latest). Versions fetched from official APIs.
 
-**Q: Can I run multiple servers at once?**  
+**Q: Can I run multiple servers at once?**
 A: Only one at a time per MineControl OS instance. You can create multiple servers and switch between them.
 
-**Q: Is my data safe during updates?**  
-A: Yes. User data stores separately from application binaries in `%APPDATA%/MineControl OS`. Updates only replace application files.
+**Q: Is my data safe during updates?**
+A: Yes. User data is stored separately from application binaries in `%APPDATA%/MineControl OS`. Updates only replace application files.
 
-**Q: How do I uninstall?**  
-A: Go to the **Uninstall** page (or Settings → Danger Zone) for two options: **Keep Data** (app binaries only) or **Delete Everything** (servers, worlds, backups, preferences). Auto-detects previous installations with one-click restore.
-
-**Q: Can I use this on Linux?**  
-A: Yes — supported via AppImage and deb packages.
+**Q: How do I uninstall?**
+A: Go to the Uninstall page for two options: Keep Data (app binaries only) or Delete Everything (servers, worlds, backups, preferences).
 
 ---
-
-## Troubleshooting
-
-### Server won't start
-- Check Java 17+ is installed
-- Check port 25565 is not in use
-- Check the Console tab for error messages
-- Use the Compatibility Checker to validate settings
-
-### Can't connect from another computer
-- Verify server is running (Dashboard shows green "Online")
-- Check Connection tab for correct LAN IP
-- Ensure Windows Firewall allows port 25565
-- Try `localhost:25565` on the hosting machine first
-
-### TLauncher / offline launcher gets "Connection timed out"
-- **Check Offline Mode**: Ensure `online-mode=false` in server.properties. Go to Compatibility Manager → select "Offline / Non-Premium" → Apply Settings.
-- **Tunnel compatibility**: If using Playit.gg, verify the tunnel points to `localhost:25565` and is running. Official clients work but TLauncher fails usually means the tunnel is misconfigured or the TLauncher user entered the wrong address.
-- **Firewall**: Ensure your Windows Firewall allows Java on the server port. Use the Firewall tab in Connection Manager.
-- **Client-side**: The TLauncher user's network may be blocking the Playit.gg domain or port. Ask them to try a different network or use a VPN.
-- **Minecraft version**: Make sure the TLauncher user is running the same Minecraft version as the server.
-
-### Update check fails
-- Requires internet access to reach GitHub
-- If GitHub is unreachable, download manually from the [Releases page](https://github.com/Harsha240105/Mine-Control/releases)
-- Auto-updater only checks releases with installer assets (`.exe`, `.dmg`, `.AppImage`)
-
-### Data not persisting
-- Verify data exists in `%APPDATA%/MineControl OS/` (Windows) or `~/Library/Application Support/MineControl OS/` (macOS)
-- The database is never deleted or recreated during updates
-
----
-
-## Persistence Model
-
-| Data | Storage |
-|------|---------|
-| Servers | `servers` table |
-| Active server | `server_config` + `activeServer.ts` singleton |
-| Settings | `server_config` table |
-| Players | `players` table |
-| Worlds | `worlds` table + filesystem |
-| Plugins/Mods/Shaders/Packs | table + filesystem |
-| Backups | `backups` table + ZIP files |
-| Console history | `logs/` on disk |
-| Chat logs | `chat_log` table |
-| UI state | `ui_state` table + localStorage |
-| Feedback | `feedback_tickets` table |
-| Schedules | `schedules` table |
-| Notifications | `notifications` table |
-| Audit log | `audit_log` table |
-| System stats | `system_stats` table |
-| Discord/Playit config | `server_config` table |
-| Uninstall history | `uninstall_history` table |
-| Restore detection | `restore_detection` table |
-| Guide/Privacy/Update prefs | Dedicated schema tables (v9–v12) |
-
-All data survives application restarts, software updates, and (where applicable) power failure recovery.
-
----
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 ## License
 

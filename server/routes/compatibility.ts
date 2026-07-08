@@ -9,6 +9,7 @@ import crypto from 'crypto';
 import { execSync } from 'child_process';
 import { authMiddleware, requirePermission, AuthRequest } from '../middleware/auth';
 import { getDatabase } from '../database';
+import { getActiveServerId } from '../db/repository/serverConfigRepository';
 import { minecraftServer } from '../services/minecraftServer';
 
 const router = Router();
@@ -176,10 +177,9 @@ router.post('/configure', authMiddleware, requirePermission('server.start'), asy
 });
 
 function getActiveServer(): ActiveServer | null {
-  const db = getDatabase();
-  const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+  const activeId = getActiveServerId();
   if (!activeId) return null;
-  const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(activeId) as ActiveServer | undefined;
+  const server = getDatabase().prepare('SELECT * FROM servers WHERE id = ?').get(activeId) as ActiveServer | undefined;
   return server || null;
 }
 

@@ -5,13 +5,9 @@ import { getDatabase } from '../database';
 import { authMiddleware, requirePermission, AuthRequest } from '../middleware/auth';
 import { resolveMinecraftDir } from '../paths';
 import { emitToAll } from '../socketManager';
+import { getActiveServerId } from '../db/repository/serverConfigRepository';
 
 const router = Router();
-
-function getActiveServerId(): string | null {
-  const db = getDatabase();
-  return (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value || null;
-}
 
 function getShadersDir(): string {
   return resolveMinecraftDir('shaderpacks');
@@ -133,7 +129,8 @@ router.delete('/:name', authMiddleware, requirePermission('plugin.manage'), (req
   }
 
   const db = getDatabase();
-  db.prepare('DELETE FROM shaders WHERE name = ?').run(req.params.name);
+  const serverId = getActiveServerId();
+  db.prepare('DELETE FROM shaders WHERE name = ? AND server_id = ?').run(req.params.name, serverId);
 
   emitToAll('shader:removed', { name: req.params.name });
   res.json({ success: true });
@@ -142,14 +139,15 @@ router.delete('/:name', authMiddleware, requirePermission('plugin.manage'), (req
 router.post('/:name/toggle', authMiddleware, requirePermission('plugin.manage'), (req: AuthRequest, res) => {
   const SHADERS_DIR = getShadersDir();
   const db = getDatabase();
-  const shader = db.prepare('SELECT * FROM shaders WHERE name = ?').get(req.params.name) as any;
+  const serverId = getActiveServerId();
+  const shader = db.prepare('SELECT * FROM shaders WHERE name = ? AND (server_id = ? OR server_id IS NULL)').get(req.params.name, serverId) as any;
 
   if (!shader) {
     return res.status(404).json({ error: 'Shader not found' });
   }
 
   const newState = shader.enabled ? 0 : 1;
-  db.prepare('UPDATE shaders SET enabled = ? WHERE name = ?').run(newState, req.params.name);
+  db.prepare('UPDATE shaders SET enabled = ? WHERE name = ? AND server_id = ?').run(newState, req.params.name, serverId);
 
   const zipPath = path.join(SHADERS_DIR, `${req.params.name}.zip`);
   const disabledPath = path.join(SHADERS_DIR, `${req.params.name}.zip.disabled`);

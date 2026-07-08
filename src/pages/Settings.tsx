@@ -93,6 +93,7 @@ export default function Settings() {
           'max-players': props['max-players'] || config.maxPlayers,
           difficulty: props.difficulty || config.difficulty,
           'view-distance': props['view-distance'] || config.viewDistance,
+          'simulation-distance': props['simulation-distance'] || config.simulationDistance || 0,
           pvp: props.pvp !== 'false' ? 'true' : 'false',
         });
       } catch (propsErr: any) {
@@ -332,6 +333,19 @@ export default function Settings() {
               min={3}
               max={128}
             />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Simulation Distance</label>
+            <input
+              type="number"
+              value={props['simulation-distance'] || config.simulationDistance || props['view-distance'] || config.viewDistance || 8}
+              onChange={(e) => setProps({ ...props, 'simulation-distance': e.target.value })}
+              className="input"
+              min={3}
+              max={128}
+            />
+            <p className="text-xs text-gray-600 mt-1">Controls how far the server simulates entities. Leave 0 to auto-calculate from view distance.</p>
           </div>
 
           <div>

@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { getDatabase } from '../database';
+import { getActiveServerId } from '../db/repository/serverConfigRepository';
 import { BASE_PATH, resolvePath, resolveMinecraftDir, getMinecraftDir } from '../paths';
 import { activeServer } from '../activeServer';
 import { maskValue, getAllCredentialMetadata, hasCredential, storeCredential, getCredential, deleteCredential } from './encryption';
@@ -104,7 +105,7 @@ export const privacyService = {
 
   getExternalIntegrations() {
     const db = getDatabase();
-    const activeId = (db.prepare("SELECT value FROM server_config WHERE key = 'active_server_id'").get() as any)?.value;
+    const activeId = getActiveServerId();
 
     const integrations: any[] = [
       {
@@ -296,8 +297,13 @@ export const privacyService = {
 
     // 4. Backup status
     try {
-      const backupCount = (db.prepare('SELECT COUNT(*) as c FROM backups').get() as any)?.c || 0;
-      const lastBackup = db.prepare('SELECT created_at FROM backups ORDER BY created_at DESC LIMIT 1').get() as any;
+      const sid = getActiveServerId();
+      const backupCount = sid
+        ? (db.prepare('SELECT COUNT(*) as c FROM backups WHERE server_id = ?').get(sid) as any)?.c || 0
+        : (db.prepare('SELECT COUNT(*) as c FROM backups').get() as any)?.c || 0;
+      const lastBackup = sid
+        ? db.prepare('SELECT created_at FROM backups WHERE server_id = ? ORDER BY created_at DESC LIMIT 1').get(sid) as any
+        : db.prepare('SELECT created_at FROM backups ORDER BY created_at DESC LIMIT 1').get() as any;
       const detail = backupCount > 0 ? `${backupCount} backup(s), last: ${lastBackup?.created_at || 'N/A'}` : 'No backups found';
       db.prepare('UPDATE security_checks SET status = ?, detail = ?, score_impact = ?, checked_at = datetime(\'now\') WHERE check_type = ?')
         .run(backupCount > 0 ? 'pass' : 'warn', detail, backupCount > 0 ? 0 : -10, 'backup_status');
@@ -466,7 +472,12 @@ export const privacyService = {
 
   clearLogs() {
     const db = getDatabase();
-    db.prepare('DELETE FROM chat_log').run();
+    const sid = getActiveServerId();
+    if (sid) {
+      db.prepare('DELETE FROM chat_log WHERE server_id = ?').run(sid);
+    } else {
+      db.prepare('DELETE FROM chat_log').run();
+    }
     db.prepare('DELETE FROM security_audit_log').run();
 
     const logsDir = resolveMinecraftDir('logs');
@@ -505,7 +516,12 @@ export const privacyService = {
 
   clearDiagnostics() {
     const db = getDatabase();
-    db.prepare('DELETE FROM connection_diagnostics').run();
+    const sid = getActiveServerId();
+    if (sid) {
+      db.prepare('DELETE FROM connection_diagnostics WHERE server_id = ?').run(sid);
+    } else {
+      db.prepare('DELETE FROM connection_diagnostics').run();
+    }
     this.addAuditLog('diagnostics_cleared', 'Diagnostics data cleared');
     return { success: true, message: 'Diagnostics data cleared' };
   },
@@ -536,8 +552,13 @@ export const privacyService = {
     const prefs = this.getPreferences();
     const db = getDatabase();
 
-    const backupCount = (db.prepare('SELECT COUNT(*) as c FROM backups').get() as any)?.c || 0;
-    const lastBackup = db.prepare('SELECT created_at FROM backups ORDER BY created_at DESC LIMIT 1').get() as any;
+    const sid = getActiveServerId();
+    const backupCount = sid
+      ? (db.prepare('SELECT COUNT(*) as c FROM backups WHERE server_id = ?').get(sid) as any)?.c || 0
+      : (db.prepare('SELECT COUNT(*) as c FROM backups').get() as any)?.c || 0;
+    const lastBackup = sid
+      ? db.prepare('SELECT created_at FROM backups WHERE server_id = ? ORDER BY created_at DESC LIMIT 1').get(sid) as any
+      : db.prepare('SELECT created_at FROM backups ORDER BY created_at DESC LIMIT 1').get() as any;
     const lastAudit = db.prepare('SELECT timestamp FROM security_audit_log ORDER BY timestamp DESC LIMIT 1').get() as any;
 
     const warnings: string[] = [];

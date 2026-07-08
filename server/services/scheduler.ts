@@ -20,12 +20,26 @@ export class SchedulerService {
 
   static initialize() {
     const db = getDatabase();
+
+    // Daily expired session cleanup
+    const sessionCleanupTask = cron.schedule('0 3 * * *', () => {
+      try {
+        const result = db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')").run();
+        if (result.changes > 0) {
+          console.log(`[Scheduler] Cleaned ${result.changes} expired session(s)`);
+        }
+      } catch (e) {
+        console.error('[Scheduler] Session cleanup failed:', e);
+      }
+    });
+    this.tasks.set('__session_cleanup', sessionCleanupTask);
+
     const schedules = db.prepare('SELECT * FROM schedules WHERE enabled = 1').all() as Schedule[];
-    
+
     for (const schedule of schedules) {
       this.scheduleTask(schedule);
     }
-    console.log(`[Scheduler] Initialized ${schedules.length} active tasks.`);
+    console.log(`[Scheduler] Initialized ${schedules.length} active tasks + session cleanup.`);
   }
 
   static scheduleTask(schedule: Schedule) {

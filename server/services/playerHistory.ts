@@ -1,4 +1,5 @@
 import { getDatabase } from '../database';
+import { getActiveServerId } from '../db/repository/serverConfigRepository';
 import { emitToAll } from '../socketManager';
 
 export type HistoryEventType =
@@ -24,9 +25,16 @@ export type HistoryEventType =
 export function recordEvent(playerId: string, eventType: HistoryEventType, eventData: string = ''): void {
   try {
     const db = getDatabase();
-    db.prepare(
-      'INSERT INTO player_history (player_id, event_type, event_data, timestamp) VALUES (?, ?, ?, ?)'
-    ).run(playerId, eventType, eventData, new Date().toISOString());
+    const serverId = getActiveServerId();
+    if (serverId) {
+      db.prepare(
+        'INSERT INTO player_history (player_id, event_type, event_data, timestamp, server_id) VALUES (?, ?, ?, ?, ?)'
+      ).run(playerId, eventType, eventData, new Date().toISOString(), serverId);
+    } else {
+      db.prepare(
+        'INSERT INTO player_history (player_id, event_type, event_data, timestamp) VALUES (?, ?, ?, ?)'
+      ).run(playerId, eventType, eventData, new Date().toISOString());
+    }
   } catch {}
 }
 
@@ -90,11 +98,13 @@ export function getPlayerTimeline(playerId: string, limit: number = 30): any[] {
 export function getRecentActivity(limit: number = 20): any[] {
   try {
     const db = getDatabase();
+    const serverId = getActiveServerId();
     return db.prepare(`
       SELECT ph.*, p.username FROM player_history ph
       JOIN players p ON p.id = ph.player_id
+      WHERE (ph.server_id = ? OR ph.server_id IS NULL)
       ORDER BY ph.timestamp DESC LIMIT ?
-    `).all(limit);
+    `).all(serverId, limit);
   } catch {
     return [];
   }
@@ -103,11 +113,12 @@ export function getRecentActivity(limit: number = 20): any[] {
 export function getRecentJoins(limit: number = 10): any[] {
   try {
     const db = getDatabase();
+    const serverId = getActiveServerId();
     return db.prepare(`
       SELECT * FROM players
-      WHERE first_join IS NOT NULL
+      WHERE first_join IS NOT NULL AND (server_id = ? OR server_id IS NULL)
       ORDER BY first_join DESC LIMIT ?
-    `).all(limit);
+    `).all(serverId, limit);
   } catch {
     return [];
   }

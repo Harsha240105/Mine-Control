@@ -8,6 +8,7 @@ import { activeServer } from '../activeServer';
 import { minecraftServer } from '../services/minecraftServer';
 import { setMinecraftDir, resolvePath, getMinecraftDir } from '../paths';
 import { downloadVersion } from '../services/download';
+import { configureServer } from '../services/serverConfigurator';
 import { emitToAll } from '../socketManager';
 import { autoBackupIfEnabled, backupService } from '../services/backup';
 
@@ -103,7 +104,7 @@ router.get('/:id', authMiddleware, (req: AuthRequest, res) => {
 // Create server (atomic: download first, then create DB record)
 router.post('/', authMiddleware, requirePermission('server.start'), async (req: AuthRequest, res) => {
   const db = getDatabase();
-  const { name, port, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, pvp, maxPlayers, viewDistance, onlineMode, software, version, seed, network } = req.body;
+  const { name, port, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, pvp, maxPlayers, viewDistance, simulationDistance, onlineMode, software, version, seed, network, jvmFlags } = req.body;
 
   if (!name) return res.status(400).json({ error: 'Server name is required' });
 
@@ -114,11 +115,17 @@ router.post('/', authMiddleware, requirePermission('server.start'), async (req: 
   const id = uuidv4();
   const dir = resolvePath('servers', slug);
 
-  // Create directories
-  for (const sub of ['plugins', 'worlds', 'backups', 'logs', 'config']) {
-    const p = path.join(dir, sub);
-    if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
-  }
+  // Auto-configure server directory: create all folders, generate config files, accept EULA
+  configureServer(dir, {
+    seed: seed || undefined,
+    port: parseInt(port || '25565'),
+    maxPlayers: parseInt(maxPlayers || '20'),
+    gamemode: (gamemode as any) || 'survival',
+    difficulty: (difficulty as any) || 'normal',
+    onlineMode: onlineMode !== false,
+    viewDistance: parseInt(viewDistance || '10'),
+    motd: motd || '§bMineControl OS §7- §fMinecraft Server',
+  });
 
   // Map software to download source
   const softwareLower = (software || '').toLowerCase();
@@ -158,8 +165,8 @@ router.post('/', authMiddleware, requirePermission('server.start'), async (req: 
   const softwareToStore = sourceName || software || '';
 
   db.prepare(`
-    INSERT INTO servers (id, name, slug, port, directory, version, version_source, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, pvp, maxPlayers, viewDistance, onlineMode, autoRestart, autoBackup, whitelistEnabled, status, seed, network)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?)
+    INSERT INTO servers (id, name, slug, port, directory, version, version_source, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, pvp, maxPlayers, viewDistance, simulationDistance, jvm_flags, onlineMode, autoRestart, autoBackup, whitelistEnabled, status, seed, network)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped', ?, ?)
   `).run(
     id, name, slug,
     parseInt(port || '25565'),
@@ -176,6 +183,8 @@ router.post('/', authMiddleware, requirePermission('server.start'), async (req: 
     pvp !== false ? 1 : 0,
     parseInt(maxPlayers || '20'),
     parseInt(viewDistance || '10'),
+    parseInt(simulationDistance || '0'),
+    jvmFlags || '',
     onlineMode ? 1 : 0,
     1, 1, 0,
     seed || '',
@@ -190,22 +199,6 @@ router.post('/', authMiddleware, requirePermission('server.start'), async (req: 
       backupService.createBackup({ name: `Post-creation-${name}`, reason: 'After server creation', type: 'auto' }).catch(() => {});
     }
   } catch {}
-
-  // Write level-seed to server.properties if provided
-  if (seed) {
-    const propsPath = path.join(dir, 'server.properties');
-    if (fs.existsSync(propsPath)) {
-      let content = fs.readFileSync(propsPath, 'utf-8');
-      if (content.includes('level-seed=')) {
-        content = content.replace(/level-seed=.*/, `level-seed=${seed}`);
-      } else {
-        content += `\nlevel-seed=${seed}\n`;
-      }
-      fs.writeFileSync(propsPath, content);
-    } else {
-      fs.writeFileSync(propsPath, `level-seed=${seed}\n`);
-    }
-  }
 
   const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(id) as any;
   emitToAll('server:created', server);
@@ -234,7 +227,7 @@ router.put('/:id', authMiddleware, requirePermission('server.start'), (req: Auth
   const server = db.prepare('SELECT * FROM servers WHERE id = ?').get(req.params.id) as any;
   if (!server) return res.status(404).json({ error: 'Server not found' });
 
-  const { name, port, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, pvp, maxPlayers, viewDistance, onlineMode, autoRestart, autoBackup, whitelistEnabled } = req.body;
+  const { name, port, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, pvp, maxPlayers, viewDistance, simulationDistance, jvmFlags, onlineMode, autoRestart, autoBackup, whitelistEnabled } = req.body;
 
   const sets: string[] = [];
   const vals: any[] = [];
@@ -250,6 +243,8 @@ router.put('/:id', authMiddleware, requirePermission('server.start'), (req: Auth
   if (pvp !== undefined) { sets.push('pvp = ?'); vals.push(pvp ? 1 : 0); }
   if (maxPlayers !== undefined) { sets.push('maxPlayers = ?'); vals.push(parseInt(maxPlayers)); }
   if (viewDistance !== undefined) { sets.push('viewDistance = ?'); vals.push(parseInt(viewDistance)); }
+  if (simulationDistance !== undefined) { sets.push('simulationDistance = ?'); vals.push(parseInt(simulationDistance)); }
+  if (jvmFlags !== undefined) { sets.push('jvm_flags = ?'); vals.push(jvmFlags); }
   if (onlineMode !== undefined) { sets.push('onlineMode = ?'); vals.push(onlineMode ? 1 : 0); }
   if (autoRestart !== undefined) { sets.push('autoRestart = ?'); vals.push(autoRestart ? 1 : 0); }
   if (autoBackup !== undefined) { sets.push('autoBackup = ?'); vals.push(autoBackup ? 1 : 0); }
@@ -300,11 +295,25 @@ router.delete('/:id', authMiddleware, requirePermission('server.start'), (req: A
 
   try {
     // Manual deletion of related records (ensures cleanup even if FK cascading is incomplete)
-    db.prepare('DELETE FROM backups WHERE server_id = ?').run(req.params.id);
-    db.prepare('DELETE FROM worlds WHERE server_id = ?').run(req.params.id);
-    db.prepare('DELETE FROM chat_log WHERE server_id = ?').run(req.params.id);
-    db.prepare('DELETE FROM schedules WHERE server_id = ?').run(req.params.id);
-    db.prepare('DELETE FROM notifications WHERE server_id = ?').run(req.params.id);
+    const serverId = req.params.id;
+    db.prepare('DELETE FROM backups WHERE server_id = ?').run(serverId);
+    db.prepare('DELETE FROM worlds WHERE server_id = ?').run(serverId);
+    db.prepare('DELETE FROM chat_log WHERE server_id = ?').run(serverId);
+    db.prepare('DELETE FROM schedules WHERE server_id = ?').run(serverId);
+    db.prepare('DELETE FROM notifications WHERE server_id = ?').run(serverId);
+    db.prepare('DELETE FROM banned_players WHERE server_id = ?').run(serverId);
+    db.prepare('DELETE FROM plugins WHERE server_id = ?').run(serverId);
+    db.prepare('DELETE FROM mods WHERE server_id = ?').run(serverId);
+    db.prepare('DELETE FROM shaders WHERE server_id = ?').run(serverId);
+    db.prepare('DELETE FROM resource_packs WHERE server_id = ?').run(serverId);
+    db.prepare('DELETE FROM system_stats WHERE server_id = ?').run(serverId);
+    db.prepare('DELETE FROM audit_log WHERE server_id = ?').run(serverId);
+    db.prepare('DELETE FROM claims WHERE server_id = ?').run(serverId);
+    db.prepare('DELETE FROM build_tags WHERE server_id = ?').run(serverId);
+    db.prepare('DELETE FROM feedback_tickets WHERE server_id = ?').run(serverId);
+    db.prepare('DELETE FROM player_history WHERE server_id = ?').run(serverId);
+    // Reset players (FK ON DELETE SET NULL) rather than deleting player profiles
+    db.prepare('UPDATE players SET server_id = NULL WHERE server_id = ?').run(serverId);
     
     // Delete the server record
     db.prepare('DELETE FROM servers WHERE id = ?').run(req.params.id);

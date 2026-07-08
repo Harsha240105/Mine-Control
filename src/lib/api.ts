@@ -699,4 +699,50 @@ export const api = {
     request<any[]>(`/discord/history${limit ? `?limit=${limit}` : ''}`),
   sendDiscordTestMessage: () =>
     request<any>('/discord/test-message', { method: 'POST' }),
+
+  // Performance Tuning
+  getPerformancePresets: () => request<any>('/performance/presets'),
+  getPerformanceTune: (serverId?: string) =>
+    request<any>(`/performance/tune${serverId ? `?server_id=${serverId}` : ''}`),
+  applyPerformancePreset: (serverId: string, presetId: string) =>
+    request<any>('/performance/apply', { method: 'POST', body: JSON.stringify({ server_id: serverId, presetId }) }),
+  setJvmFlags: (serverId: string, jvmFlags: string) =>
+    request<any>('/performance/flags', { method: 'POST', body: JSON.stringify({ server_id: serverId, jvmFlags }) }),
+  generateYmlOptimizations: (serverId: string) =>
+    request<any>('/performance/yml', { method: 'POST', body: JSON.stringify({ server_id: serverId }) }),
+
+  // 2FA
+  setup2FA: () => request<any>('/auth/setup-2fa', { method: 'POST' }),
+  verify2FA: (token: string) =>
+    request<any>('/auth/verify-2fa', { method: 'POST', body: JSON.stringify({ token }) }),
+  disable2FA: (password: string) =>
+    request<any>('/auth/disable-2fa', { method: 'POST', body: JSON.stringify({ password }) }),
+  get2FAStatus: () => request<any>('/auth/2fa-status'),
+  loginWith2FA: (username: string, password: string, totpToken: string) =>
+    request<{ token: string; user: any }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ username, password, totpToken }),
+    }),
+  getAuthSessions: () => request<any>('/auth/sessions'),
+  revokeAuthSession: (id: string) =>
+    request<any>(`/auth/sessions/${id}/revoke`, { method: 'POST' }),
+
+  // Users (admin)
+  getUsers: () => request<any[]>('/users'),
+  createUser: (data: { username: string; password: string; role?: string }) =>
+    request<any>('/users', { method: 'POST', body: JSON.stringify(data) }),
+  updateUser: (id: string, data: { role?: string }) =>
+    request<any>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteUser: (id: string) =>
+    request<{ success: boolean }>(`/users/${id}`, { method: 'DELETE' }),
+
+  // IP Whitelist
+  getIpWhitelist: (serverId?: string) =>
+    request<any>(`/ip-whitelist${serverId ? `?server_id=${serverId}` : ''}`),
+  addIpWhitelist: (ipAddress: string, description?: string, serverId?: string) =>
+    request<any>('/ip-whitelist', { method: 'POST', body: JSON.stringify({ ipAddress, description, server_id: serverId }) }),
+  removeIpWhitelist: (id: string) =>
+    request<{ success: boolean }>(`/ip-whitelist/${id}`, { method: 'DELETE' }),
+  toggleIpWhitelist: (enabled: boolean) =>
+    request<any>('/ip-whitelist/toggle', { method: 'POST', body: JSON.stringify({ enabled }) }),
 };
