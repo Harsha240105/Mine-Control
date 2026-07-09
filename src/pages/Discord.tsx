@@ -50,10 +50,11 @@ export default function Discord() {
   const [showHistory, setShowHistory] = useState(false);
 
   useEffect(() => {
+    if (!activeServer) return;
     fetchConfig();
     fetchStatus();
     fetchHistory();
-  }, []);
+  }, [activeServer?.id]);
 
   useEffect(() => {
     if (!socket) return;

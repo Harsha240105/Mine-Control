@@ -347,7 +347,8 @@ export default function Layout() {
         style={{ width: 350 }} 
       >
         <svg 
-          className="absolute inset-0 drop-shadow-[0_0_30px_rgba(59,130,246,0.1)] pointer-events-auto cursor-ns-resize" 
+          className="absolute inset-0 drop-shadow-[0_0_30px_rgba(59,130,246,0.1)] cursor-ns-resize" 
+          style={{ pointerEvents: 'visiblePainted' }}
           width="350" 
           height={h}
         >

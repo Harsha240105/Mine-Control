@@ -291,9 +291,12 @@ function getEffectiveGitHubConfig(serverId?: string): { repository: string; api_
   const repoRow = db.prepare("SELECT value FROM server_config WHERE key = 'github_repo'").get() as any;
   const { getCredential } = require('./encryption');
   const token = getCredential('github_token');
+  
+  const owner = ownerRow?.value || 'Harsha240105';
+  const repo = repoRow?.value || 'Mine-Control';
 
-  if (ownerRow?.value && repoRow?.value && token) {
-    return { repository: `${ownerRow.value}/${repoRow.value}`, api_token: token };
+  if (token) {
+    return { repository: `${owner}/${repo}`, api_token: token };
   }
 
   return null;

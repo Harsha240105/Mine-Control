@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
+import { useSocket } from '../hooks/useSocket';
 import { Cpu, Download, CheckCircle2, ChevronRight, Server, Globe, ShieldCheck, Wifi, Search, ArrowUpDown, Filter } from 'lucide-react';
 import { Button } from '../components/ui/stateful-button';
 import { api } from '../lib/api';
@@ -49,9 +50,11 @@ type SortMode = 'newest' | 'oldest' | 'mcversion-desc' | 'mcversion-asc';
 type FilterMode = 'all' | 'release' | 'snapshot' | 'stable' | 'recommended';
 
 export default function Software() {
+  const { socket } = useSocket();
   const [data, setData] = useState<VersionsData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [installing, setInstalling] = useState(false);
+  const [installing, setInstalling] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number>(0);
   const [selectedSoftware, setSelectedSoftware] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
@@ -60,6 +63,16 @@ export default function Software() {
   useEffect(() => {
     fetchVersions();
   }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    socket.on('software:progress', (data: { pct: number, version: string, source: string }) => {
+      setDownloadProgress(data.pct);
+    });
+    return () => {
+      socket.off('software:progress');
+    };
+  }, [socket]);
 
   const fetchVersions = async () => {
     try {
@@ -74,7 +87,8 @@ export default function Software() {
   };
 
   const handleInstall = async (version: string, source?: string) => {
-    setInstalling(true);
+    setInstalling(version);
+    setDownloadProgress(0);
     const softSource = source || selectedSoftware || '';
     const promise = api.setServerVersion(version, softSource);
     toast.promise(promise, {
@@ -88,7 +102,8 @@ export default function Software() {
       await fetchVersions();
       setSelectedSoftware(null);
     } catch {} finally {
-      setInstalling(false);
+      setInstalling(null);
+      setDownloadProgress(0);
     }
   };
 
@@ -352,14 +367,23 @@ export default function Software() {
                   <Button
                     variant="secondary"
                     onClick={() => handleInstall(v.version, v.source)}
-                    disabled={installing || isCurrent}
-                    className={`text-sm shrink-0 ${
-                      isCurrent ? 'opacity-50 cursor-not-allowed' :
-                      v.downloaded ? 'border-blue-500/30 text-blue-300' : ''
+                    disabled={installing !== null || isCurrent}
+                    className={`text-xs px-3 py-1.5 min-w-[80px] ${
+                      isCurrent ? 'opacity-50' : ''
                     }`}
                   >
-                    <Download size={14} />
-                    {isCurrent ? 'Active' : installing ? 'Installing...' : v.downloaded ? 'Switch' : 'Install'}
+                    {installing === v.version ? (
+                      <span className="flex items-center gap-2 text-blue-400">
+                        <div className="w-3 h-3 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                        {downloadProgress > 0 ? `${downloadProgress}%` : 'Installing...'}
+                      </span>
+                    ) : isCurrent ? (
+                      'Installed'
+                    ) : v.downloaded ? (
+                      'Switch'
+                    ) : (
+                      'Install'
+                    )}
                   </Button>
                 </div>
               );

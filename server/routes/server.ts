@@ -1581,26 +1581,29 @@ router.post('/version', authMiddleware, requirePermission('server.start'), async
     const jarPath = path.join(mcDir, jarFile);
 
     if (!fs.existsSync(jarPath)) {
+      const onProgress = (pct: number) => {
+        emitToAll('software:progress', { version, source: jarPrefix, pct });
+      };
       if (useFabric) {
-        await downloadFabricVersion(version, jarPath);
+        await downloadFabricVersion(version, jarPath, onProgress);
       } else if (usePurpur) {
-        await downloadPurpurVersion(version, jarPath);
+        await downloadPurpurVersion(version, jarPath, onProgress);
       } else if (useForge) {
-        await downloadForgeVersion(version, jarPath);
+        await downloadForgeVersion(version, jarPath, onProgress);
       } else if (useNeoForge) {
-        await downloadNeoForgeVersion(version, jarPath);
+        await downloadNeoForgeVersion(version, jarPath, onProgress);
       } else if (useQuilt) {
-        await downloadQuiltVersion(version, jarPath);
+        await downloadQuiltVersion(version, jarPath, onProgress);
       } else if (useSpigot) {
-        await downloadSpigotVersion(version, jarPath);
+        await downloadSpigotVersion(version, jarPath, onProgress);
       } else if (useFolia) {
-        await downloadFoliaVersion(version, jarPath);
+        await downloadFoliaVersion(version, jarPath, onProgress);
       } else if (usePufferfish) {
-        await downloadPaperVersion(version, jarPath);
+        await downloadPaperVersion(version, jarPath, onProgress);
       } else if (usePaper) {
-        await downloadPaperVersion(version, jarPath);
+        await downloadPaperVersion(version, jarPath, onProgress);
       } else {
-        await downloadVanillaVersion(version, jarPath);
+        await downloadVanillaVersion(version, jarPath, onProgress);
       }
     }
 

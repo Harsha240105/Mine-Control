@@ -18,7 +18,15 @@
 
 ## End-to-End Project Summary
 
-MineControl OS is a comprehensive, standalone desktop application designed to streamline and automate the entire lifecycle of a Minecraft server. From a single-click server creation process that handles downloading jars, accepting the EULA, and configuring ports, to advanced performance tuning with auto-calculated JVM flags based on system resources. It offers robust multi-server isolation, ensuring separate configurations, worlds, plugins, and mods for every server instance. Furthermore, the platform integrates seamlessly with Discord for real-time chat bridging and alerts, features a secure two-factor authentication system with role-based access, automated system backups with integrity checks, a complete plugin and mod management system via Modrinth and other sources, and a newly implemented modern interface with Apple-style floating docks and Evervault hover cards. In essence, MineControl OS removes the need for terminal usage or manual file edits, providing an intuitive, premium, self-hosted experience.
+MineControl OS is a comprehensive, standalone desktop application designed to streamline and automate the entire lifecycle of a Minecraft server. From a single-click server creation process that handles downloading jars, accepting the EULA, and configuring ports, to advanced performance tuning with auto-calculated JVM flags based on system resources. It offers robust multi-server isolation, ensuring separate configurations, worlds, plugins, and mods for every server instance. Furthermore, the platform integrates seamlessly with Discord for real-time chat bridging and alerts, features a secure two-factor authentication system with role-based access, automated system backups with integrity checks, a complete plugin and mod management system via Modrinth and other sources, and a newly implemented modern interface with Apple-style floating docks and Evervault hover cards.
+
+**Recent Updates:**
+- Improved Sidebar UI responsiveness by fixing SVG hit-boxes.
+- Enhanced Java and Server Software Downloader with a real-time progress indicator directly in the UI and native PowerShell extraction on Windows to prevent file locking issues.
+- Fixed Discord Bot Token edge cases during configuration re-saves.
+- Improved GitHub Token sync with automatic fallback mapping.
+
+In essence, MineControl OS removes the need for terminal usage or manual file edits, providing an intuitive, premium, self-hosted experience.
 
 ---
 

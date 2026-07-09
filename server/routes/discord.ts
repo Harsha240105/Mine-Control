@@ -71,8 +71,8 @@ router.post('/', authMiddleware, requirePermission('settings.edit'), async (req:
   for (const f of fields) {
     const val = req.body[f];
     if (val !== undefined) {
-      // Skip masked placeholder token to avoid overwriting the real token
-      if (f === 'bot_token' && val === '••••••••' && existing) continue;
+      // Skip masked placeholder token and empty strings to avoid accidentally overwriting the real token
+      if (f === 'bot_token' && (val === '••••••••' || val === '') && existing) continue;
       updateFields.push(`${f} = ?`);
       values.push(typeof val === 'boolean' ? (val ? 1 : 0) : val);
     }

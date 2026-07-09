@@ -208,15 +208,15 @@ export async function httpsGet(url: string, timeoutMs = 15000, headers?: Record<
   });
 }
 
-export function downloadFile(url: string, destPath: string, timeoutMs = 300000): Promise<void> {
-  return downloadWithRetry(url, destPath, timeoutMs, 3);
+export function downloadFile(url: string, destPath: string, timeoutMs = 300000, onProgress?: (pct: number) => void): Promise<void> {
+  return downloadWithRetry(url, destPath, timeoutMs, 3, onProgress);
 }
 
-async function downloadWithRetry(url: string, destPath: string, timeoutMs: number, maxRetries: number): Promise<void> {
+async function downloadWithRetry(url: string, destPath: string, timeoutMs: number, maxRetries: number, onProgress?: (pct: number) => void): Promise<void> {
   let lastError: Error | null = null;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      await downloadOnce(url, destPath, timeoutMs);
+      await downloadOnce(url, destPath, timeoutMs, onProgress);
       return;
     } catch (err: any) {
       lastError = err;
@@ -229,7 +229,7 @@ async function downloadWithRetry(url: string, destPath: string, timeoutMs: numbe
   throw lastError || new Error('Download failed');
 }
 
-function downloadOnce(url: string, destPath: string, timeoutMs: number): Promise<void> {
+function downloadOnce(url: string, destPath: string, timeoutMs: number, onProgress?: (pct: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const tempPath = destPath + '.download';
     const file = fs.createWriteStream(tempPath);
@@ -257,6 +257,19 @@ function downloadOnce(url: string, destPath: string, timeoutMs: number): Promise
           if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
           return reject(new Error(`Failed to download: HTTP ${resp.statusCode} from ${requestUrl}`));
         }
+        
+        const total = parseInt(resp.headers['content-length'] || '0', 10);
+        let downloaded = 0;
+        
+        if (onProgress) {
+          resp.on('data', (chunk: Buffer) => {
+            downloaded += chunk.length;
+            if (total > 0) {
+              onProgress(Math.round((downloaded / total) * 100));
+            }
+          });
+        }
+        
         resp.pipe(file);
         file.on('finish', () => {
           isFinished = true;
@@ -316,7 +329,7 @@ export async function isPaperAvailable(version: string): Promise<boolean> {
   return paperVersions.includes(version);
 }
 
-export async function downloadPaperVersion(version: string, jarPath: string): Promise<void> {
+export async function downloadPaperVersion(version: string, jarPath: string, onProgress?: (pct: number) => void): Promise<void> {
   try {
     const buildsData = await httpsGet(`${PAPER_API}/versions/${version}/builds`);
     const parsed = JSON.parse(buildsData);
@@ -330,13 +343,13 @@ export async function downloadPaperVersion(version: string, jarPath: string): Pr
     if (!downloadUrl) {
       throw new Error(`No download URL found for Paper ${version} build ${latestBuild.build}`);
     }
-    await downloadFile(downloadUrl, jarPath);
+    await downloadFile(downloadUrl, jarPath, 300000, onProgress);
   } catch (err: any) {
     throw new Error(`Failed to download Paper ${version}: ${err.message}`);
   }
 }
 
-export async function downloadFabricVersion(version: string, jarPath: string): Promise<void> {
+export async function downloadFabricVersion(version: string, jarPath: string, onProgress?: (pct: number) => void): Promise<void> {
   try {
     const loadersData = await httpsGet(`${FABRIC_API}/versions/loader/${version}`);
     const loaders = JSON.parse(loadersData);
@@ -345,25 +358,25 @@ export async function downloadFabricVersion(version: string, jarPath: string): P
     }
     const loaderVersion = loaders[0].loader.version;
     const downloadUrl = `${FABRIC_API}/versions/loader/${version}/${loaderVersion}/1.0.1/server/jar`;
-    await downloadFile(downloadUrl, jarPath);
+    await downloadFile(downloadUrl, jarPath, 300000, onProgress);
   } catch (err: any) {
     throw new Error(`Failed to download Fabric ${version}: ${err.message}`);
   }
 }
 
-export async function downloadPurpurVersion(version: string, jarPath: string): Promise<void> {
+export async function downloadPurpurVersion(version: string, jarPath: string, onProgress?: (pct: number) => void): Promise<void> {
   try {
     const buildsData = await httpsGet(`https://api.purpurmc.org/v2/purpur/${version}`);
     const builds = JSON.parse(buildsData);
     const latestBuild = builds.builds.latest;
     const downloadUrl = `https://api.purpurmc.org/v2/purpur/${version}/${latestBuild}/download`;
-    await downloadFile(downloadUrl, jarPath);
+    await downloadFile(downloadUrl, jarPath, 300000, onProgress);
   } catch (err: any) {
     throw new Error(`Failed to download Purpur ${version}: ${err.message}`);
   }
 }
 
-export async function downloadForgeVersion(version: string, jarPath: string): Promise<void> {
+export async function downloadForgeVersion(version: string, jarPath: string, onProgress?: (pct: number) => void): Promise<void> {
   try {
     const promosData = await httpsGet(FORGE_API);
     const promos = JSON.parse(promosData).promos || {};
@@ -374,7 +387,7 @@ export async function downloadForgeVersion(version: string, jarPath: string): Pr
       throw new Error(`This Forge version is unavailable. Choose another version.`);
     }
     const downloadUrl = `https://maven.minecraftforge.net/net/minecraftforge/forge/${version}-${forgeVersion}/forge-${version}-${forgeVersion}-server.jar`;
-    await downloadFile(downloadUrl, jarPath);
+    await downloadFile(downloadUrl, jarPath, 300000, onProgress);
   } catch (err: any) {
     if (err.message.includes('HTTP 404')) {
       throw new Error(`This Forge version is unavailable (404). Choose another version.`);
@@ -383,7 +396,7 @@ export async function downloadForgeVersion(version: string, jarPath: string): Pr
   }
 }
 
-export async function downloadNeoForgeVersion(version: string, jarPath: string): Promise<void> {
+export async function downloadNeoForgeVersion(version: string, jarPath: string, onProgress?: (pct: number) => void): Promise<void> {
   try {
     const neoforgeData = await httpsGet(`${NEOFORGE_API}/versions/${version}`);
     const parsed = JSON.parse(neoforgeData);
@@ -392,13 +405,13 @@ export async function downloadNeoForgeVersion(version: string, jarPath: string):
       throw new Error(`No NeoForge builds found for Minecraft ${version}`);
     }
     const downloadUrl = `https://maven.neoforged.net/releases/net/neoforged/neoforge/${latest}/neoforge-${latest}-server.jar`;
-    await downloadFile(downloadUrl, jarPath);
+    await downloadFile(downloadUrl, jarPath, 300000, onProgress);
   } catch (err: any) {
     throw new Error(`Failed to download NeoForge ${version}: ${err.message}`);
   }
 }
 
-export async function downloadQuiltVersion(version: string, jarPath: string): Promise<void> {
+export async function downloadQuiltVersion(version: string, jarPath: string, onProgress?: (pct: number) => void): Promise<void> {
   try {
     const loadersData = await httpsGet(`${QUILT_API}/versions/loader/${version}`);
     const loaders = JSON.parse(loadersData);
@@ -407,22 +420,22 @@ export async function downloadQuiltVersion(version: string, jarPath: string): Pr
     }
     const loaderVersion = loaders[0].loader.version;
     const downloadUrl = `${QUILT_API}/versions/loader/${version}/${loaderVersion}/server/jar`;
-    await downloadFile(downloadUrl, jarPath);
+    await downloadFile(downloadUrl, jarPath, 300000, onProgress);
   } catch (err: any) {
     throw new Error(`Failed to download Quilt ${version}: ${err.message}`);
   }
 }
 
-export async function downloadSpigotVersion(version: string, jarPath: string): Promise<void> {
+export async function downloadSpigotVersion(version: string, jarPath: string, onProgress?: (pct: number) => void): Promise<void> {
   try {
     const downloadUrl = `https://download.getbukkit.org/spigot/spigot-${version}.jar`;
-    await downloadFile(downloadUrl, jarPath);
+    await downloadFile(downloadUrl, jarPath, 300000, onProgress);
   } catch (err: any) {
     throw new Error(`Failed to download Spigot ${version}: ${err.message}`);
   }
 }
 
-export async function downloadFoliaVersion(version: string, jarPath: string): Promise<void> {
+export async function downloadFoliaVersion(version: string, jarPath: string, onProgress?: (pct: number) => void): Promise<void> {
   try {
     const buildsData = await httpsGet(`https://fill.papermc.io/v3/projects/folia/versions/${version}/builds`);
     const parsed = JSON.parse(buildsData);
@@ -436,13 +449,13 @@ export async function downloadFoliaVersion(version: string, jarPath: string): Pr
     if (!downloadUrl) {
       throw new Error(`No download URL found for Folia ${version} build ${latestBuild.build}`);
     }
-    await downloadFile(downloadUrl, jarPath);
+    await downloadFile(downloadUrl, jarPath, 300000, onProgress);
   } catch (err: any) {
     throw new Error(`Failed to download Folia ${version}: ${err.message}`);
   }
 }
 
-export async function downloadVanillaVersion(version: string, jarPath: string): Promise<void> {
+export async function downloadVanillaVersion(version: string, jarPath: string, onProgress?: (pct: number) => void): Promise<void> {
   try {
     let mojangVersions: MojangVersion[] = [];
     const cached = cacheGet<MojangVersion[]>('mojangVersions');
@@ -464,13 +477,13 @@ export async function downloadVanillaVersion(version: string, jarPath: string): 
     if (!serverDownload?.url) {
       throw new Error(`No server download available for ${version}`);
     }
-    await downloadFile(serverDownload.url, jarPath);
+    await downloadFile(serverDownload.url, jarPath, 300000, onProgress);
   } catch (err: any) {
     throw new Error(`Failed to download Minecraft ${version}: ${err.message}`);
   }
 }
 
-export async function downloadVersion(version: string, source: string | undefined, jarPath: string): Promise<{ sourceName: string; displaySource: string }> {
+export async function downloadVersion(version: string, source: string | undefined, jarPath: string, onProgress?: (pct: number) => void): Promise<{ sourceName: string; displaySource: string }> {
   const sourceLower = (source || '').toLowerCase();
   const usePaper = sourceLower === 'paper' || sourceLower === 'papermc' || (!source && await isPaperAvailable(version));
   const useFabric = sourceLower === 'fabric';
@@ -484,25 +497,25 @@ export async function downloadVersion(version: string, source: string | undefine
   const useVanilla = sourceLower === 'vanilla' || sourceLower === 'mojang';
 
   if (useFabric) {
-    await downloadFabricVersion(version, jarPath);
+    await downloadFabricVersion(version, jarPath, onProgress);
   } else if (usePurpur) {
-    await downloadPurpurVersion(version, jarPath);
+    await downloadPurpurVersion(version, jarPath, onProgress);
   } else if (useForge) {
-    await downloadForgeVersion(version, jarPath);
+    await downloadForgeVersion(version, jarPath, onProgress);
   } else if (useNeoForge) {
-    await downloadNeoForgeVersion(version, jarPath);
+    await downloadNeoForgeVersion(version, jarPath, onProgress);
   } else if (useQuilt) {
-    await downloadQuiltVersion(version, jarPath);
+    await downloadQuiltVersion(version, jarPath, onProgress);
   } else if (useSpigot) {
-    await downloadSpigotVersion(version, jarPath);
+    await downloadSpigotVersion(version, jarPath, onProgress);
   } else if (useFolia) {
-    await downloadFoliaVersion(version, jarPath);
+    await downloadFoliaVersion(version, jarPath, onProgress);
   } else if (usePufferfish) {
-    await downloadPaperVersion(version, jarPath);
+    await downloadPaperVersion(version, jarPath, onProgress);
   } else if (usePaper) {
-    await downloadPaperVersion(version, jarPath);
+    await downloadPaperVersion(version, jarPath, onProgress);
   } else {
-    await downloadVanillaVersion(version, jarPath);
+    await downloadVanillaVersion(version, jarPath, onProgress);
   }
 
   let sourceName = 'Mojang';

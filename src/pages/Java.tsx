@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSocket } from '../hooks/useSocket';
 import { Coffee, Download, Trash2, RefreshCw, CheckCircle, XCircle, AlertTriangle, ExternalLink, Cpu, Loader2 } from 'lucide-react';
 import { Button } from '../components/ui/stateful-button';
 import { api } from '../lib/api';
@@ -16,6 +17,7 @@ interface JavaVersion {
 }
 
 export default function JavaManager() {
+  const { socket } = useSocket();
   const [installed, setInstalled] = useState<JavaVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState<number | null>(null);
@@ -23,6 +25,23 @@ export default function JavaManager() {
   const [serverConfig, setServerConfig] = useState<any>(null);
   const [requiredJava, setRequiredJava] = useState<number | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!socket) return;
+    socket.on('java:progress', (data: { majorVersion: number; pct: number }) => {
+      setDownloading(data.majorVersion);
+      setDownloadProgress(data.pct);
+    });
+    socket.on('java:install-complete', () => {
+      setDownloading(null);
+      setDownloadProgress(0);
+      loadJava();
+    });
+    return () => {
+      socket.off('java:progress');
+      socket.off('java:install-complete');
+    };
+  }, [socket]);
 
   useEffect(() => {
     loadJava();

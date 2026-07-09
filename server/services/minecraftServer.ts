@@ -456,8 +456,14 @@ class MinecraftServerManager extends EventEmitter {
     try {
       const controlDir = path.resolve(this.serverDir, '..', '.minecontrol');
       const required = JavaManager.getRequiredJavaVersion(version);
-      const exePath = await JavaManager.ensureJavaInstalled(required, (msg) => {
+      const exePath = await JavaManager.ensureJavaInstalled(required, (msg, pct) => {
         this.emit('server:output', `[MineControl] ${msg}\n`);
+        if (pct !== undefined) {
+          try {
+            const { emitToAll } = require('../socketManager');
+            emitToAll('java:progress', { majorVersion: required, pct, msg });
+          } catch (e) {}
+        }
       });
       if (fs.existsSync(exePath)) {
         this.saveJavaConfig(exePath, `${required}.0.0`, required, 'Eclipse Temurin', path.dirname(path.dirname(exePath)));

@@ -176,9 +176,8 @@ export class JavaManager {
       }
 
       if (os.platform() === 'win32') {
-        await fs.createReadStream(tempZip)
-          .pipe(unzipper.Extract({ path: downloadDir }))
-          .promise();
+        const { execSync } = require('child_process');
+        execSync(`powershell -Command "Expand-Archive -Path '${tempZip}' -DestinationPath '${downloadDir}' -Force"`, { stdio: 'ignore' });
       } else {
         await execPromise(`unzip -o "${tempZip}" -d "${downloadDir}" || tar -xf "${tempZip}" -C "${downloadDir}"`);
       }
