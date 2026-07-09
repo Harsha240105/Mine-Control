@@ -162,6 +162,19 @@ export class JavaManager {
 
       if (onProgress) onProgress(`Verifying Java ${majorVersion} download...`, 95);
 
+      // Verify ZIP integrity before extraction
+      try {
+        const { execSync } = require('child_process');
+        if (os.platform() === 'win32') {
+          execSync(`powershell -Command "Add-Type -Assembly System.IO.Compression; try { [System.IO.Compression.ZipFile]::OpenRead('${tempZip}').Dispose(); exit 0 } catch { exit 1 }"`, { timeout: 15000, stdio: 'pipe' });
+        } else {
+          execSync(`unzip -t "${tempZip}" 2>&1 | head -5`, { timeout: 15000, stdio: 'pipe' });
+        }
+      } catch (verifyErr: any) {
+        if (fs.existsSync(tempZip)) { try { fs.unlinkSync(tempZip); } catch {} }
+        throw new Error(`Java ${majorVersion} download corrupted (ZIP integrity check failed). Please try again.`);
+      }
+
       if (os.platform() === 'win32') {
         await fs.createReadStream(tempZip)
           .pipe(unzipper.Extract({ path: downloadDir }))

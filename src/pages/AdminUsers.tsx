@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Users, Plus, Trash2, Shield, Smartphone, Save } from 'lucide-react';
+import { Users, Plus, Trash2, Smartphone, Save } from 'lucide-react';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
+import { Button } from '../components/ui/stateful-button';
 
 interface AppUser {
   id: string;
@@ -90,10 +91,10 @@ export default function AdminUsers() {
           <h2 className="text-xl font-bold text-gray-100">User Management</h2>
           <p className="text-sm text-gray-500 mt-0.5">Manage application user accounts and roles</p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn-primary flex items-center gap-2">
+        <Button onClick={() => setShowCreate(true)} variant="primary">
           <Plus size={16} />
           Add User
-        </button>
+        </Button>
       </div>
 
       {showCreate && (
@@ -121,11 +122,11 @@ export default function AdminUsers() {
             </div>
           </div>
           <div className="flex gap-2 mt-4">
-            <button onClick={createUser} disabled={!newUsername || !newPassword} className="btn-primary flex items-center gap-2">
+            <Button onClick={createUser} disabled={!newUsername || !newPassword} variant="primary">
               <Save size={16} />
               Create User
-            </button>
-            <button onClick={() => setShowCreate(false)} className="btn-secondary">Cancel</button>
+            </Button>
+            <Button onClick={() => setShowCreate(false)} variant="secondary">Cancel</Button>
           </div>
         </div>
       )}
@@ -175,12 +176,13 @@ export default function AdminUsers() {
                   <td className="py-3 pr-4 text-gray-500 text-xs">{u.last_login ? new Date(u.last_login).toLocaleString() : 'Never'}</td>
                   <td className="py-3 pr-4">
                     {u.username !== user?.username && (
-                      <button
+                      <Button
                         onClick={() => deleteUser(u.id, u.username)}
+                        variant="none"
                         className="text-gray-500 hover:text-red-400 transition-colors"
                       >
                         <Trash2 size={14} />
-                      </button>
+                      </Button>
                     )}
                   </td>
                 </tr>

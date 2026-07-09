@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Puzzle, Plus, Trash2, Power, PowerOff, Download, Search, Loader2, Server, Globe } from 'lucide-react';
+import { Puzzle, Plus, Trash2, Power, PowerOff, Download, Search, Server, Globe } from 'lucide-react';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 import { useActiveServer } from '../hooks/useActiveServer';
 import { useSocket } from '../hooks/useSocket';
+import { Button } from '../components/ui/stateful-button';
 
 interface ModItem {
   name: string;
@@ -112,10 +113,10 @@ export default function Mods() {
           <h2 className="text-xl font-bold text-gray-100">Mod Manager</h2>
           <p className="text-sm text-gray-500 mt-0.5">{mods.length} mod{mods.length !== 1 ? 's' : ''} installed</p>
         </div>
-        <button onClick={() => setShowInstall(!showInstall)} className="btn-primary flex items-center gap-2">
+        <Button variant="primary" onClick={() => setShowInstall(!showInstall)}>
           <Plus size={16} />
           Install Mod
-        </button>
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -148,8 +149,8 @@ export default function Mods() {
             </div>
             <div className="text-xs text-gray-500">Supports Modrinth (modrinth:slug) and CurseForge (curseforge:projectId) URLs</div>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setShowInstall(false)} className="btn-secondary">Cancel</button>
-              <button type="submit" className="btn-primary">Install</button>
+              <Button type="button" variant="secondary" onClick={() => setShowInstall(false)}>Cancel</Button>
+              <Button type="submit" variant="primary">Install</Button>
             </div>
           </form>
         </div>
@@ -170,7 +171,8 @@ export default function Mods() {
                   <p className="text-xs text-gray-500">v{mod.version}</p>
                 </div>
               </div>
-              <button
+              <Button
+                variant="none"
                 onClick={() => handleToggle(mod.name)}
                 className={`p-2 rounded-lg transition-colors ${
                   mod.enabled ? 'text-green-400 hover:bg-green-500/10' : 'text-gray-500 hover:bg-surface-700'
@@ -178,7 +180,7 @@ export default function Mods() {
                 title={mod.enabled ? 'Disable' : 'Enable'}
               >
                 {mod.enabled ? <Power size={16} /> : <PowerOff size={16} />}
-              </button>
+              </Button>
             </div>
             <p className="text-xs text-gray-400 line-clamp-2 mb-3">{mod.description || 'No description'}</p>
             <div className="flex items-center justify-between text-xs">
@@ -188,13 +190,14 @@ export default function Mods() {
                   <span className="text-gray-600 bg-surface-800 px-1.5 py-0.5 rounded">{mod.side}</span>
                 )}
               </div>
-              <button
+              <Button
+                variant="none"
                 onClick={() => handleRemove(mod.name)}
                 className="p-1 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
                 title="Remove"
               >
                 <Trash2 size={12} />
-              </button>
+              </Button>
             </div>
           </div>
         ))}

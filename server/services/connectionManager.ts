@@ -132,7 +132,8 @@ export class ConnectionManager {
     let playitLatency: number | null = null;
     let playitError: string | null = null;
     try {
-      const row = db.prepare("SELECT value FROM server_config WHERE key = 'playitAddress'").get() as any;
+      const playitKey = serverId ? `playitAddress_${serverId}` : 'playitAddress';
+      const row = db.prepare("SELECT value FROM server_config WHERE key = ?").get(playitKey) as any;
       playitAddress = row?.value || '';
       if (playitAddress && playitAddress.includes('.')) {
         const host = playitAddress.replace(/:.*$/, '');
@@ -389,8 +390,10 @@ export class ConnectionManager {
         const text = data.toString();
         const addrMatch = text.match(/(?:https?:\/\/)?([a-zA-Z0-9-]+\.playit\.(?:gg|cloud)(?::\d+)?)/);
         if (addrMatch) {
-          db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('playitAddress', ?)").run(addrMatch[1]);
-          db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('playitAgentPath', ?)").run(agentPath);
+          const playitKey = `playitAddress_${getActiveServerId() || 'global'}`;
+          const pathKey = `playitAgentPath_${getActiveServerId() || 'global'}`;
+          db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)").run(playitKey, addrMatch[1]);
+          db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES (?, ?)").run(pathKey, agentPath);
         }
       });
       this.playitProcess.on('exit', (code) => {
@@ -424,8 +427,11 @@ export class ConnectionManager {
 
   getPlayitStatus(): { configured: boolean; running: boolean; address: string; agentPath: string } {
     const db = getDatabase();
-    const address = (db.prepare("SELECT value FROM server_config WHERE key = 'playitAddress'").get() as any)?.value || '';
-    const agentPath = (db.prepare("SELECT value FROM server_config WHERE key = 'playitAgentPath'").get() as any)?.value || '';
+    const serverId = getActiveServerId();
+    const playitKey = serverId ? `playitAddress_${serverId}` : 'playitAddress';
+    const pathKey = serverId ? `playitAgentPath_${serverId}` : 'playitAgentPath';
+    const address = (db.prepare("SELECT value FROM server_config WHERE key = ?").get(playitKey) as any)?.value || '';
+    const agentPath = (db.prepare("SELECT value FROM server_config WHERE key = ?").get(pathKey) as any)?.value || '';
     return { configured: !!address, running: this.isPlayitRunning(), address, agentPath };
   }
 

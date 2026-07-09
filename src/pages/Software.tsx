@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo } from 'react';
 import { Cpu, Download, CheckCircle2, ChevronRight, Server, Globe, ShieldCheck, Wifi, Search, ArrowUpDown, Filter } from 'lucide-react';
+import { Button } from '../components/ui/stateful-button';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 
@@ -173,11 +174,12 @@ export default function Software() {
             const hasVersions = (data.software?.[soft.id]?.length ?? 0) > 0 ||
               !!data.availableVersions?.some(v => v.source === soft.id);
             return (
-              <button
+              <Button
                 key={soft.id}
+                variant="none"
                 onClick={() => !soft.disabled && setSelectedSoftware(soft.id)}
                 disabled={soft.disabled || !hasVersions}
-                className={`flex items-start gap-4 p-5 rounded-xl border text-left transition-all
+                className={`items-start gap-4 p-5 rounded-xl border text-left transition-all
                   ${soft.color} ${soft.hover} ${soft.disabled || !hasVersions ? 'opacity-50 cursor-not-allowed grayscale' : 'cursor-pointer group'}`}
               >
                 <div className="p-3 bg-surface-900 rounded-lg shadow-inner shrink-0">
@@ -209,7 +211,7 @@ export default function Software() {
                   </div>
                   <p className="text-sm text-gray-400 leading-snug">{soft.description}</p>
                 </div>
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -224,9 +226,9 @@ export default function Software() {
     <div className="space-y-6 animate-fade-in max-w-4xl mx-auto">
       {/* Breadcrumb */}
       <div className="flex items-center gap-3 mb-2">
-        <button onClick={() => setSelectedSoftware(null)} className="text-gray-400 hover:text-white transition-colors text-sm">
+        <Button variant="ghost" onClick={() => setSelectedSoftware(null)} className="text-sm">
           Software
-        </button>
+        </Button>
         <ChevronRight size={14} className="text-gray-600" />
         <h2 className="text-lg font-bold text-gray-100 flex items-center gap-2">
           {software?.icon} {software?.name}
@@ -267,8 +269,9 @@ export default function Software() {
         <div className="flex gap-2 items-center">
           <Filter size={14} className="text-gray-500" />
           {(['all', 'release', 'snapshot'] as FilterMode[]).map(m => (
-            <button
+            <Button
               key={m}
+              variant="none"
               onClick={() => setFilterMode(m)}
               className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
                 filterMode === m
@@ -277,15 +280,16 @@ export default function Software() {
               }`}
             >
               {m === 'all' ? 'All' : m.charAt(0).toUpperCase() + m.slice(1)}
-            </button>
+            </Button>
           ))}
         </div>
 
         <div className="flex gap-2 items-center">
           <ArrowUpDown size={14} className="text-gray-500" />
           {(['newest', 'oldest'] as SortMode[]).map(m => (
-            <button
+            <Button
               key={m}
+              variant="none"
               onClick={() => setSortMode(m)}
               className={`text-xs px-2.5 py-1.5 rounded-md border transition-colors ${
                 sortMode === m
@@ -294,7 +298,7 @@ export default function Software() {
               }`}
             >
               {m === 'newest' ? 'Newest' : 'Oldest'}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -305,9 +309,9 @@ export default function Software() {
           <div className="text-center py-8 text-gray-500">
             {search ? `No versions matching "${search}"` : 'No versions available for this software.'}
             {search && (
-              <button onClick={() => setSearch('')} className="block mx-auto mt-2 text-xs text-blue-400 hover:text-blue-300">
+              <Button variant="ghost" onClick={() => setSearch('')} className="block mx-auto mt-2 text-xs">
                 Clear search
-              </button>
+              </Button>
             )}
           </div>
         ) : (
@@ -345,17 +349,18 @@ export default function Software() {
                       </span>
                     )}
                   </div>
-                  <button
+                  <Button
+                    variant="secondary"
                     onClick={() => handleInstall(v.version, v.source)}
                     disabled={installing || isCurrent}
-                    className={`btn-secondary flex items-center gap-2 text-sm shrink-0 ${
+                    className={`text-sm shrink-0 ${
                       isCurrent ? 'opacity-50 cursor-not-allowed' :
                       v.downloaded ? 'border-blue-500/30 text-blue-300' : ''
                     }`}
                   >
                     <Download size={14} />
                     {isCurrent ? 'Active' : installing ? 'Installing...' : v.downloaded ? 'Switch' : 'Install'}
-                  </button>
+                  </Button>
                 </div>
               );
             })}

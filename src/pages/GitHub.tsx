@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Github, Bug, Lightbulb, Send, Paperclip, List, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import { Github, Bug, Lightbulb, Send, Paperclip, List, CheckCircle, Clock, AlertTriangle, Lock } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
 
 interface Issue {
@@ -16,7 +17,20 @@ interface Issue {
 }
 
 export default function GitHub() {
+  const { isOwner } = useAuth();
   const [tab, setTab] = useState<'report' | 'request' | 'list'>('report');
+
+  if (!isOwner) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <Lock className="w-12 h-12 mx-auto text-gray-600" />
+          <p className="text-gray-400 text-sm font-medium">Access Restricted</p>
+          <p className="text-gray-500 text-xs">Only the application owner can access GitHub features.</p>
+        </div>
+      </div>
+    );
+  }
   const [issues, setIssues] = useState<Issue[]>([]);
   const [bugTitle, setBugTitle] = useState('');
   const [bugDescription, setBugDescription] = useState('');

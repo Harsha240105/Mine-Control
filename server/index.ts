@@ -545,14 +545,16 @@ server.listen(portToUse, () => {
   discordService.initialize().catch(err => console.error('[Discord] Init failed:', err));
 
   const appVersion = (() => { try { return require('../package.json').version; } catch { return require('../../package.json').version; } })();
+  const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev');
+  const urlLine = isDev
+    ? `║  Server:  http://localhost:${PORT}         ║`
+    : `║  Desktop Application                      ║`;
   console.log(`
   ╔══════════════════════════════════════════╗
   ║         MineControl OS v${appVersion.padEnd(16, ' ')} ║
   ║     Minecraft Server Management         ║
   ║══════════════════════════════════════════║
-  ║  Server:  http://localhost:${PORT}         ║
-  ║  API:     http://localhost:${PORT}/api    ║
-  ║  Socket:  ws://localhost:${PORT}          ║
+  ${urlLine}
   ╚══════════════════════════════════════════╝
   `);
   console.log('[Startup] Phase 4: Server ready');

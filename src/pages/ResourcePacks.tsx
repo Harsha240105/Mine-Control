@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Package, Plus, Trash2, Power, PowerOff, Download, Upload, Loader2, Server } from 'lucide-react';
+import { Button } from '../components/ui/stateful-button';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 import { useActiveServer } from '../hooks/useActiveServer';
@@ -136,14 +137,14 @@ export default function ResourcePacks() {
             onChange={handleUpload}
             className="hidden"
           />
-          <button onClick={() => fileInputRef.current?.click()} className="btn-secondary flex items-center gap-2">
+          <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
             <Upload size={16} />
             Upload
-          </button>
-          <button onClick={() => setShowInstall(!showInstall)} className="btn-primary flex items-center gap-2">
+          </Button>
+          <Button variant="primary" onClick={() => setShowInstall(!showInstall)}>
             <Plus size={16} />
             Install Pack
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -161,8 +162,8 @@ export default function ResourcePacks() {
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setShowInstall(false)} className="btn-secondary">Cancel</button>
-              <button type="submit" className="btn-primary">Install</button>
+              <Button type="button" variant="secondary" onClick={() => setShowInstall(false)}>Cancel</Button>
+              <Button type="submit" variant="primary">Install</Button>
             </div>
           </form>
         </div>
@@ -183,26 +184,24 @@ export default function ResourcePacks() {
                   <p className="text-xs text-gray-500">v{pack.version}</p>
                 </div>
               </div>
-              <button
+              <Button variant="ghost"
                 onClick={() => handleToggle(pack.name)}
-                className={`p-2 rounded-lg transition-colors ${
-                  pack.enabled ? 'text-green-400 hover:bg-green-500/10' : 'text-gray-500 hover:bg-surface-700'
-                }`}
+                className={`p-2 ${pack.enabled ? 'text-green-400' : 'text-gray-500'}`}
                 title={pack.enabled ? 'Disable' : 'Enable'}
               >
                 {pack.enabled ? <Power size={16} /> : <PowerOff size={16} />}
-              </button>
+              </Button>
             </div>
             <p className="text-xs text-gray-400 line-clamp-2 mb-3">{pack.description || 'No description'}</p>
             <div className="flex items-center justify-between text-xs">
               <span className="text-gray-500">by {pack.author || 'Unknown'}</span>
-              <button
+              <Button variant="ghost"
                 onClick={() => handleRemove(pack.name)}
-                className="p-1 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                className="p-1 text-gray-500 hover:text-red-400"
                 title="Remove"
               >
                 <Trash2 size={12} />
-              </button>
+              </Button>
             </div>
           </div>
         ))}

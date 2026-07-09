@@ -16,6 +16,12 @@
 
 ---
 
+## End-to-End Project Summary
+
+MineControl OS is a comprehensive, standalone desktop application designed to streamline and automate the entire lifecycle of a Minecraft server. From a single-click server creation process that handles downloading jars, accepting the EULA, and configuring ports, to advanced performance tuning with auto-calculated JVM flags based on system resources. It offers robust multi-server isolation, ensuring separate configurations, worlds, plugins, and mods for every server instance. Furthermore, the platform integrates seamlessly with Discord for real-time chat bridging and alerts, features a secure two-factor authentication system with role-based access, automated system backups with integrity checks, a complete plugin and mod management system via Modrinth and other sources, and a newly implemented modern interface with Apple-style floating docks and Evervault hover cards. In essence, MineControl OS removes the need for terminal usage or manual file edits, providing an intuitive, premium, self-hosted experience.
+
+---
+
 ## Features
 
 ### One-Click Server Creation
@@ -59,6 +65,12 @@ Connection Wizard with auto-detection for localhost, LAN, and Playit.gg tunnelin
 
 ### Update System
 Check, download, and install updates with pre-update backups. Rich release notes viewer. Migration history tracking. Data preservation across all updates.
+
+### Aceternity-Inspired UI Components
+The application now features premium, modern UI components including:
+- **Evervault Cards:** Dynamic character-flipping hover effects for player management cards.
+- **Floating Dock:** An Apple-style responsive dock for global navigation.
+- **Text Flip Animation:** "OXK Pixel" branding with flipping text animation on the loading screen.
 
 ---
 

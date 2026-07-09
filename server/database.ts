@@ -103,7 +103,8 @@ function initializeSchema() {
         totp_enabled INTEGER DEFAULT 0,
         totp_recovery_codes TEXT DEFAULT '',
         failed_login_attempts INTEGER DEFAULT 0,
-        locked_until TEXT
+        locked_until TEXT,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
 
       CREATE TABLE IF NOT EXISTS players (
@@ -1648,6 +1649,7 @@ function initializeSchema() {
       totp_recovery_codes: "TEXT DEFAULT ''",
       failed_login_attempts: 'INTEGER DEFAULT 0',
       locked_until: 'TEXT',
+      updated_at: "TEXT DEFAULT ''",
     },
 
     // v21: Discord bridge columns
@@ -1657,6 +1659,7 @@ function initializeSchema() {
       bridge_forward_discord_to_minecraft: 'INTEGER DEFAULT 0',
       command_prefix: "TEXT DEFAULT '!'",
       allowed_role_ids: "TEXT DEFAULT ''",
+      updated_at: "TEXT DEFAULT ''",
     },
 
     // v22: Performance columns on servers
@@ -1701,6 +1704,15 @@ function initializeSchema() {
 
   if (repairCount > 0) {
     console.log(`[DB] Schema repair complete: ${repairCount} missing column(s) added`);
+    // Fill updated_at for rows that got the column added with empty default
+    for (const tbl of ['users', 'discord_config', 'servers']) {
+      try {
+        const tCols = db.prepare(`PRAGMA table_info('${tbl}')`).all().map((r: any) => r.name);
+        if (tCols.includes('updated_at')) {
+          db.exec(`UPDATE "${tbl}" SET updated_at = datetime('now') WHERE updated_at IS NULL OR updated_at = ''`);
+        }
+      } catch {}
+    }
   }
 
   // Database diagnostics
@@ -1741,7 +1753,8 @@ function ensureAllTablesExist() {
       last_login TEXT, session_token TEXT,
       totp_secret TEXT DEFAULT '', totp_enabled INTEGER DEFAULT 0,
       totp_recovery_codes TEXT DEFAULT '',
-      failed_login_attempts INTEGER DEFAULT 0, locked_until TEXT
+      failed_login_attempts INTEGER DEFAULT 0, locked_until TEXT,
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     )`,
     players: `CREATE TABLE IF NOT EXISTS players (
       id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, uuid TEXT UNIQUE NOT NULL,

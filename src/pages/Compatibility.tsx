@@ -28,6 +28,7 @@ import {
 import { api } from '../lib/api';
 import { useActiveServer } from '../hooks/useActiveServer';
 import toast from 'react-hot-toast';
+import { Button } from '../components/ui/stateful-button';
 
 type JoinMode = 'java_only' | 'java_bedrock' | 'premium_only' | 'offline';
 type CheckStatus = 'pass' | 'warn' | 'fail' | 'info';
@@ -315,30 +316,32 @@ export default function Compatibility() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <button
+          <Button
             onClick={() => loadStatus()}
-            className="btn-ghost flex items-center gap-2"
+            variant="ghost"
             title="Refresh compatibility status"
           >
             <RefreshCw size={16} />
             Refresh
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => runCheck()}
             disabled={checking}
-            className="btn-secondary flex items-center gap-2"
+            variant="secondary"
+            loading={checking}
           >
-            {checking ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle size={16} />}
+            {!checking && <CheckCircle size={16} />}
             Run Checker
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={applySettings}
             disabled={saving || checking}
-            className="btn-primary flex items-center gap-2"
+            variant="primary"
+            loading={saving}
           >
-            {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+            {!saving && <Save size={16} />}
             Apply Settings
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -478,8 +481,9 @@ function ModeCard({
   onSelect: () => void;
 }) {
   return (
-    <button
+    <Button
       onClick={onSelect}
+      variant="none"
       title={mode.description}
       className={`card-hover text-left border transition-all ${
         selected ? 'border-minecraft-500/60 bg-minecraft-500/10' : 'border-surface-700/50'
@@ -514,7 +518,7 @@ function ModeCard({
           </div>
         ))}
       </div>
-    </button>
+    </Button>
   );
 }
 
@@ -536,8 +540,9 @@ function VersionCompatibility({
             Allow a compatible range of Minecraft client versions for the selected server software.
           </p>
         </div>
-        <button
+        <Button
           onClick={onToggle}
+          variant="none"
           title="Install and configure ViaVersion components where supported"
           className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm transition-colors ${
             enabled
@@ -547,7 +552,7 @@ function VersionCompatibility({
         >
           {enabled ? <ToggleRight size={20} /> : <ToggleLeft size={20} />}
           Allow Multiple Minecraft Versions
-        </button>
+        </Button>
       </div>
 
       <div className="overflow-x-auto">
@@ -744,16 +749,17 @@ function JoinInformation({
               <code className="min-w-0 flex-1 truncate rounded bg-surface-900 px-2 py-1.5 text-xs text-minecraft-300">
                 {entry.value || 'Not configured'}
               </code>
-              <button
+              <Button
                 onClick={() => onCopy(entry.label, entry.value)}
                 disabled={!entry.value}
+                variant="none"
                 className={`p-2 rounded-lg transition-colors ${
                   copied === entry.label ? 'bg-green-500/20 text-green-400' : 'bg-surface-700 text-gray-400 hover:text-gray-200 disabled:opacity-40'
                 }`}
                 title={`Copy ${entry.label}`}
               >
                 {copied === entry.label ? <Check size={14} /> : <Copy size={14} />}
-              </button>
+              </Button>
             </div>
           </div>
         ))}

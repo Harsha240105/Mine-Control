@@ -7,6 +7,14 @@ import { storeCredential, getCredential, hasCredential } from '../services/encry
 
 const router = Router();
 
+// All GitHub routes are Owner-only for privacy
+router.use(authMiddleware, (req: AuthRequest, res, next) => {
+  if (req.user?.role !== 'Owner') {
+    return res.status(403).json({ error: 'Only the application owner can access GitHub features' });
+  }
+  next();
+});
+
 const GITHUB_OWNER = 'Harsha240105';
 const GITHUB_REPO = 'Mine-Control';
 

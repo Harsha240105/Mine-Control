@@ -5,6 +5,7 @@ import {
   ArrowLeft, ChevronRight, Star, ExternalLink, CheckCircle, X,
   Settings, List, Sidebar, RefreshCw, Trash2,
 } from 'lucide-react';
+import { Button } from '../components/ui/stateful-button';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 
@@ -334,14 +335,14 @@ export default function Guide() {
             <div className="p-2 space-y-0.5">
               <div className="flex items-center justify-between px-3 py-2">
                 <span className="text-xs text-gray-500">{searchResults.length} results</span>
-                <button onClick={() => { setSearchQuery(''); setSearchResults([]); setIsSearching(false); }}
-                  className="text-xs text-gray-500 hover:text-gray-300">
+                <Button variant="ghost" onClick={() => { setSearchQuery(''); setSearchResults([]); setIsSearching(false); }} className="text-xs">
                   <X size={14} />
-                </button>
+                </Button>
               </div>
               {searchResults.slice(0, 20).map((r, i) => (
-                <button
+                <Button
                   key={`${r.sectionId}-${r.articleId}-${i}`}
+                  variant="none"
                   onClick={() => openArticle(r.sectionId, r.articleId)}
                   className="w-full text-left px-3 py-2 rounded-lg hover:bg-surface-800 transition-colors"
                 >
@@ -351,7 +352,7 @@ export default function Guide() {
                   </div>
                   <p className="text-sm text-gray-200 font-medium truncate">{r.articleTitle}</p>
                   <p className="text-xs text-gray-500 truncate">{r.summary}</p>
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -361,18 +362,19 @@ export default function Guide() {
             <div className="p-2">
               <div className="flex items-center justify-between px-3 py-2">
                 <span className="text-xs text-gray-500 uppercase tracking-wider font-medium">Recent Searches</span>
-                <button onClick={clearSearchHistory} className="text-xs text-gray-500 hover:text-gray-300">
+                <Button variant="ghost" onClick={clearSearchHistory} className="text-xs">
                   <Trash2 size={12} />
-                </button>
+                </Button>
               </div>
               {searchHistory.map((q, i) => (
-                <button
+                <Button
                   key={i}
+                  variant="none"
                   onClick={() => handleSearchHistoryClick(q)}
                   className="w-full text-left px-3 py-1.5 text-sm text-gray-400 hover:text-gray-200 hover:bg-surface-800 rounded-lg transition-colors truncate"
                 >
                   {q}
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -380,56 +382,60 @@ export default function Guide() {
           {/* Bookmarks Button */}
           {!isSearching && (
             <div className="p-2">
-              <button
+              <Button
+                variant="none"
                 onClick={() => { setShowBookmarks(!showBookmarks); setShowRecent(false); }}
-                className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors ${
+                className={`w-full px-3 py-2 rounded-lg text-sm transition-colors ${
                   showBookmarks ? 'bg-minecraft-500/10 text-minecraft-400' : 'text-gray-400 hover:text-gray-200 hover:bg-surface-800'
                 }`}
               >
                 <Bookmark size={14} />
                 <span>Bookmarks ({bookmarks.length})</span>
-              </button>
+              </Button>
               {showBookmarks && (
                 <div className="mt-1 ml-2 space-y-0.5">
                   {bookmarks.length === 0 ? (
                     <p className="text-xs text-gray-500 px-3 py-2">No bookmarks yet</p>
                   ) : (
                     bookmarks.map(b => (
-                      <button
+                      <Button
                         key={b.id}
+                        variant="none"
                         onClick={() => openArticle(b.section_id, b.article_id)}
                         className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 hover:bg-surface-800 rounded-lg transition-colors truncate"
                       >
                         {b.title}
-                      </button>
+                      </Button>
                     ))
                   )}
                 </div>
               )}
 
               {/* Recently Viewed Button */}
-              <button
+              <Button
+                variant="none"
                 onClick={() => { setShowRecent(!showRecent); setShowBookmarks(false); }}
-                className={`flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors mt-1 ${
+                className={`w-full px-3 py-2 rounded-lg text-sm transition-colors mt-1 ${
                   showRecent ? 'bg-minecraft-500/10 text-minecraft-400' : 'text-gray-400 hover:text-gray-200 hover:bg-surface-800'
                 }`}
               >
                 <Clock size={14} />
                 <span>Recently Viewed</span>
-              </button>
+              </Button>
               {showRecent && (
                 <div className="mt-1 ml-2 space-y-0.5">
                   {recentViews.length === 0 ? (
                     <p className="text-xs text-gray-500 px-3 py-2">No recently viewed articles</p>
                   ) : (
                     recentViews.map((r, i) => (
-                      <button
+                      <Button
                         key={`${r.section_id}-${r.article_id}-${i}`}
+                        variant="none"
                         onClick={() => openArticle(r.section_id, r.article_id)}
                         className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:text-gray-200 hover:bg-surface-800 rounded-lg transition-colors truncate"
                       >
                         {r.title}
-                      </button>
+                      </Button>
                     ))
                   )}
                 </div>
@@ -443,14 +449,15 @@ export default function Guide() {
                     <span className="text-xs text-red-400 font-medium">Detected Issues</span>
                   </div>
                   {detections.map((d, i) => (
-                    <button
+                    <Button
                       key={i}
+                      variant="none"
                       onClick={() => openArticle(d.sectionId, d.articleId)}
                       className="w-full text-left px-3 py-2 mb-1 rounded-lg bg-red-500/5 border border-red-500/10 hover:bg-red-500/10 transition-colors"
                     >
                       <p className="text-xs text-gray-200 font-medium">{d.title}</p>
                       <p className="text-[11px] text-gray-500">{d.detail}</p>
-                    </button>
+                    </Button>
                   ))}
                 </div>
               )}
@@ -465,10 +472,11 @@ export default function Guide() {
                 const colorClass = SECTION_COLORS[section.id] || 'text-gray-400 bg-surface-800 border-surface-700';
                 const isActive = activeSectionId === section.id && !activeArticle;
                 return (
-                  <button
+                  <Button
                     key={section.id}
+                    variant="none"
                     onClick={() => loadSection(section.id)}
-                    className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors flex items-center gap-3 ${
+                    className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors gap-3 ${
                       isActive
                         ? 'bg-minecraft-500/10 text-minecraft-400 border border-minecraft-500/20'
                         : 'text-gray-400 hover:text-gray-200 hover:bg-surface-800'
@@ -480,7 +488,7 @@ export default function Guide() {
                       <p className="text-[11px] text-gray-500">{section.articleCount} articles</p>
                     </div>
                     <ChevronRight size={12} className="text-gray-600 flex-shrink-0" />
-                  </button>
+                  </Button>
                 );
               })}
             </div>
@@ -492,13 +500,10 @@ export default function Guide() {
       <div className="flex-1 overflow-y-auto p-6">
         {/* Breadcrumb / Back */}
         {(activeSectionId || activeArticle) && (
-          <button
-            onClick={goBackToSections}
-            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 mb-4 transition-colors"
-          >
+          <Button variant="ghost" onClick={goBackToSections} className="gap-1.5 text-xs mb-4">
             <ArrowLeft size={14} />
             <span>All Sections</span>
-          </button>
+          </Button>
         )}
 
         {/* Section Article List */}
@@ -524,14 +529,15 @@ export default function Guide() {
                 </h3>
                 <div className="space-y-2">
                   {detections.map((d, i) => (
-                    <button
+                    <Button
                       key={i}
+                      variant="none"
                       onClick={() => openArticle(d.sectionId, d.articleId)}
                       className="w-full text-left p-3 rounded-lg bg-surface-800 border border-surface-700 hover:border-red-500/30 transition-colors"
                     >
                       <p className="text-sm text-gray-200 font-medium">{d.title}</p>
                       <p className="text-xs text-gray-500 mt-0.5">{d.detail}</p>
-                    </button>
+                    </Button>
                   ))}
                 </div>
               </div>
@@ -539,8 +545,9 @@ export default function Guide() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {sections[activeSectionId]?.articles.map(article => (
-                <button
+                <Button
                   key={article.id}
+                  variant="none"
                   onClick={() => openArticle(activeSectionId, article.id)}
                   className="card-hover text-left group"
                 >
@@ -553,7 +560,7 @@ export default function Guide() {
                     </div>
                     <ChevronRight size={16} className="text-gray-600 group-hover:text-minecraft-400 flex-shrink-0 mt-1 transition-colors" />
                   </div>
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -579,17 +586,12 @@ export default function Guide() {
                 <h2 className="text-2xl font-bold text-gray-100">{activeArticle.article.title}</h2>
                 <p className="text-sm text-gray-500 mt-1">{activeArticle.article.summary}</p>
               </div>
-              <button
-                onClick={() => toggleBookmark(activeArticle.section.id, activeArticle.article.id, activeArticle.article.title)}
-                className={`p-2 rounded-lg transition-colors ${
-                  isBookmarked(activeArticle.section.id, activeArticle.article.id)
-                    ? 'bg-yellow-500/10 text-yellow-400'
-                    : 'bg-surface-800 text-gray-500 hover:text-gray-300'
-                }`}
+              <Button variant="ghost" onClick={() => toggleBookmark(activeArticle.section.id, activeArticle.article.id, activeArticle.article.title)}
+                className={`p-2 rounded-lg ${isBookmarked(activeArticle.section.id, activeArticle.article.id) ? 'bg-yellow-500/10 text-yellow-400' : 'bg-surface-800 text-gray-500 hover:text-gray-300'}`}
                 title={isBookmarked(activeArticle.section.id, activeArticle.article.id) ? 'Remove bookmark' : 'Add bookmark'}
               >
                 <Star size={16} fill={isBookmarked(activeArticle.section.id, activeArticle.article.id) ? 'currentColor' : 'none'} />
-              </button>
+              </Button>
             </div>
 
             {/* Content Blocks */}
@@ -606,15 +608,16 @@ export default function Guide() {
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {activeArticle.article.related.map((rel, i) => (
-                    <button
+                    <Button
                       key={i}
+                      variant="none"
                       onClick={() => openArticle(rel.sectionId, rel.articleId)}
-                      className="text-left p-3 rounded-lg bg-surface-800 border border-surface-700 hover:border-minecraft-500/30 transition-colors"
+                      className="text-left p-3 rounded-lg bg-surface-800 border border-surface-700 hover:border-minecraft-500/30 transition-colors flex-col items-start"
                     >
                       <p className="text-xs text-gray-500">{rel.sectionTitle}</p>
                       <p className="text-sm text-gray-200 font-medium mt-0.5">{rel.title}</p>
                       <p className="text-xs text-gray-500 mt-0.5">{rel.summary}</p>
-                    </button>
+                    </Button>
                   ))}
                 </div>
               </div>
@@ -643,14 +646,15 @@ export default function Guide() {
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                 {sections.getting_started?.articles.slice(0, 6).map(a => (
-                  <button
+                  <Button
                     key={a.id}
+                    variant="none"
                     onClick={() => openArticle('getting_started', a.id)}
-                    className="text-left p-3 rounded-lg bg-surface-800 border border-surface-700 hover:border-green-500/30 transition-colors"
+                    className="text-left p-3 rounded-lg bg-surface-800 border border-surface-700 hover:border-green-500/30 transition-colors flex-col items-start"
                   >
                     <p className="text-sm text-gray-200 font-medium">{a.title}</p>
                     <p className="text-xs text-gray-500 mt-0.5">{a.summary}</p>
-                  </button>
+                  </Button>
                 ))}
               </div>
             </div>
@@ -661,10 +665,11 @@ export default function Guide() {
                 const Icon = SECTION_ICONS[section.id] || BookOpen;
                 const colorClass = SECTION_COLORS[section.id] || 'text-gray-400 bg-surface-800 border-surface-700';
                 return (
-                  <button
+                  <Button
                     key={section.id}
+                    variant="none"
                     onClick={() => loadSection(section.id)}
-                    className="card-hover text-left group"
+                    className="card-hover text-left group flex-col items-start"
                   >
                     <div className={`w-10 h-10 rounded-lg flex items-center justify-center mb-3 ${colorClass}`}>
                       <Icon size={18} />
@@ -673,7 +678,7 @@ export default function Guide() {
                       {section.title}
                     </h3>
                     <p className="text-xs text-gray-500 mt-1">{section.articleCount} articles</p>
-                  </button>
+                  </Button>
                 );
               })}
             </div>

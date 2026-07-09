@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react';
 import {
   Wifi, Copy, Check, Globe, Monitor, Network, ExternalLink, ChevronDown, ChevronUp, Save,
-  ExternalLink as ExternalLinkIcon, Shield, ShieldOff, Play, Loader,
+  ExternalLink as ExternalLinkIcon, Shield, ShieldOff, Play,
   CheckCircle, XCircle, HelpCircle, Radio, Clock, Zap, Server,
-  History, RefreshCw, Settings,
+  History, RefreshCw,
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useActiveServer } from '../hooks/useActiveServer';
 import { useSocket } from '../hooks/useSocket';
 import toast from 'react-hot-toast';
+import { Button } from '../components/ui/stateful-button';
 
 interface ConnectionInfo {
   localAddress: string;
@@ -206,12 +207,13 @@ export default function Connection() {
                 Your server is configured to listen only on localhost. Friends cannot connect from the internet.
                 Set <code className="text-yellow-400 bg-surface-800 px-1 rounded">server-ip</code> to empty in server.properties.
               </p>
-              <button
+              <Button
+                variant="none"
                 onClick={() => copyToClipboard('server-ip=', 'Fix')}
                 className="mt-2 text-xs bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 px-3 py-1 rounded-lg transition-colors"
               >
                 Copy fix: server-ip=
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -241,10 +243,11 @@ export default function Connection() {
           {tabs.map((tab) => {
             const Icon = tab.icon;
             return (
-              <button
+              <Button
                 key={tab.id}
+                variant="none"
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+                className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
                   activeTab === tab.id
                     ? 'border-minecraft-500 text-minecraft-400'
                     : 'border-transparent text-gray-500 hover:text-gray-300'
@@ -252,7 +255,7 @@ export default function Connection() {
               >
                 <Icon size={16} />
                 {tab.label}
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -273,12 +276,13 @@ export default function Connection() {
                     <code className="text-sm font-mono text-minecraft-400 bg-surface-800 px-3 py-1.5 rounded-lg">
                       {info.localAddress}
                     </code>
-                    <button
+                    <Button
+                      variant="none"
                       onClick={() => copyToClipboard(info.localAddress, 'Localhost')}
                       className={`p-2 rounded-lg transition-colors ${copied === 'Localhost' ? 'bg-green-500/20 text-green-400' : 'bg-surface-800 text-gray-400 hover:text-gray-200'}`}
                     >
                       {copied === 'Localhost' ? <Check size={16} /> : <Copy size={16} />}
-                    </button>
+                    </Button>
                   </div>
                   <div className="flex items-center gap-2 text-xs text-green-400">
                     <CheckCircle size={14} />
@@ -305,12 +309,13 @@ export default function Connection() {
                         <code className="text-sm font-mono text-minecraft-400 bg-surface-800 px-3 py-1.5 rounded-lg">
                           {info.lanAddress}
                         </code>
-                        <button
+                        <Button
+                          variant="none"
                           onClick={() => copyToClipboard(info.lanAddress, 'LAN')}
                           className={`p-2 rounded-lg transition-colors ${copied === 'LAN' ? 'bg-green-500/20 text-green-400' : 'bg-surface-800 text-gray-400 hover:text-gray-200'}`}
                         >
                           {copied === 'LAN' ? <Check size={16} /> : <Copy size={16} />}
-                        </button>
+                        </Button>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-green-400 mb-2">
                         <CheckCircle size={14} />
@@ -322,21 +327,24 @@ export default function Connection() {
                   )}
                   <div className="flex gap-2 mt-2">
                     {info.lanAddress && (
-                      <button
+                      <Button
+                        variant="none"
                         onClick={() => copyToClipboard(info.lanAddress, 'LAN')}
                         className="text-xs bg-surface-800 hover:bg-surface-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors"
                       >
                         Copy Address
-                      </button>
+                      </Button>
                     )}
                     {!info.firewallActive && (
-                      <button
+                      <Button
+                        variant="none"
                         onClick={() => handleFirewallAction('add', () => api.addFirewallRule(), 'Add Firewall Rule')}
                         disabled={firewallBusy !== null}
+                        loading={firewallBusy === 'add'}
                         className="text-xs bg-green-600/20 hover:bg-green-600/30 text-green-400 px-3 py-1.5 rounded-lg transition-colors"
                       >
-                        {firewallBusy === 'add' ? 'Adding...' : 'Open Firewall'}
-                      </button>
+                        Open Firewall
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -360,23 +368,25 @@ export default function Connection() {
                         <code className="text-sm font-mono text-pink-400 bg-surface-800 px-3 py-1.5 rounded-lg">
                           {info.playitAddress}
                         </code>
-                        <button
+                        <Button
+                          variant="none"
                           onClick={() => copyToClipboard(info.playitAddress, 'Playit')}
                           className={`p-2 rounded-lg transition-colors ${copied === 'Playit' ? 'bg-green-500/20 text-green-400' : 'bg-surface-800 text-gray-400 hover:text-gray-200'}`}
                         >
                           {copied === 'Playit' ? <Check size={16} /> : <Copy size={16} />}
-                        </button>
+                        </Button>
                       </div>
                       <div className="flex items-center gap-2 text-xs text-pink-400 mb-2">
                         <CheckCircle size={14} />
                         Join Address: {info.playitAddress}
                       </div>
-                      <button
+                      <Button
+                        variant="none"
                         onClick={() => setShowPlayitConfig(true)}
                         className="text-xs bg-pink-600/20 hover:bg-pink-600/30 text-pink-400 px-3 py-1.5 rounded-lg transition-colors"
                       >
                         Open Playit Dashboard
-                      </button>
+                      </Button>
                     </>
                   ) : (
                     <div className="space-y-3">
@@ -384,12 +394,13 @@ export default function Connection() {
                         <HelpCircle size={14} />
                         No tunnel configured — friends outside your network cannot connect yet
                       </div>
-                      <button
+                      <Button
+                        variant="none"
                         onClick={() => setShowPlayitConfig(true)}
-                        className="text-xs bg-pink-600/20 hover:bg-pink-600/30 text-pink-400 px-3 py-1.5 rounded-lg transition-colors inline-flex items-center gap-1"
+                        className="text-xs bg-pink-600/20 hover:bg-pink-600/30 text-pink-400 px-3 py-1.5 rounded-lg transition-colors"
                       >
                         Configure Playit.gg Tunnel
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -418,14 +429,15 @@ export default function Connection() {
                       placeholder="e.g. your-server.playit.gg"
                       className="input flex-1 text-sm font-mono"
                     />
-                    <button
+                    <Button
+                      variant="primary"
                       onClick={savePlayitAddress}
-                      disabled={savingPlayit}
-                      className="btn-primary flex items-center gap-2 text-sm whitespace-nowrap"
+                      loading={savingPlayit}
+                      className="text-sm whitespace-nowrap"
                     >
                       <Save size={14} />
-                      {savingPlayit ? 'Saving...' : 'Save'}
-                    </button>
+                      Save
+                    </Button>
                   </div>
                 </div>
               )}
@@ -443,23 +455,23 @@ export default function Connection() {
             Quick Connect
           </h3>
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => copyToClipboard(info.localAddress, 'Localhost')} className="btn-primary flex items-center gap-2 text-sm">
+            <Button variant="primary" onClick={() => copyToClipboard(info.localAddress, 'Localhost')} className="text-sm">
               <Copy size={14} /> Copy Localhost
-            </button>
+            </Button>
             {info.lanAddress && (
-              <button onClick={() => copyToClipboard(info.lanAddress, 'LAN')} className="btn-primary flex items-center gap-2 text-sm bg-green-600/20 hover:bg-green-600/30 text-green-400">
+              <Button variant="none" onClick={() => copyToClipboard(info.lanAddress, 'LAN')} className="btn-primary text-sm bg-green-600/20 hover:bg-green-600/30 text-green-400">
                 <Copy size={14} /> Copy LAN
-              </button>
+              </Button>
             )}
             {info.publicIp && (
-              <button onClick={() => copyToClipboard(`${info.publicIp}:${info.port}`, 'Public')} className="btn-primary flex items-center gap-2 text-sm bg-purple-600/20 hover:bg-purple-600/30 text-purple-400">
+              <Button variant="none" onClick={() => copyToClipboard(`${info.publicIp}:${info.port}`, 'Public')} className="btn-primary text-sm bg-purple-600/20 hover:bg-purple-600/30 text-purple-400">
                 <Copy size={14} /> Copy Public IP
-              </button>
+              </Button>
             )}
             {info.playitAddress && (
-              <button onClick={() => copyToClipboard(info.playitAddress, 'Playit')} className="btn-primary flex items-center gap-2 text-sm bg-pink-600/20 hover:bg-pink-600/30 text-pink-400">
+              <Button variant="none" onClick={() => copyToClipboard(info.playitAddress, 'Playit')} className="btn-primary text-sm bg-pink-600/20 hover:bg-pink-600/30 text-pink-400">
                 <Copy size={14} /> Copy Playit
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -474,50 +486,57 @@ export default function Connection() {
             {firewallStatus?.isAdmin === false && (
               <span className="text-[10px] text-yellow-500 bg-yellow-500/10 px-1.5 py-0.5 rounded">Limited</span>
             )}
-            <button onClick={handleTestConnection} disabled={testingConnection} className="flex items-center gap-1.5 text-xs bg-surface-800 hover:bg-surface-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors">
-              {testingConnection ? <Loader size={12} className="animate-spin" /> : <Play size={12} />}
-              {testingConnection ? 'Testing...' : 'Test Connection'}
-            </button>
-            <button onClick={() => { fetchFirewallStatus(); fetchDiagnostics(); }} className="flex items-center gap-1.5 text-xs bg-surface-800 hover:bg-surface-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors">
+            <Button variant="none" onClick={handleTestConnection} disabled={testingConnection} loading={testingConnection} className="text-xs bg-surface-800 hover:bg-surface-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors">
+              <Play size={12} />
+              Test Connection
+            </Button>
+            <Button variant="none" onClick={() => { fetchFirewallStatus(); fetchDiagnostics(); }} className="text-xs bg-surface-800 hover:bg-surface-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors">
               <RefreshCw size={12} /> Refresh
-            </button>
+            </Button>
           </div>
 
           {!firewallStatus?.exists && !info?.firewallActive && (
-            <button
+            <Button
+              variant="none"
               onClick={() => handleFirewallAction('add', () => api.addFirewallRule(), 'Add Firewall Rule')}
               disabled={firewallBusy !== null}
-              className="btn-primary flex items-center gap-2 text-sm bg-green-600/20 hover:bg-green-600/30 text-green-400"
+              loading={firewallBusy === 'add'}
+              className="btn-primary text-sm bg-green-600/20 hover:bg-green-600/30 text-green-400"
             >
-              {firewallBusy === 'add' ? <Loader size={14} className="animate-spin" /> : <Shield size={14} />}
-              {firewallBusy === 'add' ? 'Adding...' : 'Add Firewall Rule'}
-            </button>
+              <Shield size={14} />
+              Add Firewall Rule
+            </Button>
           )}
 
           {firewallStatus?.exists && (
             <div className="flex flex-wrap gap-2">
-              <button
+              <Button
+                variant="none"
                 onClick={() => handleFirewallAction('remove', () => api.removeFirewallRule(), 'Remove Firewall Rule')}
                 disabled={firewallBusy !== null}
-                className="text-xs bg-red-600/20 hover:bg-red-600/30 text-red-400 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                loading={firewallBusy === 'remove'}
+                className="text-xs bg-red-600/20 hover:bg-red-600/30 text-red-400 px-3 py-1.5 rounded-lg transition-colors"
               >
-                {firewallBusy === 'remove' ? <Loader size={12} className="animate-spin" /> : <ShieldOff size={12} />}
-                {firewallBusy === 'remove' ? 'Removing...' : 'Remove Rule'}
-              </button>
-              <button
+                <ShieldOff size={12} />
+                Remove Rule
+              </Button>
+              <Button
+                variant="none"
                 onClick={() => handleFirewallAction('repair', () => api.repairFirewallRule(), 'Repair Firewall Rule')}
                 disabled={firewallBusy !== null}
-                className="text-xs bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                loading={firewallBusy === 'repair'}
+                className="text-xs bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 px-3 py-1.5 rounded-lg transition-colors"
               >
-                {firewallBusy === 'repair' ? <Loader size={12} className="animate-spin" /> : <RefreshCw size={12} />}
+                <RefreshCw size={12} />
                 Repair
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="none"
                 onClick={() => api.openFirewall().then(r => toast.success(r.message)).catch(() => toast.error('Failed'))}
-                className="text-xs bg-surface-800 hover:bg-surface-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                className="text-xs bg-surface-800 hover:bg-surface-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors"
               >
                 <ExternalLink size={12} /> Windows Firewall
-              </button>
+              </Button>
             </div>
           )}
 
@@ -535,16 +554,17 @@ export default function Connection() {
 
       {/* Diagnostics History */}
       <div className="card">
-        <button
+        <Button
+          variant="none"
           onClick={() => setShowHistory(!showHistory)}
-          className="flex items-center justify-between w-full"
+          className="justify-between w-full"
         >
           <h3 className="text-sm font-medium text-gray-200 flex items-center gap-2">
             <History size={16} className="text-minecraft-500" />
             Diagnostics History ({diagHistory.length})
           </h3>
           {showHistory ? <ChevronUp size={16} className="text-gray-500" /> : <ChevronDown size={16} className="text-gray-500" />}
-        </button>
+        </Button>
         {showHistory && (
           <div className="mt-3 space-y-1.5 max-h-64 overflow-y-auto custom-scrollbar">
             {diagHistory.length === 0 ? (

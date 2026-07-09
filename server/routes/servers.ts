@@ -148,8 +148,14 @@ router.post('/', authMiddleware, requirePermission('server.start'), async (req: 
   // If version and software provided, download the jar before creating DB record
   if (version && software) {
     try {
-      const prefix = softwareLower;
-      jarFileName = `${prefix}-${version}.jar`;
+      // Fabric/Quilt use a fixed launcher jar name; others use <type>-<version>.jar
+      if (downloadSource === 'fabric') {
+        jarFileName = 'fabric-server-launch.jar';
+      } else if (downloadSource === 'quilt') {
+        jarFileName = 'quilt-server-launch.jar';
+      } else {
+        jarFileName = `${softwareLower}-${version}.jar`;
+      }
       const jarPath = path.join(dir, jarFileName);
       const result = await downloadVersion(version, downloadSource, jarPath);
       sourceName = result.sourceName;

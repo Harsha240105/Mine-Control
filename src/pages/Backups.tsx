@@ -9,6 +9,7 @@ import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 import { useActiveServer } from '../hooks/useActiveServer';
 import { useSocket } from '../hooks/useSocket';
+import { Button } from '../components/ui/stateful-button';
 
 interface Backup {
   id: string; name: string; size: string; created_at: string; type: string;
@@ -60,7 +61,9 @@ export default function Backups() {
     try {
       const data = await api.getBackups({ search, type: typeFilter || undefined, sort: sortBy, order: sortOrder });
       setBackups(data);
-    } catch {}
+    } catch (e) {
+      console.error('[Backups] fetchBackups error:', e);
+    }
   }, [search, typeFilter, sortBy, sortOrder]);
 
   const fetchStats = useCallback(async () => {
@@ -216,12 +219,12 @@ export default function Backups() {
           <p className="text-sm text-gray-500 mt-0.5">{backups.length} backups · {stats?.totalSize || '0 B'} total</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowImport(!showImport)} className="btn-secondary flex items-center gap-2 text-sm">
+          <Button onClick={() => setShowImport(!showImport)} variant="secondary" className="text-sm">
             <Upload size={14} /> Import
-          </button>
-          <button onClick={() => setShowCreate(!showCreate)} className="btn-primary flex items-center gap-2 text-sm">
+          </Button>
+          <Button onClick={() => setShowCreate(!showCreate)} variant="primary" className="text-sm">
             <Plus size={14} /> Create Backup
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -274,9 +277,9 @@ export default function Backups() {
               {settings.customFolderEnabled && (
                 <div className="flex items-center gap-2 ml-6">
                   <input type="text" value={settings.customFolder || ''} onChange={(e) => setSettings({ ...settings, customFolder: e.target.value })} placeholder="C:\\Backups\\MyServer" className="input flex-1 text-sm font-mono" />
-                  <button onClick={async () => { if (window.electronAPI?.selectDirectory) { const dir = await window.electronAPI.selectDirectory(); if (dir) setSettings({ ...settings, customFolder: dir }); } }} className="btn-secondary text-sm whitespace-nowrap">
+                  <Button onClick={async () => { if (window.electronAPI?.selectDirectory) { const dir = await window.electronAPI.selectDirectory(); if (dir) setSettings({ ...settings, customFolder: dir }); } }} variant="secondary" className="text-sm whitespace-nowrap">
                     Browse
-                  </button>
+                  </Button>
                 </div>
               )}
               <label className="flex items-center gap-3 cursor-pointer">
@@ -307,11 +310,11 @@ export default function Backups() {
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <button onClick={handleRunCleanup} className="btn-secondary flex items-center gap-2 text-sm"><RefreshCw size={12} /> Run Cleanup Now</button>
-            <button onClick={saveSettings} disabled={savingSettings} className="btn-primary flex items-center gap-2 text-sm">
-              {savingSettings ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save size={14} />}
+            <Button onClick={handleRunCleanup} variant="secondary" className="text-sm"><RefreshCw size={12} /> Run Cleanup Now</Button>
+            <Button onClick={saveSettings} disabled={savingSettings} variant="primary" loading={savingSettings} className="text-sm">
+              <Save size={14} />
               {savingSettings ? 'Saving...' : 'Save Settings'}
-            </button>
+            </Button>
           </div>
         </div>
       </details>
@@ -372,7 +375,7 @@ export default function Backups() {
             </div>
           )}
           <div className="flex justify-end mt-4">
-            <button onClick={saveSchedule} className="btn-primary flex items-center gap-2 text-sm"><Save size={14} /> Save Schedule</button>
+            <Button onClick={saveSchedule} variant="primary" className="text-sm"><Save size={14} /> Save Schedule</Button>
           </div>
         </div>
       </details>
@@ -415,11 +418,10 @@ export default function Backups() {
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary">Cancel</button>
-              <button type="submit" disabled={loading} className="btn-primary flex items-center gap-2">
-                {loading && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+              <Button type="button" onClick={() => setShowCreate(false)} variant="secondary">Cancel</Button>
+              <Button type="submit" disabled={loading} variant="primary" loading={loading}>
                 {loading ? 'Creating...' : 'Create Backup'}
-              </button>
+              </Button>
             </div>
           </form>
         </div>
@@ -445,11 +447,11 @@ export default function Backups() {
               </label>
             </div>
             <div className="flex justify-end gap-2">
-              <button onClick={() => { setShowImport(false); setImportFile(null); }} className="btn-secondary">Cancel</button>
-              <button onClick={handleImport} disabled={!importFile || importing} className="btn-primary flex items-center gap-2">
-                {importing ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Upload size={14} />}
+              <Button onClick={() => { setShowImport(false); setImportFile(null); }} variant="secondary">Cancel</Button>
+              <Button onClick={handleImport} disabled={!importFile || importing} variant="primary" loading={importing}>
+                {!importing && <Upload size={14} />}
                 {importing ? 'Importing...' : 'Import'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -474,9 +476,9 @@ export default function Backups() {
           <option value="size">Size</option>
           <option value="restore_count">Restores</option>
         </select>
-        <button onClick={() => setSortOrder(sortOrder === 'DESC' ? 'ASC' : 'DESC')} className="btn-ghost p-2 text-xs text-gray-500">
+        <Button onClick={() => setSortOrder(sortOrder === 'DESC' ? 'ASC' : 'DESC')} variant="ghost" className="p-2 text-xs text-gray-500">
           {sortOrder === 'DESC' ? 'Newest' : 'Oldest'}
-        </button>
+        </Button>
       </div>
 
       {/* Backup List */}
@@ -505,19 +507,22 @@ export default function Backups() {
               </div>
             </div>
             <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-              <button onClick={() => handleVerify(backup.id)} className="btn-ghost p-1.5 text-gray-500 hover:text-blue-400" title="Verify Integrity"><Shield size={14} /></button>
-              <button onClick={() => handleExport(backup.id)} className="btn-ghost p-1.5 text-gray-500 hover:text-purple-400" title="Export"><Download size={14} /></button>
+              <Button onClick={() => handleVerify(backup.id)} variant="ghost" className="p-1.5 text-gray-500 hover:text-blue-400" title="Verify Integrity"><Shield size={14} /></Button>
+              <Button onClick={() => handleExport(backup.id)} variant="ghost" className="p-1.5 text-gray-500 hover:text-purple-400" title="Export"><Download size={14} /></Button>
               <a href={api.downloadBackupUrl(backup.id)} download className="btn-ghost p-1.5 text-gray-500 hover:text-minecraft-400" title="Download"><Archive size={14} /></a>
-              <button onClick={() => { setSelectedBackup(backup); setShowRestoreConfirm(true); }} className="btn-ghost p-1.5 text-gray-500 hover:text-green-400" title="Restore"><RotateCcw size={14} /></button>
-              <button onClick={() => { setDeleteId(backup.id); setShowDeleteConfirm(true); }} className="btn-ghost p-1.5 text-gray-500 hover:text-red-400" title="Delete"><Trash2 size={14} /></button>
+              <Button onClick={() => { setSelectedBackup(backup); setShowRestoreConfirm(true); }} variant="ghost" className="p-1.5 text-gray-500 hover:text-green-400" title="Restore"><RotateCcw size={14} /></Button>
+              <Button onClick={() => { setDeleteId(backup.id); setShowDeleteConfirm(true); }} variant="ghost" className="p-1.5 text-gray-500 hover:text-red-400" title="Delete"><Trash2 size={14} /></Button>
             </div>
           </div>
         ))}
         {backups.length === 0 && (
           <div className="card p-8 text-center text-gray-500">
             <HardDrive size={40} className="mx-auto mb-3 opacity-30" />
-            <p>No backups yet</p>
-            <p className="text-xs mt-1">Create your first backup to protect your worlds</p>
+            <p className="text-sm font-medium text-gray-400">No backups yet</p>
+            <div className="mt-4 space-y-2 text-xs text-gray-500">
+              <p><span className="text-minecraft-400 font-medium">Automatic Backup</span> — Created after the first successful server start. No action needed.</p>
+              <p><span className="text-blue-400 font-medium">Manual Backup</span> — Click "Create Backup" above to make one anytime.</p>
+            </div>
           </div>
         )}
       </div>
@@ -531,7 +536,7 @@ export default function Backups() {
                 <h3 className="text-lg font-semibold text-gray-100">{selectedBackup.name}</h3>
                 <p className="text-xs text-gray-500 mt-1">{new Date(selectedBackup.created_at).toLocaleString()} · {selectedBackup.type}</p>
               </div>
-              <button onClick={() => setSelectedBackup(null)} className="btn-ghost p-1 text-gray-500 hover:text-gray-300">✕</button>
+              <Button onClick={() => setSelectedBackup(null)} variant="ghost" className="p-1 text-gray-500 hover:text-gray-300">✕</Button>
             </div>
             <div className="p-5 space-y-5">
               {/* Info Grid */}
@@ -616,10 +621,10 @@ export default function Backups() {
 
               {/* Actions */}
               <div className="flex items-center gap-2 justify-end pt-2 border-t border-surface-700">
-                <button onClick={() => handleVerify(selectedBackup.id)} className="btn-secondary text-xs flex items-center gap-1"><Shield size={12} /> Verify</button>
-                <button onClick={() => handleExport(selectedBackup.id)} className="btn-secondary text-xs flex items-center gap-1"><Download size={12} /> Export</button>
+                <Button onClick={() => handleVerify(selectedBackup.id)} variant="secondary" className="text-xs"><Shield size={12} /> Verify</Button>
+                <Button onClick={() => handleExport(selectedBackup.id)} variant="secondary" className="text-xs"><Download size={12} /> Export</Button>
                 <a href={api.downloadBackupUrl(selectedBackup.id)} download className="btn-secondary text-xs flex items-center gap-1"><Archive size={12} /> Download</a>
-                <button onClick={() => setShowRestoreConfirm(true)} className="btn-primary text-xs flex items-center gap-1"><RotateCcw size={12} /> Restore</button>
+                <Button onClick={() => setShowRestoreConfirm(true)} variant="primary" className="text-xs"><RotateCcw size={12} /> Restore</Button>
               </div>
             </div>
           </div>
@@ -656,10 +661,10 @@ export default function Backups() {
               A safety backup will be created automatically before restoring. The server must be restarted after restore.
             </p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => setShowRestoreConfirm(false)} className="btn-secondary text-sm">Cancel</button>
-              <button onClick={handleRestore} className="btn-primary text-sm bg-yellow-600 hover:bg-yellow-700 flex items-center gap-2">
+              <Button onClick={() => setShowRestoreConfirm(false)} variant="secondary" className="text-sm">Cancel</Button>
+              <Button onClick={handleRestore} variant="none" className="btn btn-primary text-sm bg-yellow-600 hover:bg-yellow-700">
                 <RotateCcw size={14} /> Restore
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -680,10 +685,10 @@ export default function Backups() {
             </div>
             <p className="text-sm text-gray-300 mb-4">Are you sure you want to delete this backup permanently?</p>
             <div className="flex justify-end gap-2">
-              <button onClick={() => { setShowDeleteConfirm(false); setDeleteId(null); }} className="btn-secondary text-sm">Cancel</button>
-              <button onClick={handleDelete} className="btn-primary text-sm bg-red-600 hover:bg-red-700 flex items-center gap-2">
+              <Button onClick={() => { setShowDeleteConfirm(false); setDeleteId(null); }} variant="secondary" className="text-sm">Cancel</Button>
+              <Button onClick={handleDelete} variant="none" className="btn btn-primary text-sm bg-red-600 hover:bg-red-700">
                 <Trash2 size={14} /> Delete
-              </button>
+              </Button>
             </div>
           </div>
         </div>

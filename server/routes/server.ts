@@ -139,16 +139,26 @@ router.post('/repair', authMiddleware, requirePermission('server.start'), async 
         result = { success: true, message: `RAM adjusted to ${totalMem}G` };
         break;
       case 'download-server':
-        const cfg = minecraftServer.getConfig();
-        const verStr = (cfg.jarFile || '').replace(/^(paper|vanilla|fabric|forge|neoforge|quilt|purpur|spigot|folia|pufferfish)-/i, '').replace('.jar', '');
-        const srcStr = (cfg.jarFile || '').match(/^(paper|vanilla|fabric|forge|neoforge|quilt|purpur|spigot|folia|pufferfish)/i)?.[1]?.toLowerCase() || 'paper';
-        await downloadVersion(verStr || '1.21.4', srcStr, path.join(minecraftServer.directory, cfg.jarFile || 'server.jar'));
-        result = { success: true, message: 'Server JAR downloaded successfully' };
+        {
+          const cfg = minecraftServer.getConfig();
+          const jf = cfg.jarFile || 'server.jar';
+          let verStr: string;
+          let srcStr: string;
+          if (jf === 'fabric-server-launch.jar' || jf === 'quilt-server-launch.jar') {
+            srcStr = jf === 'fabric-server-launch.jar' ? 'fabric' : 'quilt';
+            verStr = cfg.version || '1.21.4';
+          } else {
+            verStr = jf.replace(/^(paper|vanilla|fabric|forge|neoforge|quilt|purpur|spigot|folia|pufferfish)-/i, '').replace('.jar', '');
+            srcStr = jf.match(/^(paper|vanilla|fabric|forge|neoforge|quilt|purpur|spigot|folia|pufferfish)/i)?.[1]?.toLowerCase() || 'paper';
+          }
+          await downloadVersion(verStr, srcStr, path.join(minecraftServer.directory, jf));
+          result = { success: true, message: 'Server JAR downloaded successfully' };
+        }
         break;
       case 'repair-fabric':
         const fCfg = minecraftServer.getConfig();
-        const fVer = (fCfg.jarFile || '').replace(/^fabric-/i, '').replace('.jar', '');
-        await downloadFabricVersion(fVer || '1.21.4', path.join(minecraftServer.directory, 'fabric-server-launch.jar'));
+        const fVer = fCfg.version || (fCfg.jarFile || '').replace(/^fabric-/i, '').replace('.jar', '') || '1.21.4';
+        await downloadFabricVersion(fVer, path.join(minecraftServer.directory, 'fabric-server-launch.jar'));
         result = { success: true, message: 'Fabric loader repaired successfully' };
         break;
       case 'repair-forge':
@@ -157,8 +167,8 @@ router.post('/repair', authMiddleware, requirePermission('server.start'), async 
         break;
       case 'repair-quilt':
         const qCfg = minecraftServer.getConfig();
-        const qVer = (qCfg.jarFile || '').replace(/^quilt-/i, '').replace('.jar', '');
-        await downloadQuiltVersion(qVer || '1.21.4', path.join(minecraftServer.directory, 'quilt-server-launch.jar'));
+        const qVer = qCfg.version || (qCfg.jarFile || '').replace(/^quilt-/i, '').replace('.jar', '') || '1.21.4';
+        await downloadQuiltVersion(qVer, path.join(minecraftServer.directory, 'quilt-server-launch.jar'));
         result = { success: true, message: 'Quilt loader repaired successfully' };
         break;
       default:
@@ -1888,6 +1898,20 @@ router.post('/firewall/verify', authMiddleware, async (req: AuthRequest, res) =>
 // Check admin status
 router.get('/firewall/admin-check', authMiddleware, async (_req: AuthRequest, res) => {
   res.json({ isAdmin: firewallManager.isAdmin(), isWindows: firewallManager.isWindows() });
+});
+
+// Developer mode toggle
+router.get('/developer-mode', authMiddleware, (req: AuthRequest, res) => {
+  const db = getDatabase();
+  const row = db.prepare("SELECT value FROM server_config WHERE key = 'developer_mode'").get() as any;
+  res.json({ enabled: row?.value === 'true' });
+});
+
+router.post('/developer-mode', authMiddleware, (req: AuthRequest, res) => {
+  const db = getDatabase();
+  const enabled = req.body?.enabled === true ? 'true' : 'false';
+  db.prepare("INSERT OR REPLACE INTO server_config (key, value) VALUES ('developer_mode', ?)").run(enabled);
+  res.json({ enabled: enabled === 'true' });
 });
 
 export default router;

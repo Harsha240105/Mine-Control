@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Coffee, Download, Trash2, RefreshCw, CheckCircle, XCircle, AlertTriangle, ExternalLink, Cpu, Loader2 } from 'lucide-react';
+import { Button } from '../components/ui/stateful-button';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 
@@ -153,10 +154,10 @@ export default function JavaManager() {
           <p className="text-gray-500 mt-1">Manage Java runtimes for Minecraft servers</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleAutoDetect} className="btn-ghost px-3 py-2 text-sm flex items-center gap-1.5">
+          <Button variant="ghost" onClick={handleAutoDetect} className="px-3 py-2 text-sm">
             <RefreshCw size={14} />
             Rescan
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -202,10 +203,10 @@ export default function JavaManager() {
             <Coffee size={40} className="mx-auto text-gray-600 mb-3" />
             <p className="text-gray-400 mb-2">No Java installations detected</p>
             <p className="text-gray-500 text-sm mb-4">Download Java to get started</p>
-            <button onClick={() => handleDownload(21)} className="btn-primary px-4 py-2 text-sm">
-              <Download size={14} className="inline mr-1.5" />
+            <Button variant="primary" onClick={() => handleDownload(21)} className="px-4 py-2 text-sm">
+              <Download size={14} />
               Download Java 21 (Recommended)
-            </button>
+            </Button>
           </div>
         ) : (
           <div className="space-y-2">

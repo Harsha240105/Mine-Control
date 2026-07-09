@@ -4,6 +4,7 @@ import { api, ApiError } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
 import { useActiveServer } from '../hooks/useActiveServer';
 import toast from 'react-hot-toast';
+import { Button } from '../components/ui/stateful-button';
 
 interface LogEntry {
   id?: number;
@@ -163,29 +164,31 @@ export default function Console() {
             <option value="fatal">FATAL</option>
             <option value="debug">DEBUG</option>
           </select>
-          <button onClick={() => setShowSearch(!showSearch)} className="btn-ghost p-2" title="Search">
+          <Button onClick={() => setShowSearch(!showSearch)} variant="ghost" className="p-2" title="Search">
             <Search size={16} />
-          </button>
-          <button onClick={loadLogs} className="btn-ghost p-2" title="Refresh">
+          </Button>
+          <Button onClick={loadLogs} variant="ghost" className="p-2" title="Refresh">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
-          </button>
-          <button onClick={handleDownload} className="btn-ghost p-2" title="Download Logs">
+          </Button>
+          <Button onClick={handleDownload} variant="ghost" className="p-2" title="Download Logs">
             <Download size={16} />
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => { const next = !autoScroll; setAutoScroll(next); localStorage.setItem('mc_console_autoscroll', next ? 'true' : 'false'); }}
-            className={`btn-ghost p-2 ${autoScroll ? 'text-minecraft-400' : ''}`}
+            variant="ghost"
+            className={`p-2 ${autoScroll ? 'text-minecraft-400' : ''}`}
             title="Auto-scroll"
           >
             <ChevronDown size={16} />
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => setLogs([])}
-            className="btn-ghost p-2 hover:text-red-400"
+            variant="ghost"
+            className="p-2 hover:text-red-400"
             title="Clear Console"
           >
             <Trash2 size={16} />
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -204,15 +207,16 @@ export default function Console() {
                 placeholder="Search logs..."
               />
               {searchQuery && (
-                <button
+                <Button
                   onClick={() => { setSearchQuery(''); loadLogs(); }}
+                  variant="none"
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
                 >
                   <X size={14} />
-                </button>
+                </Button>
               )}
             </div>
-            <button onClick={handleSearch} className="btn-primary text-sm">Search</button>
+            <Button onClick={handleSearch} variant="primary" className="text-sm">Search</Button>
           </div>
         </div>
       )}
@@ -252,13 +256,14 @@ export default function Console() {
             className="input pl-8 pr-12 font-mono text-sm bg-surface-900 border-surface-700"
             placeholder="Enter a command..."
           />
-          <button
+          <Button
             type="submit"
             disabled={!command.trim()}
+            variant="none"
             className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1.5 text-gray-400 hover:text-minecraft-400 disabled:opacity-30 transition-colors"
           >
             <Send size={16} />
-          </button>
+          </Button>
         </div>
       </form>
     </div>

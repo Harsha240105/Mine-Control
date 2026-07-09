@@ -7,6 +7,7 @@ import {
   EyeOff, Eye, Users, Map, ExternalLink, Copy, CheckCircle,
   Loader2, Sparkles, Play, AlertTriangle,
 } from 'lucide-react';
+import { Button } from '../components/ui/stateful-button';
 import toast from 'react-hot-toast';
 import { useActiveServer } from '../hooks/useActiveServer';
 
@@ -271,9 +272,9 @@ export default function Wizard() {
           <Server className="w-5 h-5 text-minecraft-500" />
           <span className="text-sm font-medium text-gray-200">Create New Server</span>
         </div>
-        <button onClick={() => navigate('/')} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+        <Button variant="ghost" onClick={() => navigate('/')} className="text-xs">
           Cancel
-        </button>
+        </Button>
       </div>
 
       {/* Content - Single Page */}
@@ -291,14 +292,14 @@ export default function Wizard() {
         <section><StepSummary data={data} /></section>
         
         <div className="pt-8 border-t border-surface-800">
-          <button
+          <Button variant="primary"
             onClick={handleCreate}
             disabled={!data.name.trim() || !data.software || !data.version}
-            className="btn-primary w-full py-4 text-lg flex items-center justify-center gap-2"
+            className="w-full py-4 text-lg"
           >
             <Sparkles size={20} />
             Create Server
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -349,8 +350,9 @@ function StepCompatibility({ data, update }: { data: WizardData; update: (p: Par
             const selected = data.compatibilityMode === opt.id;
             const Icon = opt.icon;
             return (
-              <button
+              <Button
                 key={opt.id}
+                variant="none"
                 onClick={() => update({ compatibilityMode: opt.id })}
                 className={`relative p-4 rounded-xl border-2 text-left transition-all ${
                   selected
@@ -374,7 +376,7 @@ function StepCompatibility({ data, update }: { data: WizardData; update: (p: Par
                     {opt.warning}
                   </p>
                 )}
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -434,8 +436,9 @@ function StepIdentification({ data, update }: { data: WizardData; update: (p: Pa
               const selected = data.network === opt.id;
               const Icon = opt.icon;
               return (
-                <button
+                <Button
                   key={opt.id}
+                  variant="none"
                   onClick={() => update({ network: opt.id as any })}
                   className={`relative p-4 rounded-xl border-2 text-left transition-all ${
                     selected
@@ -451,7 +454,7 @@ function StepIdentification({ data, update }: { data: WizardData; update: (p: Pa
                   <Icon className={`w-5 h-5 mb-2 ${selected ? 'text-minecraft-400' : 'text-gray-400'}`} />
                   <h3 className="text-sm font-semibold text-gray-200">{opt.label}</h3>
                   <p className="text-xs text-gray-500 mt-1">{opt.desc}</p>
-                </button>
+                </Button>
               );
             })}
           </div>
@@ -469,8 +472,9 @@ function StepSoftware({ data, update }: { data: WizardData; update: (p: Partial<
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         {SERVER_SOFTWARE.map((sw) => (
-          <button
+          <Button
             key={sw.id}
+            variant="none"
             onClick={() => update({ software: sw.id })}
             className={`relative p-4 rounded-xl border-2 text-left transition-all ${
               data.software === sw.id
@@ -493,7 +497,7 @@ function StepSoftware({ data, update }: { data: WizardData; update: (p: Partial<
             <p className="text-[11px] text-gray-500 mt-1.5">
               <span className="text-gray-400">Best for:</span> {sw.best}
             </p>
-          </button>
+          </Button>
         ))}
       </div>
     </div>
@@ -593,9 +597,9 @@ function StepVersion({ data, update, versions, loading, search, setSearch }: {
 function VersionCard({ v, selected, onSelect }: { v: any; selected: string; onSelect: () => void }) {
   const isSelected = v.version === selected;
   return (
-    <button
+    <Button variant="none"
       onClick={onSelect}
-      className={`p-2.5 rounded-lg border text-left text-sm transition-all ${
+      className={`p-2.5 rounded-lg border text-left text-sm transition-all flex-col items-start ${
         isSelected
           ? 'border-minecraft-500 bg-minecraft-600/15 text-minecraft-400 font-medium'
           : 'border-surface-700 bg-surface-800/50 text-gray-300 hover:border-surface-600'
@@ -605,7 +609,7 @@ function VersionCard({ v, selected, onSelect }: { v: any; selected: string; onSe
       <span className={`block text-[10px] mt-0.5 ${isSelected ? 'text-minecraft-400/70' : 'text-gray-600'}`}>
         {v.source}
       </span>
-    </button>
+    </Button>
   );
 }
 
@@ -658,12 +662,12 @@ function StepSettings({ data, update }: { data: WizardData; update: (p: Partial<
         <div>
           <label className="block text-xs font-medium text-gray-400 mb-1">Connection Mode</label>
           <div className="flex gap-2">
-            <button onClick={() => update({ onlineMode: true })} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${data.onlineMode ? 'bg-green-500/20 border border-green-500/50 text-green-400' : 'bg-surface-800 border border-surface-600 text-gray-400'}`}>
+            <Button variant="none" onClick={() => update({ onlineMode: true })} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${data.onlineMode ? 'bg-green-500/20 border border-green-500/50 text-green-400' : 'bg-surface-800 border border-surface-600 text-gray-400'}`}>
               Premium
-            </button>
-            <button onClick={() => update({ onlineMode: false })} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${!data.onlineMode ? 'bg-yellow-500/20 border border-yellow-500/50 text-yellow-400' : 'bg-surface-800 border border-surface-600 text-gray-400'}`}>
+            </Button>
+            <Button variant="none" onClick={() => update({ onlineMode: false })} className={`flex-1 py-2 rounded-lg text-xs font-medium transition-all ${!data.onlineMode ? 'bg-yellow-500/20 border border-yellow-500/50 text-yellow-400' : 'bg-surface-800 border border-surface-600 text-gray-400'}`}>
               Offline
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -752,8 +756,9 @@ function StepPlugins({ data, togglePlugin }: { data: WizardData; update: (p: Par
           {displayPlugins.map(p => {
             const selected = data.plugins.includes(p.name);
             return (
-              <button
+              <Button
                 key={p.name}
+                variant="none"
                 onClick={() => togglePlugin(p.name)}
                 className={`flex items-center gap-3 p-3 rounded-lg border text-left transition-all ${
                   selected
@@ -775,7 +780,7 @@ function StepPlugins({ data, togglePlugin }: { data: WizardData; update: (p: Par
                 }`}>
                   {selected && <Check size={12} className="text-white" />}
                 </div>
-              </button>
+              </Button>
             );
           })}
         </div>

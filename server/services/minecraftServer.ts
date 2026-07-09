@@ -44,6 +44,7 @@ class MinecraftServerManager extends EventEmitter {
   private outputBuffer: string[] = [];
   private startAttemptedAt: number | null = null;
   private hasStartedSuccessfully = false;
+  private _autoBackupTriggered = false;
   private crashLog: string[] = [];
   private _currentTps = 20.0;
   private _lastJavaLaunch: {
@@ -238,7 +239,7 @@ class MinecraftServerManager extends EventEmitter {
     const totalMem = Math.round(os.totalmem() / 1024 / 1024 / 1024);
     add('RAM Check', maxRam <= totalMem, `Allocated ${maxRam}GB, system has ${totalMem}GB total RAM${maxRam > totalMem ? '. Reduce max RAM allocation.' : ''}`, true, 'adjust-ram');
 
-    // 3. Jar exists
+    // 3. Jar exists — auto-download if missing
     let waitCount = 0;
     while (fs.existsSync(jarPath + '.download') && waitCount < 120) {
       if (waitCount === 0) this.emit('server:output', '[MineControl] Waiting for jar download to finish...\n');
@@ -248,7 +249,16 @@ class MinecraftServerManager extends EventEmitter {
     if (fs.existsSync(jarPath)) {
       add('Server Jar', true, `Found: ${jarFileName}`);
     } else {
-      add('Server Jar', false, `Missing: ${jarFileName}. Download a server version from the Software page.`, true, 'download-server');
+      add('Server Jar', false, `Downloading ${jarFileName}...`, true, 'download-server');
+      try {
+        const { downloadVersion } = require('./download');
+        const version = this.getVersionFromConfig(config);
+        const source = this.getSourceFromConfig(config);
+        await downloadVersion(version, source, jarPath);
+        add('Server Jar', true, `${jarFileName} downloaded automatically`);
+      } catch (e: any) {
+        add('Server Jar', false, `Missing: ${jarFileName}. Auto-download failed: ${e.message}`, true, 'download-server');
+      }
     }
 
     // 4. EULA
@@ -292,11 +302,22 @@ class MinecraftServerManager extends EventEmitter {
     javaMajor = javaValidation.javaMajor;
     for (const c of javaValidation.checks) add(c.name, c.passed, c.message, c.actionable, c.action);
 
-    // 7. Fabric loader check
+    // 7. Fabric loader check + auto-download
     if (config.jarFile?.toLowerCase().includes('fabric')) {
       const loaderJar = path.join(this.serverDir, 'fabric-server-launch.jar');
-      const exists = fs.existsSync(loaderJar);
-      add('Fabric Loader', exists, exists ? 'fabric-server-launch.jar found' : 'Missing fabric-server-launch.jar. Run Repair Fabric.', true, 'repair-fabric');
+      if (!fs.existsSync(loaderJar)) {
+        add('Fabric Loader', false, 'Downloading fabric-server-launch.jar...', true, 'repair-fabric');
+        try {
+          const { downloadFabricVersion } = require('./download');
+          const version = this.getVersionFromConfig(config);
+          await downloadFabricVersion(version, loaderJar);
+          add('Fabric Loader', true, 'fabric-server-launch.jar downloaded automatically');
+        } catch (e: any) {
+          add('Fabric Loader', false, `Fabric download failed: ${e.message}. Run Repair Fabric.`, true, 'repair-fabric');
+        }
+      } else {
+        add('Fabric Loader', true, 'fabric-server-launch.jar found');
+      }
     }
 
     // 8. Forge libraries check
@@ -306,11 +327,22 @@ class MinecraftServerManager extends EventEmitter {
       add('Forge Libraries', exists, exists ? 'Forge libraries directory found' : 'Missing Forge libraries. Run Repair Forge.', true, 'repair-forge');
     }
 
-    // 9. Quilt loader check
+    // 9. Quilt loader check + auto-download
     if (config.jarFile?.toLowerCase().includes('quilt')) {
       const loaderJar = path.join(this.serverDir, 'quilt-server-launch.jar');
-      const exists = fs.existsSync(loaderJar);
-      add('Quilt Loader', exists, exists ? 'quilt-server-launch.jar found' : 'Missing Quilt loader. Run Repair Quilt.', true, 'repair-quilt');
+      if (!fs.existsSync(loaderJar)) {
+        add('Quilt Loader', false, 'Downloading quilt-server-launch.jar...', true, 'repair-quilt');
+        try {
+          const { downloadQuiltVersion } = require('./download');
+          const version = this.getVersionFromConfig(config);
+          await downloadQuiltVersion(version, loaderJar);
+          add('Quilt Loader', true, 'quilt-server-launch.jar downloaded automatically');
+        } catch (e: any) {
+          add('Quilt Loader', false, `Quilt download failed: ${e.message}. Run Repair Quilt.`, true, 'repair-quilt');
+        }
+      } else {
+        add('Quilt Loader', true, 'quilt-server-launch.jar found');
+      }
     }
 
     // 10. Mods folder writable
@@ -345,12 +377,19 @@ class MinecraftServerManager extends EventEmitter {
 
   private getVersionFromConfig(config: any): string {
     const jf = config.jarFile || 'server.jar';
+    // For Fabric/Quilt with fixed launcher names, use stored version
+    if (jf === 'fabric-server-launch.jar' || jf === 'quilt-server-launch.jar') {
+      return config.version || '1.21';
+    }
     const m = jf.match(/(?:paper|vanilla|fabric|forge|neoforge|quilt|purpur|spigot|folia|pufferfish)-(.+)\.jar$/i);
-    return m ? m[1] : '1.21';
+    return m ? m[1] : (config.version || '1.21');
   }
 
   private getSourceFromConfig(config: any): string {
     const jf = config.jarFile || 'server.jar';
+    // Fabric/Quilt launcher names
+    if (jf === 'fabric-server-launch.jar') return 'fabric';
+    if (jf === 'quilt-server-launch.jar') return 'quilt';
     const m = jf.match(/^(paper|vanilla|fabric|forge|neoforge|quilt|purpur|spigot|folia|pufferfish)/i);
     return m ? m[1].toLowerCase() : 'paper';
   }
@@ -447,6 +486,56 @@ class MinecraftServerManager extends EventEmitter {
     return { success: true, message: `Changed port to ${newPort}` };
   }
 
+  // ── Auto-download server jar by source ──
+  private async autoDownloadJar(config: any, jarPath: string): Promise<boolean> {
+    const source = this.getSourceFromConfig(config);
+    const version = this.getVersionFromConfig(config);
+    this.emit('server:output', `[MineControl] Auto-downloading ${source} ${version}...\n`);
+    try {
+      const { downloadVersion } = require('./download');
+      await downloadVersion(version, source, jarPath);
+      this.emit('server:output', `[MineControl] ${source} ${version} downloaded.\n`);
+      return true;
+    } catch (err: any) {
+      this.emit('server:output', `[MineControl] Auto-download failed: ${err.message}\n`);
+      return false;
+    }
+  }
+
+  // ── Auto-download Fabric loader ──
+  private async autoDownloadFabricLoader(config: any): Promise<boolean> {
+    const version = this.getVersionFromConfig(config);
+    const loaderJar = path.join(this.serverDir, 'fabric-server-launch.jar');
+    if (fs.existsSync(loaderJar)) return true;
+    this.emit('server:output', `[MineControl] Downloading Fabric loader for MC ${version}...\n`);
+    try {
+      const { downloadFabricVersion } = require('./download');
+      await downloadFabricVersion(version, loaderJar);
+      this.emit('server:output', `[MineControl] Fabric loader downloaded.\n`);
+      return true;
+    } catch (err: any) {
+      this.emit('server:output', `[MineControl] Fabric loader download failed: ${err.message}\n`);
+      return false;
+    }
+  }
+
+  // ── Auto-download Quilt loader ──
+  private async autoDownloadQuiltLoader(config: any): Promise<boolean> {
+    const version = this.getVersionFromConfig(config);
+    const loaderJar = path.join(this.serverDir, 'quilt-server-launch.jar');
+    if (fs.existsSync(loaderJar)) return true;
+    this.emit('server:output', `[MineControl] Downloading Quilt loader for MC ${version}...\n`);
+    try {
+      const { downloadQuiltVersion } = require('./download');
+      await downloadQuiltVersion(version, loaderJar);
+      this.emit('server:output', `[MineControl] Quilt loader downloaded.\n`);
+      return true;
+    } catch (err: any) {
+      this.emit('server:output', `[MineControl] Quilt loader download failed: ${err.message}\n`);
+      return false;
+    }
+  }
+
   // ── Pre-flight validation: runs BEFORE entering STARTING ──
   private async validatePreFlight(): Promise<{ config: any; jarFileName: string; jarPath: string }> {
     const config = this.getConfig();
@@ -463,8 +552,12 @@ class MinecraftServerManager extends EventEmitter {
       waitCount++;
     }
 
+    // Auto-download jar if missing
     if (!fs.existsSync(jarPath)) {
-      throw new Error(`Missing: ${jarFileName}. Download a server version from the Software page first.`);
+      const downloaded = await this.autoDownloadJar(config, jarPath);
+      if (!downloaded) {
+        throw new Error(`Missing: ${jarFileName}. Auto-download failed. Check your network connection and try again.`);
+      }
     }
 
     // EULA
@@ -514,7 +607,7 @@ class MinecraftServerManager extends EventEmitter {
         'enforce-whitelist=false',
         'whitelist=false',
         'allow-flight=false',
-        'level-name=world',
+        `level-name=${(config.name || 'world').replace(/[^a-zA-Z0-9_\-]/g, '_')}`,
         'level-type=default',
         'level-seed=',
         'enable-command-block=false',
@@ -554,6 +647,14 @@ class MinecraftServerManager extends EventEmitter {
       this.emit('server:output', '[MineControl] Generated default server.properties.\n');
     }
 
+    // Ensure Fabric/Quilt loader exists
+    const source = this.getSourceFromConfig(config);
+    if (source === 'fabric') {
+      await this.autoDownloadFabricLoader(config);
+    } else if (source === 'quilt') {
+      await this.autoDownloadQuiltLoader(config);
+    }
+
     return { config, jarFileName, jarPath };
   }
 
@@ -568,6 +669,7 @@ class MinecraftServerManager extends EventEmitter {
         'online-mode': config.onlineMode ? 'true' : 'false',
         'enforce-secure-profile': config.onlineMode ? 'true' : 'false',
         'server-ip': config.serverIp || '',
+        'level-name': (config.name || 'world').replace(/[^a-zA-Z0-9_\-]/g, '_'),
       };
       let changed = false;
       for (const [key, value] of Object.entries(updates)) {
@@ -677,10 +779,8 @@ class MinecraftServerManager extends EventEmitter {
       this.appendStartupLog(`Server jar OK: ${jarFileName}`);
 
       // Determine version and source for Java requirement lookup
-      const jarBase = path.basename(jarPath).replace(/\.jar$/, '');
-      const versionStr = jarBase.replace(/^(paper|vanilla|fabric|forge|neoforge|quilt|purpur|spigot|folia|pufferfish)-/i, '');
-      const sourceMatch = jarBase.match(/^(paper|vanilla|fabric|forge|neoforge|quilt|purpur|spigot|folia|pufferfish)/i);
-      const sourceStr = sourceMatch ? sourceMatch[1].toLowerCase() : 'paper';
+      const versionStr = this.getVersionFromConfig(config);
+      const sourceStr = this.getSourceFromConfig(config);
 
       // Phase 2: Java resolution — use version-based requirement as authoritative
       this.appendStartupLog('Resolving Java runtime...');
@@ -698,23 +798,7 @@ class MinecraftServerManager extends EventEmitter {
 
       this.appendStartupLog('Launching...');
 
-      // Phase 3: Library checks
-      if (config.jarFile?.toLowerCase().includes('fabric')) {
-        this.appendStartupLog('Checking Fabric loader...');
-        const loaderJar = path.join(this.serverDir, 'fabric-server-launch.jar');
-        if (!fs.existsSync(loaderJar)) {
-          this.appendStartupLog('Fabric loader missing. Attempting repair...');
-          try {
-            const { downloadFabricVersion } = require('./download');
-            const jarVersion = versionStr;
-            await downloadFabricVersion(jarVersion, loaderJar);
-            this.appendStartupLog('Fabric loader downloaded');
-          } catch (e: any) {
-            this.appendStartupLog(`Fabric repair failed: ${e.message}`);
-          }
-        }
-      }
-
+      // Phase 3: Library checks (Forge/NeoForge still need manual installer)
       if (config.jarFile?.toLowerCase().includes('forge')) {
         this.appendStartupLog('Checking Forge libraries...');
         const librariesDir = path.join(this.serverDir, 'libraries');
@@ -1104,6 +1188,21 @@ class MinecraftServerManager extends EventEmitter {
         this.emit('server:started');
         // Verify port is actually listening after Done
         this.verifyPortListening(parseInt(String(this.getConfig().port || 25565)));
+        // Auto-backup after first successful start (once per session)
+        // Delay 10s to allow world to finish generating on first run
+        if (this.startAttemptedAt && !this._autoBackupTriggered) {
+          this._autoBackupTriggered = true;
+          setTimeout(() => {
+            try {
+              const { backupService } = require('./backup');
+              backupService.createBackup({
+                name: `First-start-${new Date().toISOString().slice(0, 10)}`,
+                reason: 'Automatic backup after first successful server start',
+                type: 'auto',
+              }).catch(() => {});
+            } catch {}
+          }, 10000);
+        }
         continue;
       }
 
@@ -1492,6 +1591,8 @@ class MinecraftServerManager extends EventEmitter {
       return {
         name: server.name || 'MineControl OS',
         serverIp,
+        version: server.version || '',
+        version_source: server.version_source || '',
         javaPath: server.javaPath || 'java',
         javaExecutable: server.javaPath || 'java',
         javaVersion: server.javaVersion || '',
@@ -1524,6 +1625,8 @@ class MinecraftServerManager extends EventEmitter {
     return {
       name: config.name || 'MineControl OS',
       serverIp,
+      version: config.version || '',
+      version_source: config.version_source || '',
       javaPath: config.javaPath || 'java',
       javaExecutable: config.javaPath || 'java',
       javaVersion: config.javaVersion || '',

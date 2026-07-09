@@ -115,6 +115,65 @@ router.post('/change-password', authMiddleware, (req: AuthRequest, res) => {
   return res.json({ success: true });
 });
 
+router.post('/change-username', authMiddleware, (req: AuthRequest, res) => {
+  const { newUsername, password } = req.body;
+
+  if (!newUsername || newUsername.length < 3) {
+    return res.status(400).json({ error: 'Username must be at least 3 characters' });
+  }
+  if (!/^[a-zA-Z0-9_]+$/.test(newUsername)) {
+    return res.status(400).json({ error: 'Username can only contain letters, numbers, and underscores' });
+  }
+
+  const db = getDatabase();
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user?.id) as any;
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  if (!bcrypt.compareSync(password, user.password_hash)) {
+    return res.status(400).json({ error: 'Password is incorrect' });
+  }
+
+  const existing = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(newUsername, req.user?.id);
+  if (existing) {
+    return res.status(409).json({ error: 'Username already taken' });
+  }
+
+  db.prepare('UPDATE users SET username = ?, updated_at = datetime(\'now\') WHERE id = ?').run(newUsername, req.user?.id);
+  return res.json({ success: true, username: newUsername });
+});
+
+router.post('/change-both', authMiddleware, (req: AuthRequest, res) => {
+  const { newUsername, currentPassword, newPassword } = req.body;
+
+  if (!newUsername || newUsername.length < 3) {
+    return res.status(400).json({ error: 'Username must be at least 3 characters' });
+  }
+  if (!/^[a-zA-Z0-9_]+$/.test(newUsername)) {
+    return res.status(400).json({ error: 'Username can only contain letters, numbers, and underscores' });
+  }
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({ error: 'New password must be at least 6 characters' });
+  }
+
+  const db = getDatabase();
+  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user?.id) as any;
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  if (!bcrypt.compareSync(currentPassword, user.password_hash)) {
+    return res.status(400).json({ error: 'Current password is incorrect' });
+  }
+
+  const existing = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(newUsername, req.user?.id);
+  if (existing) {
+    return res.status(409).json({ error: 'Username already taken' });
+  }
+
+  const hash = bcrypt.hashSync(newPassword, 10);
+  db.prepare('UPDATE users SET username = ?, password_hash = ?, updated_at = datetime(\'now\') WHERE id = ?')
+    .run(newUsername, hash, req.user?.id);
+  return res.json({ success: true, username: newUsername });
+});
+
 // 2FA setup
 router.post('/setup-2fa', authMiddleware, async (req: AuthRequest, res) => {
   try {

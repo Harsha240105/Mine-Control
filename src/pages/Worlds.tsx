@@ -6,6 +6,7 @@ import {
   AlertTriangle, MoreHorizontal, Edit3, X, Search, FileText,
   Zap, Shield, ChevronDown, ExternalLink, Save,
 } from 'lucide-react';
+import { Button } from '../components/ui/stateful-button';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
 import { useActiveServer } from '../hooks/useActiveServer';
@@ -320,18 +321,18 @@ export default function Worlds() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={handleDetect} className="btn-secondary flex items-center gap-2 text-xs" title="Auto-detect worlds">
+          <Button variant="secondary" onClick={handleDetect} className="text-xs" title="Auto-detect worlds">
             <RefreshCw size={14} /> Detect
-          </button>
-          <button onClick={() => setShowImportZip(true)} className="btn-secondary flex items-center gap-2 text-xs">
+          </Button>
+          <Button variant="secondary" onClick={() => setShowImportZip(true)} className="text-xs">
             <FileArchive size={14} /> Import ZIP
-          </button>
-          <button onClick={() => setShowImportFolder(true)} className="btn-secondary flex items-center gap-2 text-xs">
+          </Button>
+          <Button variant="secondary" onClick={() => setShowImportFolder(true)} className="text-xs">
             <FolderOpen size={14} /> Import Folder
-          </button>
-          <button onClick={() => setShowCreate(!showCreate)} className="btn-primary flex items-center gap-2">
+          </Button>
+          <Button variant="primary" onClick={() => setShowCreate(!showCreate)}>
             <Plus size={16} /> Create
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -459,8 +460,8 @@ export default function Worlds() {
               </div>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowCreate(false)} className="btn-secondary">Cancel</button>
-              <button type="submit" className="btn-primary">Create World</button>
+              <Button type="button" variant="secondary" onClick={() => setShowCreate(false)}>Cancel</Button>
+              <Button type="submit" variant="primary">Create World</Button>
             </div>
           </form>
         </div>
@@ -488,8 +489,8 @@ export default function Worlds() {
               <input type="text" value={importZipName} onChange={(e) => setImportZipName(e.target.value)} className="input" placeholder="Auto-detect from ZIP" />
             </div>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => { setShowImportZip(false); setImportFile(null); }} className="btn-secondary">Cancel</button>
-              <button type="submit" className="btn-primary"><Upload size={14} className="inline mr-1" /> Import</button>
+              <Button type="button" variant="secondary" onClick={() => { setShowImportZip(false); setImportFile(null); }}>Cancel</Button>
+              <Button type="submit" variant="primary"><Upload size={14} /> Import</Button>
             </div>
           </form>
         </div>
@@ -506,9 +507,9 @@ export default function Worlds() {
               <label className="block text-xs font-medium text-gray-400 mb-1">Source Folder Path</label>
               <div className="flex gap-2">
                 <input type="text" value={importFolderPath} onChange={(e) => setImportFolderPath(e.target.value)} className="input flex-1" placeholder="C:\Users\...\world" required />
-                <button type="button" onClick={async () => { if (window.electronAPI) { const p = await window.electronAPI.selectDirectory(); if (p) setImportFolderPath(p); } }} className="btn-secondary px-3 py-2 text-xs shrink-0">
-                  <FolderOpen size={14} className="inline mr-1" /> Browse
-                </button>
+                <Button type="button" variant="secondary" onClick={async () => { if (window.electronAPI) { const p = await window.electronAPI.selectDirectory(); if (p) setImportFolderPath(p); } }} className="px-3 py-2 text-xs shrink-0">
+                  <FolderOpen size={14} /> Browse
+                </Button>
               </div>
               <p className="text-[10px] text-gray-500 mt-1">Path to a Minecraft world folder containing level.dat and region/</p>
             </div>
@@ -517,8 +518,8 @@ export default function Worlds() {
               <input type="text" value={importFolderName} onChange={(e) => setImportFolderName(e.target.value)} className="input" placeholder="Defaults to folder name" />
             </div>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setShowImportFolder(false)} className="btn-secondary">Cancel</button>
-              <button type="submit" className="btn-primary"><Upload size={14} className="inline mr-1" /> Import</button>
+              <Button type="button" variant="secondary" onClick={() => setShowImportFolder(false)}>Cancel</Button>
+              <Button type="submit" variant="primary"><Upload size={14} /> Import</Button>
             </div>
           </form>
         </div>
@@ -544,10 +545,9 @@ export default function Worlds() {
                   </div>
                 </div>
                 <div className="relative">
-                  <button onClick={() => setSelectedWorld(selectedWorld?.name === world.name ? null : world)}
-                    className="p-1 text-gray-400 hover:text-gray-200 hover:bg-surface-700 rounded transition-colors">
+                  <Button variant="ghost" onClick={() => setSelectedWorld(selectedWorld?.name === world.name ? null : world)} className="p-1">
                     <MoreHorizontal size={14} />
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -561,21 +561,21 @@ export default function Worlds() {
               </div>
 
               <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => openWorldDetail(world.name)} className="btn-ghost p-1.5 text-xs flex items-center gap-1" title="Details">
+                <Button variant="ghost" onClick={() => openWorldDetail(world.name)} className="p-1.5 text-xs" title="Details">
                   <Map size={12} /> Details
-                </button>
-                <button onClick={() => handleDownloadWorld(world.name)} className="btn-ghost p-1.5 text-xs flex items-center gap-1" title="Download">
+                </Button>
+                <Button variant="ghost" onClick={() => handleDownloadWorld(world.name)} className="p-1.5 text-xs" title="Download">
                   <Download size={12} /> Download
-                </button>
-                <button onClick={() => handleClone(world.name)} className="btn-ghost p-1.5 text-xs flex items-center gap-1" title="Clone">
+                </Button>
+                <Button variant="ghost" onClick={() => handleClone(world.name)} className="p-1.5 text-xs" title="Clone">
                   <Copy size={12} /> Clone
-                </button>
-                <button onClick={() => { setShowRename(world.name); setRenameValue(world.name); }} className="btn-ghost p-1.5 text-xs flex items-center gap-1 ml-auto" title="Rename">
+                </Button>
+                <Button variant="ghost" onClick={() => { setShowRename(world.name); setRenameValue(world.name); }} className="p-1.5 text-xs ml-auto" title="Rename">
                   <Edit3 size={12} /> Rename
-                </button>
-                <button onClick={() => setShowDelete(world.name)} className="btn-ghost p-1.5 text-xs flex items-center gap-1 text-red-400 hover:text-red-300" title="Delete">
+                </Button>
+                <Button variant="ghost" onClick={() => setShowDelete(world.name)} className="p-1.5 text-xs text-red-400" title="Delete">
                   <Trash2 size={12} /> Delete
-                </button>
+                </Button>
               </div>
             </div>
           ))}
@@ -602,8 +602,8 @@ export default function Worlds() {
               <input type="text" value={renameValue} onChange={(e) => setRenameValue(e.target.value)} className="input w-full" autoFocus />
             </div>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowRename(null)} className="btn-secondary text-sm">Cancel</button>
-              <button onClick={() => handleRename(showRename)} className="btn-primary text-sm">Rename</button>
+              <Button variant="secondary" onClick={() => setShowRename(null)} className="text-sm">Cancel</Button>
+              <Button variant="primary" onClick={() => handleRename(showRename)} className="text-sm">Rename</Button>
             </div>
           </div>
         </div>
@@ -623,8 +623,8 @@ export default function Worlds() {
               <AlertTriangle size={12} /> Recommended: Create a backup before deleting.
             </p>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowDelete(null)} className="btn-secondary text-sm">Cancel</button>
-              <button onClick={() => handleDelete(showDelete)} className="btn-danger text-sm">Delete Permanently</button>
+              <Button variant="secondary" onClick={() => setShowDelete(null)} className="text-sm">Cancel</Button>
+              <Button variant="danger" onClick={() => handleDelete(showDelete)} className="text-sm">Delete Permanently</Button>
             </div>
           </div>
         </div>
@@ -641,10 +641,10 @@ export default function Worlds() {
               Remove empty chunks from <strong className="text-gray-200">{showOptimize}</strong> to reduce file size. A backup will be recommended before proceeding.
             </p>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowOptimize(null)} className="btn-secondary text-sm">Cancel</button>
-              <button onClick={() => handleOptimize(showOptimize)} className="btn-primary text-sm flex items-center gap-1">
+              <Button variant="secondary" onClick={() => setShowOptimize(null)} className="text-sm">Cancel</Button>
+              <Button variant="primary" onClick={() => handleOptimize(showOptimize)} className="text-sm">
                 <Zap size={14} /> Optimize
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -661,10 +661,10 @@ export default function Worlds() {
               Scan and repair <strong className="text-gray-200">{showRepair}</strong>. This will check for missing directories, corrupt region files, and regenerate level.dat if missing.
             </p>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowRepair(null)} className="btn-secondary text-sm">Cancel</button>
-              <button onClick={() => handleRepair(showRepair)} className="btn-primary text-sm flex items-center gap-1">
+              <Button variant="secondary" onClick={() => setShowRepair(null)} className="text-sm">Cancel</Button>
+              <Button variant="primary" onClick={() => handleRepair(showRepair)} className="text-sm">
                 <Wrench size={14} /> Repair
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -694,9 +694,9 @@ export default function Worlds() {
                   </div>
                 </div>
               </div>
-              <button onClick={() => setSelectedWorld(null)} className="p-2 hover:bg-surface-700 rounded-lg text-gray-400 hover:text-white transition-colors">
+              <Button variant="ghost" onClick={() => setSelectedWorld(null)} className="p-2">
                 <X size={24} />
-              </button>
+              </Button>
             </div>
 
             <div className="p-6 overflow-y-auto flex-1 custom-scrollbar space-y-6">
@@ -846,24 +846,24 @@ export default function Worlds() {
 
             {/* Footer actions */}
             <div className="p-4 border-t border-surface-700 flex flex-wrap gap-2 bg-surface-800/50">
-              <button onClick={() => { handleDownloadWorld(selectedWorld.name); }} className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1">
+              <Button variant="secondary" onClick={() => { handleDownloadWorld(selectedWorld.name); }} className="text-xs py-1.5 px-3">
                 <Download size={14} /> Export ZIP
-              </button>
-              <button onClick={() => handleClone(selectedWorld.name)} className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1">
+              </Button>
+              <Button variant="secondary" onClick={() => handleClone(selectedWorld.name)} className="text-xs py-1.5 px-3">
                 <Copy size={14} /> Clone
-              </button>
-              <button onClick={() => { setShowOptimize(selectedWorld.name); }} className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1">
+              </Button>
+              <Button variant="secondary" onClick={() => { setShowOptimize(selectedWorld.name); }} className="text-xs py-1.5 px-3">
                 <Zap size={14} /> Optimize
-              </button>
-              <button onClick={() => { setShowRepair(selectedWorld.name); }} className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1">
+              </Button>
+              <Button variant="secondary" onClick={() => { setShowRepair(selectedWorld.name); }} className="text-xs py-1.5 px-3">
                 <Wrench size={14} /> Repair
-              </button>
-              <button onClick={() => { setShowRename(selectedWorld.name); setRenameValue(selectedWorld.name); }} className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1">
+              </Button>
+              <Button variant="secondary" onClick={() => { setShowRename(selectedWorld.name); setRenameValue(selectedWorld.name); }} className="text-xs py-1.5 px-3">
                 <Edit3 size={14} /> Rename
-              </button>
-              <button onClick={() => setShowDelete(selectedWorld.name)} className="btn-danger text-xs py-1.5 px-3 flex items-center gap-1 ml-auto">
+              </Button>
+              <Button variant="danger" onClick={() => setShowDelete(selectedWorld.name)} className="text-xs py-1.5 px-3 ml-auto">
                 <Trash2 size={14} /> Delete
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -5,6 +5,7 @@ import {
   RefreshCw, Upload, Trash2, Eye, EyeOff, History, ExternalLink, Camera, Ban,
   ArrowUpDown, Wifi, WifiOff, List, BarChart3, Download, Shield,
 } from 'lucide-react';
+import { Button } from '../components/ui/stateful-button';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
 import { useActiveServer } from '../hooks/useActiveServer';
@@ -156,7 +157,7 @@ function PrivacyNotice({ diagnostics, onClose }: { diagnostics: Record<string, a
             <Shield size={18} className="text-green-400" />
             <h3 className="text-sm font-semibold text-gray-200">Data Privacy Review</h3>
           </div>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-300"><X size={18} /></button>
+          <Button variant="ghost" onClick={onClose}><X size={18} /></Button>
         </div>
         <div className="p-5 space-y-3">
           <p className="text-xs text-gray-400">The following diagnostic data will be included with your report. No passwords, tokens, or sensitive credentials are uploaded.</p>
@@ -176,7 +177,7 @@ function PrivacyNotice({ diagnostics, onClose }: { diagnostics: Record<string, a
           </div>
         </div>
         <div className="p-4 border-t border-surface-700 flex justify-end">
-          <button onClick={onClose} className="btn-primary text-xs px-4 py-2">I Understand</button>
+          <Button variant="primary" onClick={onClose} className="text-xs px-4 py-2">I Understand</Button>
         </div>
       </div>
     </div>
@@ -285,7 +286,7 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
             const Icon = t.icon;
             const isActive = issueType === t.value;
             return (
-              <button
+              <Button variant="none"
                 key={t.value}
                 type="button"
                 onClick={() => handleTypeChange(t.value)}
@@ -298,7 +299,7 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
                   <span className="text-sm font-medium block">{t.label}</span>
                   <span className="text-[10px] opacity-70">{t.description}</span>
                 </div>
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -363,18 +364,18 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
         <label className="block text-sm font-medium text-gray-300 mb-2">Priority</label>
         <div className="flex gap-2">
           {(Object.entries(PRIORITY_CONFIG) as [Priority, typeof PRIORITY_CONFIG[Priority]][]).map(([key, cfg]) => (
-            <button
+            <Button variant="none"
               key={key}
               type="button"
               onClick={() => setPriority(key)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium border ${
                 priority === key
                   ? `${cfg.color} bg-opacity-20 border-current`
                   : 'text-gray-400 border-surface-700 bg-surface-800 hover:border-surface-600'
               }`}
             >
               {cfg.label}
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -389,13 +390,13 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
           {screenshots.map((s, i) => (
             <div key={i} className="relative group">
               <img src={s.data} alt={s.name} className="w-20 h-20 object-cover rounded-lg border border-surface-700" />
-              <button
+              <Button variant="ghost"
                 type="button"
                 onClick={() => removeScreenshot(i)}
-                className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                className="absolute -top-2 -right-2 w-5 h-5 rounded-full opacity-0 group-hover:opacity-100 bg-red-500 text-white"
               >
                 <X size={10} />
-              </button>
+              </Button>
               <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-lg flex items-center justify-center cursor-pointer"
                 onClick={() => window.open(s.data, '_blank')}>
                 <Eye size={16} className="text-white" />
@@ -403,19 +404,19 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
             </div>
           ))}
         </div>
-        <button
+        <Button variant="ghost"
           type="button"
           onClick={() => fileInputRef.current?.click()}
-          className="text-xs text-minecraft-400 hover:text-minecraft-300 flex items-center gap-1"
+          className="text-xs"
         >
           <Plus size={12} /> Add Screenshot
-        </button>
+        </Button>
         <input ref={fileInputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleScreenshot} />
       </div>
 
       {/* Submit */}
       <div className="flex items-center justify-between pt-2 border-t border-surface-700/50">
-        <button
+        <Button variant="ghost"
           type="button"
           onClick={async () => {
             const fakeTicket = await api.createFeedbackTicket({
@@ -427,19 +428,18 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
             setDiagnostics(fakeTicket.diagnostic_data);
             setShowPrivacy(true);
           }}
-          className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1"
+          className="text-xs"
         >
           <Shield size={12} />
           Review data before submitting
-        </button>
-        <button
+        </Button>
+        <Button variant="primary"
           type="submit"
-          disabled={sending}
-          className="btn-primary flex items-center gap-2"
+          loading={sending}
         >
-          {sending ? <Loader2 size={16} className="animate-spin" /> : <Send size={16} />}
+          <Send size={16} />
           {sending ? 'Submitting...' : 'Submit Report'}
-        </button>
+        </Button>
       </div>
     </form>
   );
@@ -582,9 +582,9 @@ function TicketDetail({ ticketId, onBack, onUpdated }: { ticketId: string; onBac
   return (
     <div className="space-y-5 animate-fade-in">
       {/* Back button */}
-      <button onClick={onBack} className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1">
+      <Button variant="ghost" onClick={onBack} className="text-xs">
         <ChevronUp size={14} className="rotate-[-90deg]" /> Back to list
-      </button>
+      </Button>
 
       {/* Header */}
       <div className="card p-5">
@@ -620,9 +620,9 @@ function TicketDetail({ ticketId, onBack, onUpdated }: { ticketId: string; onBac
             </div>
           </div>
           <div className="flex items-center gap-1">
-            <button onClick={handleVote} className="flex items-center gap-1 px-2 py-1 rounded bg-surface-800 border border-surface-700 text-xs text-gray-400 hover:text-minecraft-400">
+            <Button variant="none" onClick={handleVote} className="px-2 py-1 rounded bg-surface-800 border border-surface-700 text-xs text-gray-400 hover:text-minecraft-400">
               <ChevronUp size={12} /> {ticket.votes}
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -656,7 +656,7 @@ function TicketDetail({ ticketId, onBack, onUpdated }: { ticketId: string; onBac
           {/* Diagnostics */}
           {ticket.diagnostic_data && (
             <div className="card p-5">
-              <button
+              <Button variant="none"
                 onClick={() => setShowDiagnostics(!showDiagnostics)}
                 className="flex items-center justify-between w-full"
               >
@@ -664,7 +664,7 @@ function TicketDetail({ ticketId, onBack, onUpdated }: { ticketId: string; onBac
                   <FileText size={14} /> Diagnostic Data
                 </h4>
                 {showDiagnostics ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-              </button>
+              </Button>
               {showDiagnostics && (
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
                   {Object.entries(ticket.diagnostic_data).map(([key, value]) => (
@@ -731,18 +731,18 @@ function TicketDetail({ ticketId, onBack, onUpdated }: { ticketId: string; onBac
             <h4 className="text-xs font-semibold text-gray-300 mb-3 uppercase tracking-wider">Change Status</h4>
             <div className="flex flex-wrap gap-1.5">
               {(Object.entries(STATUS_CONFIG) as [TicketStatus, typeof STATUS_CONFIG[TicketStatus]][]).map(([key, cfg]) => (
-                <button
+                <Button variant="none"
                   key={key}
                   onClick={() => handleStatusChange(key)}
                   disabled={key === ticket.status}
-                  className={`text-[10px] px-2 py-1 rounded-full border transition-all ${
+                  className={`text-[10px] px-2 py-1 rounded-full border ${
                     key === ticket.status
-                      ? cfg.color + ' cursor-default'
+                      ? cfg.color
                       : 'text-gray-500 border-surface-700 hover:border-gray-600'
                   }`}
                 >
                   {cfg.label}
-                </button>
+                </Button>
               ))}
             </div>
             <input
@@ -759,18 +759,18 @@ function TicketDetail({ ticketId, onBack, onUpdated }: { ticketId: string; onBac
             <h4 className="text-xs font-semibold text-gray-300 mb-3 uppercase tracking-wider">Priority</h4>
             <div className="flex flex-wrap gap-1.5">
               {(Object.entries(PRIORITY_CONFIG) as [Priority, typeof PRIORITY_CONFIG[Priority]][]).map(([key, cfg]) => (
-                <button
+                <Button variant="none"
                   key={key}
                   onClick={() => handlePriorityChange(key)}
                   disabled={key === ticket.priority}
-                  className={`text-[10px] px-2 py-1 rounded-full border transition-all ${
+                  className={`text-[10px] px-2 py-1 rounded-full border ${
                     key === ticket.priority
-                      ? cfg.color + ' border-current bg-opacity-10 cursor-default'
+                      ? cfg.color + ' border-current bg-opacity-10'
                       : 'text-gray-500 border-surface-700 hover:border-gray-600'
                   }`}
                 >
                   {cfg.label}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -786,7 +786,7 @@ function TicketDetail({ ticketId, onBack, onUpdated }: { ticketId: string; onBac
                 className="input w-full resize-y text-xs"
                 placeholder="Internal notes..."
               />
-              <button onClick={handleSaveNotes} className="btn-primary text-xs mt-2 w-full">Save Notes</button>
+              <Button variant="primary" onClick={handleSaveNotes} className="text-xs mt-2 w-full">Save Notes</Button>
             </div>
           )}
 
@@ -809,9 +809,9 @@ function TicketDetail({ ticketId, onBack, onUpdated }: { ticketId: string; onBac
               {ticket.sync_error && (
                 <div className="text-red-400 text-[10px] break-all">{ticket.sync_error}</div>
               )}
-              <button onClick={handleSync} className="text-minecraft-400 hover:text-minecraft-300 flex items-center gap-1 text-[10px]">
+              <Button variant="ghost" onClick={handleSync} className="text-[10px]">
                 <RefreshCw size={10} /> Trigger Sync
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -848,14 +848,14 @@ function SyncQueue() {
         <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
           <Upload size={16} /> Pending Uploads
         </h3>
-        <button
+        <Button variant="primary"
           onClick={handleSync}
           disabled={syncing || queue.length === 0}
-          className="btn-primary text-xs flex items-center gap-1"
+          className="text-xs"
         >
           {syncing ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
           {syncing ? 'Syncing...' : `Sync All (${queue.length})`}
-        </button>
+        </Button>
       </div>
 
       {loading ? (
@@ -964,9 +964,9 @@ export default function Feedback() {
             </h2>
             <p className="text-sm text-gray-500 mt-1">All reports are stored locally. No GitHub account needed.</p>
           </div>
-          <button onClick={() => setViewMode('queue')} className="text-xs text-gray-500 hover:text-gray-300 flex items-center gap-1">
+          <Button variant="ghost" onClick={() => setViewMode('queue')} className="text-xs">
             <Upload size={12} /> Pending Uploads
-          </button>
+          </Button>
         </div>
         <CreateForm onCreated={() => { setViewMode('list'); fetchTickets(); fetchStats(); }} />
       </div>
@@ -993,9 +993,9 @@ export default function Feedback() {
             <Upload className="text-minecraft-500" size={24} />
             Sync Queue
           </h2>
-          <button onClick={() => setViewMode('list')} className="text-xs text-gray-500 hover:text-gray-300">
+          <Button variant="ghost" onClick={() => setViewMode('list')} className="text-xs">
             Back to tickets
-          </button>
+          </Button>
         </div>
         <SyncQueue />
       </div>
@@ -1017,17 +1017,17 @@ export default function Feedback() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setViewMode('queue')} className="btn-ghost text-xs flex items-center gap-1">
+          <Button variant="ghost" onClick={() => setViewMode('queue')} className="text-xs">
             <Upload size={14} />
             Queue
             {stats?.pendingUploads > 0 && (
               <span className="bg-yellow-500 text-black text-[9px] px-1.5 py-0.5 rounded-full font-bold">{stats.pendingUploads}</span>
             )}
-          </button>
-          <button onClick={() => setViewMode('create')} className="btn-primary text-sm flex items-center gap-2">
+          </Button>
+          <Button variant="primary" onClick={() => setViewMode('create')} className="text-sm">
             <Plus size={16} />
             New Report
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -1066,21 +1066,13 @@ export default function Feedback() {
               placeholder="Search by ID, summary, or description..."
             />
           </div>
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={`btn-ghost text-xs flex items-center gap-1 ${showFilters ? 'text-minecraft-400' : ''}`}
-          >
+          <Button variant="ghost" onClick={() => setShowFilters(!showFilters)} className={`text-xs ${showFilters ? 'text-minecraft-400' : ''}`}>
             <Filter size={14} /> Filters
-          </button>
-          <button
-            onClick={() => {
-              setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc');
-            }}
-            className="btn-ghost text-xs flex items-center gap-1"
-          >
+          </Button>
+          <Button variant="ghost" onClick={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')} className="text-xs">
             <ArrowUpDown size={14} />
             {sortOrder === 'desc' ? 'Newest' : 'Oldest'}
-          </button>
+          </Button>
         </div>
 
         {showFilters && (
@@ -1138,9 +1130,9 @@ export default function Feedback() {
           <MessageCircle size={48} className="mx-auto text-gray-700 mb-3" />
           <h3 className="text-lg font-semibold text-gray-300 mb-1">No tickets yet</h3>
           <p className="text-sm text-gray-500 mb-4">Be the first to submit feedback or report an issue.</p>
-          <button onClick={() => setViewMode('create')} className="btn-primary text-sm">
+          <Button variant="primary" onClick={() => setViewMode('create')} className="text-sm">
             Create Report
-          </button>
+          </Button>
         </div>
       ) : (
         <div className="space-y-2">

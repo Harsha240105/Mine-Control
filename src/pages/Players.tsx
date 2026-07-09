@@ -7,6 +7,8 @@ import {
   AlertTriangle, CheckCircle, XCircle, History, FileText,
   X,
 } from 'lucide-react';
+import { Button } from '../components/ui/stateful-button';
+import { EvervaultCard, Icon } from '../components/ui/evervault-card';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
 import { useActiveServer } from '../hooks/useActiveServer';
@@ -422,32 +424,32 @@ export default function Players() {
           <p className="text-sm text-gray-500 mt-0.5">{players.length} total players</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={() => setShowDetectModal(true)} className="btn-secondary flex items-center gap-2 text-xs">
+          <Button variant="secondary" onClick={() => setShowDetectModal(true)} className="text-xs">
             <RefreshCw size={14} />
             Scan
-          </button>
-          <button onClick={handleExportAll} className="btn-secondary flex items-center gap-2 text-xs">
+          </Button>
+          <Button variant="secondary" onClick={handleExportAll} className="text-xs">
             <Download size={14} />
             Export
-          </button>
-          <button onClick={() => setShowImportModal(true)} className="btn-secondary flex items-center gap-2 text-xs">
+          </Button>
+          <Button variant="secondary" onClick={() => setShowImportModal(true)} className="text-xs">
             <Upload size={14} />
             Import
-          </button>
-          <button onClick={() => setShowAdd(!showAdd)} className="btn-primary flex items-center gap-2">
+          </Button>
+          <Button variant="primary" onClick={() => setShowAdd(!showAdd)}>
             <Plus size={16} />
             Add
-          </button>
+          </Button>
         </div>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-1 bg-surface-900 p-1 rounded-lg w-fit border border-surface-800">
         {(['players', 'approval', 'whitelist', 'banned'] as const).map((t) => (
-          <button
+          <Button variant="none"
             key={t}
             onClick={() => setTab(t)}
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors capitalize ${
+            className={`px-4 py-1.5 rounded-md text-sm font-medium capitalize ${
               tab === t ? 'bg-minecraft-600/20 text-minecraft-400' : 'text-gray-400 hover:text-gray-200'
             }`}
           >
@@ -460,7 +462,7 @@ export default function Players() {
             )}
             {t === 'whitelist' && <span className="ml-1.5 text-xs opacity-60">({whitelist.length})</span>}
             {t === 'banned' && <span className="ml-1.5 text-xs opacity-60">({banned.length})</span>}
-          </button>
+          </Button>
         ))}
       </div>
 
@@ -513,148 +515,117 @@ export default function Players() {
                 ))}
               </select>
             </div>
-            <button type="submit" className="btn-primary">Add</button>
+            <Button type="submit" variant="primary">Add</Button>
           </form>
         </div>
       )}
 
       {/* ───── PLAYERS TAB ───── */}
       {tab === 'players' && (
-        <div className="card p-0 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-surface-800">
-                  <th className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3">Player</th>
-                  <th className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3">Status</th>
-                  <th className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3">Role</th>
-                  <th className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3">OP</th>
-                  <th className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3">Playtime</th>
-                  <th className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3">Last Login</th>
-                  <th className="text-right text-xs font-medium text-gray-400 uppercase tracking-wider px-4 py-3">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPlayers.map((player) => (
-                  <tr key={player.id} className="border-b border-surface-800/50 hover:bg-surface-800/30 transition-colors">
-                    <td className="px-4 py-3">
-                      <button onClick={() => openProfile(player)} className="flex items-center gap-3 hover:opacity-80 text-left">
-                        <div className="w-8 h-8 rounded-full bg-surface-700 flex items-center justify-center text-sm font-bold text-gray-300">
-                          {player.username.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-200">{player.username}</p>
-                          <p className="text-xs text-gray-500 font-mono">{player.uuid?.slice(0, 8) || 'N/A'}...</p>
-                        </div>
-                      </button>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className="flex items-center gap-2">
-                        <span className={statusDot(player.status)} />
-                        <span className="text-xs capitalize">{player.status}</span>
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <select
-                        value={player.role}
-                        onChange={(e) => handleRoleChange(player.id, e.target.value)}
-                        className="text-xs bg-surface-800 border border-surface-700 rounded px-2 py-1 text-gray-200"
-                        disabled={player.role === 'Owner'}
-                      >
-                        {Object.keys(ROLE_COLORS).map((r) => (
-                          <option key={r} value={r}>{r}</option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-4 py-3">
-                      {player.ops ? (
-                        <span className="text-xs text-red-400 font-medium">OP</span>
-                      ) : (
-                        <span className="text-xs text-gray-500">-</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-gray-400">{formatPlaytime(player.playtime)}</td>
-                    <td className="px-4 py-3 text-sm text-gray-400">
-                      {player.last_login ? new Date(player.last_login).toLocaleDateString() : 'Never'}
-                    </td>
-                    <td className="px-4 py-3 relative">
-                      <div className="flex items-center justify-end gap-1">
-                        {player.status === 'online' && (
-                          <button
-                            onClick={() => { setKickPlayerId(player.id); setKickReason(''); }}
-                            className="p-1.5 text-gray-400 hover:text-yellow-400 hover:bg-surface-700 rounded transition-colors"
-                            title="Kick"
-                          >
-                            <LogOut size={14} />
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleMute(player.id, !!player.muted)}
-                          className={`p-1.5 rounded transition-colors ${player.muted ? 'text-green-400 hover:bg-green-500/10' : 'text-gray-400 hover:text-yellow-400 hover:bg-surface-700'}`}
-                          title={player.muted ? 'Unmute' : 'Mute'}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {filteredPlayers.map((player) => (
+            <div key={player.id} className="border border-surface-700/50 flex flex-col items-center p-4 relative h-[22rem] bg-surface-900/50 rounded-xl group hover:border-minecraft-500/30 transition-colors w-full shadow-lg">
+              <Icon className="absolute h-6 w-6 -top-3 -left-3 text-surface-600 group-hover:text-minecraft-400 transition-colors z-30" />
+              <Icon className="absolute h-6 w-6 -bottom-3 -left-3 text-surface-600 group-hover:text-minecraft-400 transition-colors z-30" />
+              <Icon className="absolute h-6 w-6 -top-3 -right-3 text-surface-600 group-hover:text-minecraft-400 transition-colors z-30" />
+              <Icon className="absolute h-6 w-6 -bottom-3 -right-3 text-surface-600 group-hover:text-minecraft-400 transition-colors z-30" />
+
+              <div className="absolute inset-0 z-0 opacity-40 pointer-events-auto">
+                <EvervaultCard text="" />
+              </div>
+
+              <div className="relative z-10 flex flex-col items-center h-full w-full mt-4 pointer-events-none">
+                 {/* User avatar */}
+                 <div className="w-16 h-16 rounded-full bg-surface-700 flex items-center justify-center text-2xl font-bold text-gray-300 mb-3 border border-surface-600 shadow-md">
+                   {player.username.charAt(0).toUpperCase()}
+                 </div>
+                 <h2 className="text-white text-xl font-bold mb-1 flex items-center gap-2">
+                   {player.username}
+                   {player.ops ? <Shield size={14} className="text-red-400" /> : null}
+                 </h2>
+                 <p className="text-xs text-gray-500 font-mono mb-4">{player.uuid?.slice(0, 8) || 'N/A'}</p>
+                 
+                 <div className="flex flex-col gap-2 w-full mt-auto pointer-events-auto">
+                    {/* Status */}
+                    <div className="flex justify-between items-center bg-surface-800/80 px-3 py-2 rounded-lg border border-surface-700">
+                       <span className="text-xs text-gray-400">Status</span>
+                       <span className="flex items-center gap-2">
+                         <span className={statusDot(player.status)} />
+                         <span className="text-xs capitalize text-gray-200">{player.status}</span>
+                       </span>
+                    </div>
+                    {/* Role */}
+                    <div className="flex justify-between items-center bg-surface-800/80 px-3 py-2 rounded-lg border border-surface-700">
+                       <span className="text-xs text-gray-400">Role</span>
+                       <select
+                          value={player.role}
+                          onChange={(e) => handleRoleChange(player.id, e.target.value)}
+                          className="text-xs bg-transparent text-gray-200 focus:outline-none text-right appearance-none cursor-pointer"
+                          disabled={player.role === 'Owner'}
                         >
-                          {player.muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                        </button>
-                        <div className="relative">
-                          <button
-                            onClick={() => setOpenMenuId(openMenuId === player.id ? null : player.id)}
-                            className="p-1.5 text-gray-400 hover:text-gray-200 hover:bg-surface-700 rounded transition-colors"
-                          >
-                            <MoreHorizontal size={14} />
-                          </button>
-                          {openMenuId === player.id && (
+                          {Object.keys(ROLE_COLORS).map((r) => (
+                            <option key={r} value={r} className="bg-surface-800">{r}</option>
+                          ))}
+                        </select>
+                    </div>
+                    
+                    {/* Actions */}
+                    <div className="flex gap-2 mt-2">
+                      <Button variant="outline" onClick={() => openProfile(player)} className="flex-1 border-surface-600 hover:border-minecraft-500 hover:bg-minecraft-500/10 text-xs py-1.5 h-auto">
+                         View Profile
+                      </Button>
+                      <div className="relative">
+                        <Button variant="outline" onClick={() => setOpenMenuId(openMenuId === player.id ? null : player.id)} className="px-2 border-surface-600 hover:border-gray-400 text-xs py-1.5 h-auto">
+                          <MoreHorizontal size={14} />
+                        </Button>
+                        {openMenuId === player.id && (
                             <>
-                              <div className="fixed inset-0 z-10" onClick={() => setOpenMenuId(null)} />
-                              <div className="absolute right-0 top-full mt-1 w-48 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-20 py-1">
-                                <button onClick={() => { setOpenMenuId(null); openProfile(player); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-surface-700 flex items-center gap-2">
-                                  <Eye size={14} /> View Profile
-                                </button>
+                              <div className="fixed inset-0 z-40" onClick={() => setOpenMenuId(null)} />
+                              <div className="absolute right-0 bottom-full mb-1 w-48 bg-surface-800 border border-surface-700 rounded-lg shadow-xl z-50 py-1">
                                 {!player.ops && player.role !== 'Owner' && (
-                                  <button onClick={() => { setOpenMenuId(null); handleOp(player.id); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-surface-700 flex items-center gap-2">
+                                  <Button variant="none" onClick={() => { setOpenMenuId(null); handleOp(player.id); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-surface-700 flex items-center gap-2">
                                     <Shield size={14} /> OP
-                                  </button>
+                                  </Button>
                                 )}
                                 {player.ops && (
-                                  <button onClick={() => { setOpenMenuId(null); handleDeop(player.id); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-surface-700 flex items-center gap-2">
+                                  <Button variant="none" onClick={() => { setOpenMenuId(null); handleDeop(player.id); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-surface-700 flex items-center gap-2">
                                     <ShieldOff size={14} /> De-OP
-                                  </button>
+                                  </Button>
                                 )}
-                                <button onClick={() => { setOpenMenuId(null); handleWhitelist(player.id); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-surface-700 flex items-center gap-2">
+                                <Button variant="none" onClick={() => { setOpenMenuId(null); handleWhitelist(player.id); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-surface-700 flex items-center gap-2">
                                   <UserCheck size={14} /> Whitelist
-                                </button>
-                                <button onClick={() => { setOpenMenuId(null); handleUnwhitelist(player.id); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-surface-700 flex items-center gap-2">
+                                </Button>
+                                <Button variant="none" onClick={() => { setOpenMenuId(null); handleUnwhitelist(player.id); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-surface-700 flex items-center gap-2">
                                   <UserX size={14} /> Unwhitelist
-                                </button>
-                                <button onClick={() => { setOpenMenuId(null); setBanPlayerId(player.id); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-surface-700 flex items-center gap-2">
+                                </Button>
+                                <Button variant="none" onClick={() => { setOpenMenuId(null); setBanPlayerId(player.id); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-surface-700 flex items-center gap-2">
                                   <Ban size={14} /> Ban
-                                </button>
-                                <button onClick={() => { setOpenMenuId(null); setTempBanPlayerId(player.id); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-surface-700 flex items-center gap-2">
+                                </Button>
+                                <Button variant="none" onClick={() => { setOpenMenuId(null); setTempBanPlayerId(player.id); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-surface-700 flex items-center gap-2">
                                   <Clock size={14} /> Temp Ban
-                                </button>
-                                <button onClick={() => { setOpenMenuId(null); handleExportPlayer(player.id); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-surface-700 flex items-center gap-2">
+                                </Button>
+                                <Button variant="none" onClick={() => { setOpenMenuId(null); handleExportPlayer(player.id); }} className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-surface-700 flex items-center gap-2">
                                   <Download size={14} /> Export Data
-                                </button>
+                                </Button>
                                 {player.role !== 'Owner' && (
-                                  <button onClick={() => { setOpenMenuId(null); handleDelete(player.id); }} className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-2">
+                                  <Button variant="none" onClick={() => { setOpenMenuId(null); handleDelete(player.id); }} className="w-full text-left px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 flex items-center gap-2">
                                     <Trash2 size={14} /> Delete
-                                  </button>
+                                  </Button>
                                 )}
                               </div>
                             </>
                           )}
-                        </div>
                       </div>
-                    </td>
-                  </tr>
-                ))}
-                {filteredPlayers.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500 text-sm">No players found</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                 </div>
+              </div>
+            </div>
+          ))}
+          {filteredPlayers.length === 0 && (
+            <div className="col-span-full py-12 text-center text-gray-500 bg-surface-900/50 rounded-xl border border-surface-800">
+              No players found
+            </div>
+          )}
         </div>
       )}
 
@@ -701,12 +672,12 @@ export default function Players() {
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end gap-2">
-                          <button onClick={() => handleApprove(player.id)} className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5">
+                          <Button variant="primary" onClick={() => handleApprove(player.id)} className="text-xs py-1.5 px-3">
                             <CheckCircle size={14} /> Approve
-                          </button>
-                          <button onClick={() => handleReject(player.id)} className="btn-danger text-xs py-1.5 px-3 flex items-center gap-1.5">
+                          </Button>
+                          <Button variant="danger" onClick={() => handleReject(player.id)} className="text-xs py-1.5 px-3">
                             <XCircle size={14} /> Reject
-                          </button>
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -740,9 +711,9 @@ export default function Players() {
                     <td className="px-4 py-3 text-sm text-gray-400">{w.added_by}</td>
                     <td className="px-4 py-3 text-sm text-gray-400">{new Date(w.added_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-right">
-                      <button onClick={() => handleRemoveFromWhitelist(w.username)} className="p-1.5 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors">
+                      <Button variant="ghost" onClick={() => handleRemoveFromWhitelist(w.username)} className="p-1.5 text-gray-400 hover:text-red-400">
                         <UserX size={14} />
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -777,9 +748,9 @@ export default function Players() {
                     <td className="px-4 py-3 text-sm text-gray-400">{b.banned_by}</td>
                     <td className="px-4 py-3 text-sm text-gray-400">{new Date(b.banned_at).toLocaleDateString()}</td>
                     <td className="px-4 py-3 text-right">
-                      <button onClick={() => handleUnban(b.id)} className="p-1.5 text-gray-400 hover:text-green-400 hover:bg-green-500/10 rounded transition-colors" title="Unban">
+                      <Button variant="ghost" onClick={() => handleUnban(b.id)} className="p-1.5 text-gray-400 hover:text-green-400" title="Unban">
                         <UserCheck size={14} />
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -827,18 +798,18 @@ export default function Players() {
                   </div>
                 </div>
               </div>
-              <button onClick={() => setSelectedPlayer(null)} className="p-2 hover:bg-surface-700 rounded-lg text-gray-400 hover:text-white transition-colors">
+              <Button variant="ghost" onClick={() => setSelectedPlayer(null)} className="p-2">
                 <X size={24} />
-              </button>
+              </Button>
             </div>
 
             {/* Profile tabs */}
             <div className="flex gap-1 px-5 pt-4 bg-surface-900 border-b border-surface-700">
               {(['stats', 'history', 'sessions'] as const).map((t) => (
-                <button
+                <Button variant="none"
                   key={t}
                   onClick={() => setProfileTab(t)}
-                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors capitalize ${
+                  className={`px-4 py-2 text-sm font-medium border-b-2 capitalize ${
                     profileTab === t
                       ? 'border-minecraft-400 text-minecraft-400'
                       : 'border-transparent text-gray-400 hover:text-gray-200'
@@ -847,7 +818,7 @@ export default function Players() {
                   {t === 'stats' && <><Activity size={14} className="inline mr-1.5" />Stats</>}
                   {t === 'history' && <><History size={14} className="inline mr-1.5" />History</>}
                   {t === 'sessions' && <><Clock size={14} className="inline mr-1.5" />Sessions</>}
-                </button>
+                </Button>
               ))}
             </div>
 
@@ -1021,37 +992,37 @@ export default function Players() {
             <div className="p-4 border-t border-surface-700 flex flex-wrap gap-2 bg-surface-800/50">
               {selectedPlayer.approval_status === 'pending' && (
                 <>
-                  <button onClick={() => { handleApprove(selectedPlayer.id); setSelectedPlayer(null); }} className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1.5">
+                  <Button variant="primary" onClick={() => { handleApprove(selectedPlayer.id); setSelectedPlayer(null); }} className="text-xs py-1.5 px-3">
                     <CheckCircle size={14} /> Approve
-                  </button>
-                  <button onClick={() => { handleReject(selectedPlayer.id); setSelectedPlayer(null); }} className="btn-danger text-xs py-1.5 px-3 flex items-center gap-1.5">
+                  </Button>
+                  <Button variant="danger" onClick={() => { handleReject(selectedPlayer.id); setSelectedPlayer(null); }} className="text-xs py-1.5 px-3">
                     <XCircle size={14} /> Reject
-                  </button>
+                  </Button>
                 </>
               )}
               {!selectedPlayer.ops && selectedPlayer.role !== 'Owner' && (
-                <button onClick={() => { handleOp(selectedPlayer.id); }} className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5">
+                <Button variant="secondary" onClick={() => { handleOp(selectedPlayer.id); }} className="text-xs py-1.5 px-3">
                   <Shield size={14} /> OP
-                </button>
+                </Button>
               )}
               {selectedPlayer.ops && (
-                <button onClick={() => { handleDeop(selectedPlayer.id); }} className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5">
+                <Button variant="secondary" onClick={() => { handleDeop(selectedPlayer.id); }} className="text-xs py-1.5 px-3">
                   <ShieldOff size={14} /> De-OP
-                </button>
+                </Button>
               )}
-              <button onClick={() => { handleWhitelist(selectedPlayer.id); }} className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5">
+              <Button variant="secondary" onClick={() => { handleWhitelist(selectedPlayer.id); }} className="text-xs py-1.5 px-3">
                 <UserCheck size={14} /> Whitelist
-              </button>
-              <button onClick={() => { handleExportPlayer(selectedPlayer.id); }} className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5">
+              </Button>
+              <Button variant="secondary" onClick={() => { handleExportPlayer(selectedPlayer.id); }} className="text-xs py-1.5 px-3">
                 <Download size={14} /> Export
-              </button>
-              <button onClick={() => { setBanPlayerId(selectedPlayer.id); }} className="btn-danger text-xs py-1.5 px-3 flex items-center gap-1.5">
+              </Button>
+              <Button variant="danger" onClick={() => { setBanPlayerId(selectedPlayer.id); }} className="text-xs py-1.5 px-3">
                 <Ban size={14} /> Ban
-              </button>
+              </Button>
               {selectedPlayer.status === 'online' && (
-                <button onClick={() => { setKickPlayerId(selectedPlayer.id); }} className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5">
+                <Button variant="secondary" onClick={() => { setKickPlayerId(selectedPlayer.id); }} className="text-xs py-1.5 px-3">
                   <LogOut size={14} /> Kick
-                </button>
+                </Button>
               )}
             </div>
           </div>
@@ -1081,14 +1052,14 @@ export default function Players() {
               </div>
             )}
             <div className="flex gap-3 justify-end">
-              <button onClick={() => { setShowDetectModal(false); setDetectResult(null); }} className="btn-secondary text-sm">Close</button>
-              <button onClick={handleDetect} disabled={detecting} className="btn-primary text-sm flex items-center gap-2">
+              <Button variant="secondary" onClick={() => { setShowDetectModal(false); setDetectResult(null); }} className="text-sm">Close</Button>
+              <Button variant="primary" onClick={handleDetect} disabled={detecting} className="text-sm">
                 {detecting ? (
                   <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Scanning...</>
                 ) : (
                   <><RefreshCw size={14} /> Scan Now</>
                 )}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1102,9 +1073,9 @@ export default function Players() {
               <h3 className="text-lg font-bold text-gray-100 flex items-center gap-2">
                 <Download size={18} className="text-minecraft-400" /> Export Data
               </h3>
-              <button onClick={() => setShowExportModal(false)} className="p-1.5 hover:bg-surface-700 rounded text-gray-400 hover:text-white">
+              <Button variant="ghost" onClick={() => setShowExportModal(false)} className="p-1.5">
                 <X size={18} />
-              </button>
+              </Button>
             </div>
             <textarea
               className="input w-full h-64 font-mono text-xs resize-none"
@@ -1112,10 +1083,10 @@ export default function Players() {
               readOnly
             />
             <div className="flex gap-3 justify-end mt-4">
-              <button onClick={copyExport} className="btn-primary text-sm flex items-center gap-2">
+              <Button variant="primary" onClick={copyExport} className="text-sm">
                 <FileText size={14} /> Copy
-              </button>
-              <button onClick={() => setShowExportModal(false)} className="btn-secondary text-sm">Close</button>
+              </Button>
+              <Button variant="secondary" onClick={() => setShowExportModal(false)} className="text-sm">Close</Button>
             </div>
           </div>
         </div>
@@ -1129,9 +1100,9 @@ export default function Players() {
               <h3 className="text-lg font-bold text-gray-100 flex items-center gap-2">
                 <Upload size={18} className="text-minecraft-400" /> Import Players
               </h3>
-              <button onClick={() => setShowImportModal(false)} className="p-1.5 hover:bg-surface-700 rounded text-gray-400 hover:text-white">
+              <Button variant="ghost" onClick={() => setShowImportModal(false)} className="p-1.5">
                 <X size={18} />
-              </button>
+              </Button>
             </div>
             <p className="text-sm text-gray-400 mb-3">Paste JSON export data to import players and their history.</p>
             <textarea
@@ -1141,14 +1112,14 @@ export default function Players() {
               placeholder='{"exportVersion": 1, "player": {...}, "history": [...]}'
             />
             <div className="flex gap-3 justify-end mt-4">
-              <button onClick={handleImport} disabled={importing} className="btn-primary text-sm flex items-center gap-2">
+              <Button variant="primary" onClick={handleImport} disabled={importing} className="text-sm">
                 {importing ? (
                   <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Importing...</>
                 ) : (
                   <><Upload size={14} /> Import</>
                 )}
-              </button>
-              <button onClick={() => setShowImportModal(false)} className="btn-secondary text-sm">Close</button>
+              </Button>
+              <Button variant="secondary" onClick={() => setShowImportModal(false)} className="text-sm">Close</Button>
             </div>
           </div>
         </div>
@@ -1172,8 +1143,8 @@ export default function Players() {
               />
             </div>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => { setBanPlayerId(null); setBanReason(''); }} className="btn-secondary text-sm">Cancel</button>
-              <button onClick={() => handleBan(banPlayerId, banReason)} className="btn-danger text-sm">Ban</button>
+              <Button variant="secondary" onClick={() => { setBanPlayerId(null); setBanReason(''); }} className="text-sm">Cancel</Button>
+              <Button variant="danger" onClick={() => handleBan(banPlayerId, banReason)} className="text-sm">Ban</Button>
             </div>
           </div>
         </div>
@@ -1197,8 +1168,8 @@ export default function Players() {
               />
             </div>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => { setKickPlayerId(null); setKickReason(''); }} className="btn-secondary text-sm">Cancel</button>
-              <button onClick={() => handleKick(kickPlayerId, kickReason)} className="btn-danger text-sm">Kick</button>
+              <Button variant="secondary" onClick={() => { setKickPlayerId(null); setKickReason(''); }} className="text-sm">Cancel</Button>
+              <Button variant="danger" onClick={() => handleKick(kickPlayerId, kickReason)} className="text-sm">Kick</Button>
             </div>
           </div>
         </div>
@@ -1237,8 +1208,8 @@ export default function Players() {
               </div>
             </div>
             <div className="flex gap-3 justify-end">
-              <button onClick={() => { setTempBanPlayerId(null); }} className="btn-secondary text-sm">Cancel</button>
-              <button onClick={handleTempBan} className="btn-danger text-sm">Apply Temp Ban</button>
+              <Button variant="secondary" onClick={() => { setTempBanPlayerId(null); }} className="text-sm">Cancel</Button>
+              <Button variant="danger" onClick={handleTempBan} className="text-sm">Apply Temp Ban</Button>
             </div>
           </div>
         </div>

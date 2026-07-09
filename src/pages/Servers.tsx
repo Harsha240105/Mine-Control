@@ -4,11 +4,12 @@ import {
   Server, Plus, Search, Settings, Play, Square, Trash2,
   Globe, Wifi, HardDrive, Calendar, Clock, Import, X, Save,
   CheckCircle, XCircle, Hash, Layers, Bookmark, Download, ChevronRight,
-  AlertTriangle, Loader2,
+  AlertTriangle, Zap,
 } from 'lucide-react';
 import { api, ApiError } from '../lib/api';
 import toast from 'react-hot-toast';
 import { useActiveServer } from '../hooks/useActiveServer';
+import { Button } from '../components/ui/stateful-button';
 
 interface ServerRecord {
   id: string;
@@ -275,18 +276,20 @@ export default function Servers() {
     <div className="space-y-6 animate-fade-in">
       {/* Three option cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <button
+        <Button
+          variant="none"
           onClick={() => setShowCreate(true)}
-          className="group relative p-6 rounded-2xl bg-gradient-to-br from-minecraft-600/20 to-minecraft-700/10 border-2 border-minecraft-500/30 hover:border-minecraft-500/60 hover:shadow-[0_0_30px_rgba(34,197,94,0.15)] transition-all duration-300 text-center"
+          className="group relative p-6 rounded-2xl bg-gradient-to-br from-minecraft-600/20 to-minecraft-700/10 border-2 border-minecraft-500/30 hover:border-minecraft-500/60 hover:shadow-[0_0_30px_rgba(34,197,94,0.15)] transition-all duration-300 text-center flex-col"
         >
           <div className="w-12 h-12 mx-auto rounded-full bg-minecraft-500/20 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform duration-300">
             <Plus className="w-6 h-6 text-minecraft-400" />
           </div>
           <h3 className="text-lg font-bold text-gray-100 mb-1">Create Server</h3>
           <p className="text-xs text-gray-400 leading-relaxed">Set up a brand new Minecraft server from scratch.</p>
-        </button>
+        </Button>
 
-        <button
+        <Button
+          variant="none"
           onClick={() => {
             if (contextServers.length > 0) {
               document.getElementById('server-grid')?.scrollIntoView({ behavior: 'smooth' });
@@ -294,7 +297,7 @@ export default function Servers() {
               setShowCreate(true);
             }
           }}
-          className="group relative p-6 rounded-2xl bg-surface-800/50 border-2 border-surface-700/50 hover:border-surface-600 hover:bg-surface-800 transition-all duration-300 text-center"
+          className="group relative p-6 rounded-2xl bg-surface-800/50 border-2 border-surface-700/50 hover:border-surface-600 hover:bg-surface-800 transition-all duration-300 text-center flex-col"
         >
           <div className="w-12 h-12 mx-auto rounded-full bg-surface-700 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform duration-300">
             <Play className="w-6 h-6 text-gray-400 group-hover:text-white transition-colors" />
@@ -305,18 +308,19 @@ export default function Servers() {
               ? `Select from ${contextServers.length} ${contextServers.length === 1 ? 'server' : 'servers'} and pick up where you left off.`
               : 'No servers yet. Create one to get started.'}
           </p>
-        </button>
+        </Button>
 
-        <button
+        <Button
+          variant="none"
           onClick={() => navigate('/import')}
-          className="group relative p-6 rounded-2xl bg-surface-800/50 border-2 border-surface-700/50 hover:border-surface-600 hover:bg-surface-800 transition-all duration-300 text-center"
+          className="group relative p-6 rounded-2xl bg-surface-800/50 border-2 border-surface-700/50 hover:border-surface-600 hover:bg-surface-800 transition-all duration-300 text-center flex-col"
         >
           <div className="w-12 h-12 mx-auto rounded-full bg-surface-700 flex items-center justify-center mb-3 group-hover:scale-110 transition-transform duration-300">
             <Download className="w-6 h-6 text-gray-400 group-hover:text-white transition-colors" />
           </div>
           <h3 className="text-lg font-bold text-gray-100 mb-1">Import Server</h3>
           <p className="text-xs text-gray-400 leading-relaxed">Bring an existing server folder or ZIP into MineControl OS.</p>
-        </button>
+        </Button>
       </div>
 
       {/* Restore Detection */}
@@ -331,20 +335,14 @@ export default function Servers() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/import')}
-            className="btn-secondary flex items-center gap-2"
-          >
+          <Button variant="secondary" onClick={() => navigate('/import')}>
             <Import size={16} />
             Import
-          </button>
-          <button
-            onClick={() => { setShowCreate(true); }}
-            className="btn-primary flex items-center gap-2"
-          >
+          </Button>
+          <Button variant="primary" onClick={() => { setShowCreate(true); }}>
             <Plus size={16} />
             Create Server
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -375,21 +373,33 @@ export default function Servers() {
               : 'Your server library is empty. Create your first Minecraft server to get started.'}
           </p>
           {!searchQuery && (
-            <div className="flex gap-4 justify-center">
-              <button
-                onClick={() => { setShowCreate(true); }}
-                className="btn-primary flex items-center gap-2 px-6 py-2.5"
-              >
-                <Plus size={18} />
-                Create Your First Server
-              </button>
-              <button
+            <div className="flex flex-col items-center gap-4">
+              <div className="flex gap-4 justify-center">
+                <Button
+                  variant="primary"
+                  onClick={() => navigate('/wizard')}
+                  className="px-6 py-2.5"
+                >
+                  <Zap size={18} />
+                  Guided Setup Wizard
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => { setShowCreate(true); }}
+                  className="px-6 py-2.5"
+                >
+                  <Plus size={18} />
+                  Quick Create
+                </Button>
+              </div>
+              <Button
+                variant="none"
                 onClick={() => navigate('/import')}
-                className="btn-secondary flex items-center gap-2 px-6 py-2.5"
+                className="text-sm text-gray-500 hover:text-gray-300 gap-1.5 transition-colors"
               >
-                <Import size={18} />
+                <Import size={14} />
                 Import Existing Server
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -485,59 +495,66 @@ export default function Servers() {
 
                   <div className="flex items-center gap-1">
                     {server.status === 'running' ? (
-                      <button
+                      <Button
+                        variant="none"
                         onClick={() => handleServerAction(server.id, 'stop')}
                         className="p-1.5 rounded-lg text-yellow-400 hover:bg-yellow-500/10 transition-colors"
                         title="Stop Server"
                       >
                         <Square size={14} />
-                      </button>
+                      </Button>
                     ) : (
-                      <button
+                      <Button
+                        variant="none"
                         onClick={() => handleServerAction(server.id, 'start')}
                         disabled={server.status === 'starting'}
                         className="p-1.5 rounded-lg text-green-400 hover:bg-green-500/10 transition-colors disabled:opacity-50"
                         title="Start Server"
                       >
                         <Play size={14} />
-                      </button>
+                      </Button>
                     )}
 
-                    <button
+                    <Button
+                      variant="none"
                       onClick={() => handleNavigateWithSelect(server.id, '/dashboard')}
                       className="p-1.5 rounded-lg text-blue-400 hover:bg-blue-500/10 transition-colors"
                       title="Open Dashboard"
                     >
                       <Layers size={14} />
-                    </button>
+                    </Button>
 
-                    <button
+                    <Button
+                      variant="none"
                       onClick={() => handleNavigateWithSelect(server.id, '/settings')}
                       className="p-1.5 rounded-lg text-gray-400 hover:text-gray-200 hover:bg-surface-700/50 transition-colors"
                       title="Settings"
                     >
                       <Settings size={14} />
-                    </button>
+                    </Button>
 
                     {deleteConfirm === server.id ? (
                       <div className="flex items-center gap-1">
-                        <button
+                        <Button
+                          variant="none"
                           onClick={() => handleDelete(server.id)}
                           className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/10 transition-colors"
                           title="Confirm Delete"
                         >
                           <CheckCircle size={14} />
-                        </button>
-                        <button
+                        </Button>
+                        <Button
+                          variant="none"
                           onClick={() => setDeleteConfirm(null)}
                           className="p-1.5 rounded-lg text-gray-400 hover:bg-surface-700/50 transition-colors"
                           title="Cancel"
                         >
                           <XCircle size={14} />
-                        </button>
+                        </Button>
                       </div>
                     ) : (
-                      <button
+                      <Button
+                        variant="none"
                         onClick={() => setDeleteConfirm(server.id)}
                         disabled={isActive}
                         className={`p-1.5 rounded-lg transition-colors ${
@@ -548,7 +565,7 @@ export default function Servers() {
                         title="Delete Server"
                       >
                         <Trash2 size={14} />
-                      </button>
+                      </Button>
                     )}
                   </div>
                 </div>
@@ -577,12 +594,13 @@ export default function Servers() {
                   <p className="text-xs text-gray-500">Configure your Minecraft server</p>
                 </div>
               </div>
-              <button
+              <Button
+                variant="none"
                 onClick={() => { if (!creating) setShowCreate(false); }}
                 className="p-1.5 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-surface-800 transition-colors"
               >
                 <X size={18} />
-              </button>
+              </Button>
             </div>
 
             {/* Modal Body */}
@@ -727,30 +745,21 @@ export default function Servers() {
 
             {/* Modal Footer */}
             <div className="flex items-center justify-end gap-3 p-5 border-t border-surface-700/50">
-              <button
+              <Button
+                variant="ghost"
                 onClick={() => setShowCreate(false)}
                 disabled={creating}
-                className="btn-ghost"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="primary"
                 onClick={handleCreate}
+                loading={creating}
                 disabled={creating || !formData.name.trim()}
-                className="btn-primary flex items-center gap-2"
               >
-                {creating ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  <>
-                    <Save size={16} />
-                    Create Server
-                  </>
-                )}
-              </button>
+                {creating ? 'Creating...' : <><Save size={16} /> Create Server</>}
+              </Button>
             </div>
           </div>
         </div>
@@ -789,7 +798,8 @@ function DetectionBanner({ serverCount }: { serverCount: number }) {
             You can restore your previous servers and settings.
           </p>
           <div className="flex gap-2 mt-3">
-            <button
+            <Button
+              variant="none"
               onClick={async () => {
                 setRestoring(true);
                 try {
@@ -805,18 +815,19 @@ function DetectionBanner({ serverCount }: { serverCount: number }) {
                 }
                 setRestoring(false);
               }}
+              loading={restoring}
               disabled={restoring}
-              className="px-3 py-1.5 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5"
+              className="px-3 py-1.5 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg text-xs font-medium transition-all"
             >
-              {restoring ? <Loader2 size={12} className="animate-spin" /> : null}
               Restore
-            </button>
-            <button
+            </Button>
+            <Button
+              variant="none"
               onClick={() => navigate('/uninstall')}
               className="px-3 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 rounded-lg text-xs font-medium transition-all"
             >
               Manage Data
-            </button>
+            </Button>
           </div>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Map, ExternalLink, RefreshCw, Info, Wifi, WifiOff, Globe, Server } from 'lucide-react';
+import { Button } from '../components/ui/stateful-button';
 import { api } from '../lib/api';
 import { useActiveServer } from '../hooks/useActiveServer';
 
@@ -110,13 +111,13 @@ export default function MapView() {
             min={1}
             max={65535}
           />
-          <button onClick={() => { setMapUrl(''); checkMapStatus(); }} className="btn-ghost p-2" title="Refresh">
+          <Button variant="ghost" onClick={() => { setMapUrl(''); checkMapStatus(); }} className="p-2" title="Refresh">
             <RefreshCw size={16} />
-          </button>
-          <button onClick={handleOpenExternal} className="btn-primary flex items-center gap-2 text-sm">
+          </Button>
+          <Button variant="primary" onClick={handleOpenExternal} className="text-sm">
             <ExternalLink size={14} />
             Open in Browser
-          </button>
+          </Button>
         </div>
       </div>
 

@@ -6,6 +6,7 @@ import {
   Users, Database, Layers, Map, Clock, Shield, BookOpen, Box,
   Grid3X3, Cpu, Wifi, Sword, ChevronRight, Info,
 } from 'lucide-react';
+import { Button } from '../components/ui/stateful-button';
 import toast from 'react-hot-toast';
 import { api } from '../lib/api';
 
@@ -508,15 +509,12 @@ export default function Import() {
         )}
 
         <div className="flex justify-between">
-          <button onClick={() => goToStep('detect')} className="px-6 py-2 rounded-lg bg-surface-700 hover:bg-surface-600 text-white font-medium transition-colors">
+          <Button variant="secondary" onClick={() => goToStep('detect')}>
             Back
-          </button>
-          <button
-            onClick={() => { loadPlayerAnalysis(); goToStep('players'); }}
-            className="px-6 py-2 rounded-lg bg-minecraft-600 hover:bg-minecraft-500 text-white font-medium flex items-center gap-2 transition-colors"
-          >
+          </Button>
+          <Button variant="primary" onClick={() => { loadPlayerAnalysis(); goToStep('players'); }}>
             View Players <ArrowRight size={16} />
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -606,15 +604,12 @@ export default function Import() {
       )}
 
       <div className="flex justify-between mt-6">
-        <button onClick={() => goToStep('world')} className="px-6 py-2 rounded-lg bg-surface-700 hover:bg-surface-600 text-white font-medium transition-colors">
+        <Button variant="secondary" onClick={() => goToStep('world')}>
           Back
-        </button>
-        <button
-          onClick={handlePlayersNext}
-          className="px-6 py-2 rounded-lg bg-minecraft-600 hover:bg-minecraft-500 text-white font-medium flex items-center gap-2 transition-colors"
-        >
+        </Button>
+        <Button variant="primary" onClick={handlePlayersNext}>
           Choose Destination <ArrowRight size={16} />
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -750,16 +745,13 @@ export default function Import() {
       )}
 
       <div className="flex justify-between">
-        <button onClick={() => goToStep('players')} className="px-6 py-2 rounded-lg bg-surface-700 hover:bg-surface-600 text-white font-medium transition-colors">
+        <Button variant="secondary" onClick={() => goToStep('players')}>
           Back
-        </button>
-        <button
-          onClick={handleDestinationNext}
-          disabled={!destinationType || (destinationType === 'existing' && !selectedServerId)}
-          className="px-6 py-2 rounded-lg bg-minecraft-600 hover:bg-minecraft-500 text-white font-medium flex items-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-        >
+        </Button>
+        <Button variant="primary" onClick={handleDestinationNext}
+          disabled={!destinationType || (destinationType === 'existing' && !selectedServerId)}>
           Review Summary <ArrowRight size={16} />
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -824,15 +816,12 @@ export default function Import() {
         </div>
 
         <div className="flex justify-between">
-          <button onClick={() => goToStep('destination')} className="px-6 py-2 rounded-lg bg-surface-700 hover:bg-surface-600 text-white font-medium transition-colors">
+          <Button variant="secondary" onClick={() => goToStep('destination')}>
             Back
-          </button>
-          <button
-            onClick={executeImport}
-            className="px-8 py-3 rounded-xl bg-minecraft-600 hover:bg-minecraft-500 text-white font-bold flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
-          >
+          </Button>
+          <Button variant="primary" onClick={executeImport} className="px-8 py-3 rounded-xl font-bold hover:scale-105 active:scale-95">
             <Download size={18} /> Start Import
-          </button>
+          </Button>
         </div>
       </div>
     );

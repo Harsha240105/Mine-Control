@@ -52,6 +52,16 @@ export function getLevelName(): string {
     const match = content.match(/^level-name=(.*)$/m);
     if (match) return match[1].trim();
   }
+  // Use server name from DB as default
+  try {
+    const { getActiveServerId } = require('../db/repository/serverConfigRepository');
+    const db = getDatabase();
+    const sid = getActiveServerId();
+    if (sid) {
+      const server = db.prepare('SELECT name FROM servers WHERE id = ?').get(sid) as any;
+      if (server?.name) return server.name.replace(/[^a-zA-Z0-9_\-]/g, '_');
+    }
+  } catch {}
   return 'world';
 }
 

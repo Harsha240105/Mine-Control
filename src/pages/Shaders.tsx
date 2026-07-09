@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Palette, Plus, Trash2, Power, PowerOff, Download, Upload, Loader2, Server } from 'lucide-react';
+import { Button } from '../components/ui/stateful-button';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 import { useActiveServer } from '../hooks/useActiveServer';
@@ -143,14 +144,14 @@ export default function Shaders() {
             onChange={handleUpload}
             className="hidden"
           />
-          <button onClick={() => fileInputRef.current?.click()} className="btn-secondary flex items-center gap-2">
+          <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
             <Upload size={16} />
             Upload
-          </button>
-          <button onClick={() => setShowInstall(!showInstall)} className="btn-primary flex items-center gap-2">
+          </Button>
+          <Button variant="primary" onClick={() => setShowInstall(!showInstall)}>
             <Plus size={16} />
             Install Shader
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -168,8 +169,8 @@ export default function Shaders() {
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setShowInstall(false)} className="btn-secondary">Cancel</button>
-              <button type="submit" className="btn-primary">Install</button>
+              <Button type="button" variant="secondary" onClick={() => setShowInstall(false)}>Cancel</Button>
+              <Button type="submit" variant="primary">Install</Button>
             </div>
           </form>
         </div>
@@ -205,26 +206,24 @@ export default function Shaders() {
                   <p className="text-xs text-gray-500">v{shader.version}</p>
                 </div>
               </div>
-              <button
+              <Button variant="ghost"
                 onClick={() => handleToggle(shader.name)}
-                className={`p-2 rounded-lg transition-colors ${
-                  shader.enabled ? 'text-green-400 hover:bg-green-500/10' : 'text-gray-500 hover:bg-surface-700'
-                }`}
+                className={`p-2 ${shader.enabled ? 'text-green-400' : 'text-gray-500'}`}
                 title={shader.enabled ? 'Disable' : 'Enable'}
               >
                 {shader.enabled ? <Power size={16} /> : <PowerOff size={16} />}
-              </button>
+              </Button>
             </div>
             <p className="text-xs text-gray-400 line-clamp-2 mb-3">{shader.description || 'No description'}</p>
             <div className="flex items-center justify-between text-xs">
               <span className="text-gray-500">by {shader.author || 'Unknown'}</span>
-              <button
+              <Button variant="ghost"
                 onClick={() => handleRemove(shader.name)}
-                className="p-1 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                className="p-1 text-gray-500 hover:text-red-400"
                 title="Remove"
               >
                 <Trash2 size={12} />
-              </button>
+              </Button>
             </div>
           </div>
         ))}

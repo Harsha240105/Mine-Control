@@ -6,6 +6,7 @@ import {
   Info, Clock, Wifi, MessageSquare, Activity, Upload, Terminal, Settings,
   FileText, Save, Users, Star, AlertOctagon, Search,
 } from 'lucide-react';
+import { Button } from '../components/ui/stateful-button';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 
@@ -196,10 +197,11 @@ export default function Privacy() {
         {tabs.map(tab => {
           const Icon = tab.icon;
           return (
-            <button
+            <Button
               key={tab.key}
+              variant="none"
               onClick={() => { setActiveTab(tab.key); if (tab.key === 'audit') loadAuditLog(); }}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm whitespace-nowrap transition-colors ${
+              className={`px-4 py-2 rounded-lg text-sm whitespace-nowrap transition-colors ${
                 activeTab === tab.key
                   ? 'bg-minecraft-500/10 text-minecraft-400 border border-minecraft-500/20'
                   : 'text-gray-500 hover:text-gray-300 hover:bg-surface-800'
@@ -207,7 +209,7 @@ export default function Privacy() {
             >
               <Icon size={16} />
               {tab.label}
-            </button>
+            </Button>
           );
         })}
       </div>
@@ -219,14 +221,14 @@ export default function Privacy() {
           <div className={`card ${getScoreBg(score)}`}>
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-sm font-semibold text-gray-200">Security Score</h3>
-              <button
+              <Button variant="none"
                 onClick={runSecurityCheck}
                 disabled={runningCheck}
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-minecraft-500/10 text-minecraft-400 hover:bg-minecraft-500/20 transition-colors disabled:opacity-50"
+                className="text-xs px-3 py-1.5 rounded-lg bg-minecraft-500/10 text-minecraft-400 hover:bg-minecraft-500/20 disabled:opacity-50"
               >
                 <RefreshCw size={12} className={runningCheck ? 'animate-spin' : ''} />
                 {runningCheck ? 'Running...' : 'Run Check'}
-              </button>
+              </Button>
             </div>
             <div className="flex items-center gap-6">
               <div className="text-4xl font-bold" style={{ color: score >= 80 ? '#22c55e' : score >= 50 ? '#eab308' : '#ef4444' }}>
@@ -354,13 +356,13 @@ export default function Privacy() {
                   <p className="text-xs text-gray-500 truncate mt-0.5">{loc.path}</p>
                   <p className="text-[11px] text-gray-600 mt-0.5">{loc.size}</p>
                 </div>
-                <button
+                <Button variant="ghost"
                   onClick={() => openFolder(loc.path)}
-                  className="p-2 text-gray-500 hover:text-minecraft-400 hover:bg-surface-800 rounded-lg transition-colors ml-2 shrink-0"
+                  className="p-2 ml-2 shrink-0"
                   title="Open folder"
                 >
                   <FolderOpen size={16} />
-                </button>
+                </Button>
               </div>
             ))}
           </div>
@@ -425,16 +427,16 @@ export default function Privacy() {
                   <h3 className="text-sm font-medium text-gray-200">{perm.label}</h3>
                   <p className="text-xs text-gray-500">{perm.description}</p>
                 </div>
-                <button
+                <Button variant="none"
                   onClick={() => togglePermission(perm.feature_key, perm.enabled)}
-                  className={`relative w-10 h-5 rounded-full transition-colors ml-3 ${
+                  className={`relative w-10 h-5 rounded-full ml-3 ${
                     perm.enabled ? 'bg-green-500/50' : 'bg-gray-700'
                   }`}
                 >
                   <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
                     perm.enabled ? 'translate-x-5' : 'translate-x-0.5'
                   }`} />
-                </button>
+                </Button>
               </div>
             ))}
           </div>
@@ -459,12 +461,12 @@ export default function Privacy() {
                     {cred.hasValue ? (
                       <>
                         <span className="text-xs text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full">Stored</span>
-                        <button
+                        <Button variant="ghost"
                           onClick={() => deleteCredential(cred.key)}
-                          className="text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-red-500/10 transition-colors"
+                          className="text-xs px-2 py-1 text-red-400"
                         >
                           <Trash2 size={12} />
-                        </button>
+                        </Button>
                       </>
                     ) : (
                       <span className="text-xs text-gray-500">Not configured</span>
@@ -483,12 +485,12 @@ export default function Privacy() {
                       onChange={(e) => setCredentialValues(prev => ({ ...prev, [cred.key]: e.target.value }))}
                       className="flex-1 bg-surface-800 border border-surface-700 rounded-lg px-3 py-1.5 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-minecraft-500/50"
                     />
-                    <button
+                    <Button variant="none"
                       onClick={() => saveCredential(cred.key)}
-                      className="px-3 py-1.5 bg-minecraft-500/10 text-minecraft-400 rounded-lg text-sm hover:bg-minecraft-500/20 transition-colors"
+                      className="px-3 py-1.5 bg-minecraft-500/10 text-minecraft-400 rounded-lg text-sm hover:bg-minecraft-500/20"
                     >
                       Save
-                    </button>
+                    </Button>
                   </div>
                 )}
               </div>
@@ -502,14 +504,14 @@ export default function Privacy() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-500">Detailed security check results and recommendations.</p>
-            <button
+            <Button variant="none"
               onClick={runSecurityCheck}
               disabled={runningCheck}
-              className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-minecraft-500/10 text-minecraft-400 hover:bg-minecraft-500/20 transition-colors disabled:opacity-50"
+              className="text-xs px-3 py-1.5 rounded-lg bg-minecraft-500/10 text-minecraft-400 hover:bg-minecraft-500/20 disabled:opacity-50"
             >
               <RefreshCw size={12} className={runningCheck ? 'animate-spin' : ''} />
               {runningCheck ? 'Running...' : 'Run Full Check'}
-            </button>
+            </Button>
           </div>
 
           <div className={`card ${getScoreBg(score)}`}>
@@ -600,10 +602,10 @@ export default function Privacy() {
               />
               Include encrypted credentials in export
             </label>
-            <button onClick={handleExport} className="btn-primary text-sm flex items-center gap-2">
+            <Button variant="primary" onClick={handleExport} className="text-sm">
               <Download size={14} />
               Export Privacy Data
-            </button>
+            </Button>
           </div>
 
           {/* Clear Operations */}
@@ -632,21 +634,21 @@ export default function Privacy() {
             {confirming === 'delete-all' ? (
               <div className="flex items-center gap-3">
                 <p className="text-sm text-red-400">Are you sure? This cannot be undone.</p>
-                <button onClick={handleDeleteAll} className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded-lg text-sm hover:bg-red-500/30 transition-colors">
+                <Button variant="danger" onClick={handleDeleteAll} className="px-3 py-1.5 text-sm">
                   Confirm Delete
-                </button>
-                <button onClick={() => setConfirming(null)} className="px-3 py-1.5 text-gray-500 rounded-lg text-sm hover:text-gray-300 transition-colors">
+                </Button>
+                <Button variant="ghost" onClick={() => setConfirming(null)} className="px-3 py-1.5 text-sm">
                   Cancel
-                </button>
+                </Button>
               </div>
             ) : (
-              <button
+              <Button variant="danger"
                 onClick={() => setConfirming('delete-all')}
-                className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 text-red-400 rounded-lg text-sm hover:bg-red-500/20 transition-colors"
+                className="px-3 py-1.5 text-sm"
               >
                 <Trash2 size={14} />
                 Delete All User Data
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -657,9 +659,9 @@ export default function Privacy() {
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <p className="text-sm text-gray-500">Security-relevant events are logged here for accountability.</p>
-            <button onClick={loadAuditLog} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+            <Button variant="ghost" onClick={loadAuditLog} className="text-xs">
               <RefreshCw size={14} />
-            </button>
+            </Button>
           </div>
           {auditLog.length === 0 ? (
             <div className="card text-center py-8">
@@ -703,13 +705,13 @@ function ClearAction({ label, desc, onAction }: { label: string; desc: string; o
         <span className="text-sm text-gray-300">{label}</span>
         <p className="text-[11px] text-gray-600">{desc}</p>
       </div>
-      <button
+      <Button variant="none"
         onClick={handleClick}
         disabled={busy}
-        className="text-xs px-3 py-1.5 rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 transition-colors disabled:opacity-50"
+        className="text-xs px-3 py-1.5 rounded-lg bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 disabled:opacity-50"
       >
         {busy ? 'Clearing...' : 'Clear'}
-      </button>
+      </Button>
     </div>
   );
 }

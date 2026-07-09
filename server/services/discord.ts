@@ -1,4 +1,6 @@
 import { Client, GatewayIntentBits, TextChannel, VoiceChannel, ChannelType, Message } from 'discord.js';
+import https from 'https';
+import os from 'os';
 import { minecraftServer } from './minecraftServer';
 import { getDatabase } from '../database';
 import { getActiveServerId } from '../db/repository/serverConfigRepository';
@@ -36,33 +38,35 @@ class DiscordService {
     });
 
     this.client.on('ready', () => {
-      this._connected = true;
-      this._connecting = false;
-      this._botName = this.client.user?.tag || '';
-      this._guildId = '';
-      this._guildName = '';
-      this._textChannelName = '';
-      this._voiceChannelName = '';
+      try {
+        this._connected = true;
+        this._connecting = false;
+        this._botName = this.client.user?.tag || '';
+        this._guildId = '';
+        this._guildName = '';
+        this._textChannelName = '';
+        this._voiceChannelName = '';
 
-      // Resolve guild/channel names - prefer configured guild
-      const configuredGuildId = this._guildId;
-      for (const g of this.client.guilds.cache.values()) {
-        if (configuredGuildId && g.id !== configuredGuildId) continue;
-        this._guildId = g.id;
-        this._guildName = g.name;
-        if (this._textChannelId && g.channels.cache.has(this._textChannelId)) {
-          const ch = g.channels.cache.get(this._textChannelId);
-          this._textChannelName = ch?.name || '';
+        // Resolve guild/channel names - prefer configured guild
+        const configuredGuildId = this._guildId;
+        for (const g of this.client.guilds.cache.values()) {
+          if (configuredGuildId && g.id !== configuredGuildId) continue;
+          this._guildId = g.id;
+          this._guildName = g.name;
+          if (this._textChannelId && g.channels.cache.has(this._textChannelId)) {
+            const ch = g.channels.cache.get(this._textChannelId);
+            this._textChannelName = ch?.name || '';
+          }
+          if (this._voiceChannelId && g.channels.cache.has(this._voiceChannelId)) {
+            const ch = g.channels.cache.get(this._voiceChannelId);
+            this._voiceChannelName = ch?.name || '';
+          }
+          if (!configuredGuildId) break;
         }
-        if (this._voiceChannelId && g.channels.cache.has(this._voiceChannelId)) {
-          const ch = g.channels.cache.get(this._voiceChannelId);
-          this._voiceChannelName = ch?.name || '';
-        }
-        if (!configuredGuildId) break;
-      }
 
-      this._lastError = '';
-      this.persistStatus('connected');
+        this._lastError = '';
+        this.persistStatus('connected');
+      } catch {}
       this.emitStatus();
       this.setupHooks();
       this._ready = true;
@@ -100,6 +104,8 @@ class DiscordService {
     });
 
     this.client.on('error', (err) => {
+      this._connected = false;
+      this._connecting = false;
       this._lastError = err.message;
       this.persistStatus('error');
       this.emitStatus();
@@ -156,16 +162,25 @@ class DiscordService {
 
   async connect(token: string, textChannelId: string, voiceChannelId?: string): Promise<boolean> {
     if (this._connecting) return false;
-    if (this._connected) await this.disconnect();
+    // Always destroy any prior connection before starting fresh
+    try { await this.client.destroy(); } catch {}
+    this._connected = false;
     this._connecting = true;
     this._textChannelId = textChannelId;
     this._voiceChannelId = voiceChannelId || '';
+    this.persistStatus('connecting');
     this.emitStatus();
 
     try {
-      await this.client.login(token);
+      const loginPromise = this.client.login(token);
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Connection timed out after 15s')), 15000)
+      );
+      await Promise.race([loginPromise, timeout]);
+      this._connecting = false;
       return true;
     } catch (err: any) {
+      try { await this.client.destroy(); } catch {}
       this._connected = false;
       this._connecting = false;
       this._lastError = err.message || 'Failed to connect';
@@ -177,7 +192,7 @@ class DiscordService {
 
   async disconnect(): Promise<void> {
     this.removeHooks();
-    try { this.client.destroy(); } catch {}
+    try { await this.client.destroy(); } catch {}
     this._connected = false;
     this._connecting = false;
     this._ready = false;
@@ -463,6 +478,42 @@ class DiscordService {
     return db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId) || { name: 'MineControl OS', port: 25565, version: '', version_source: 'Minecraft', autoRestart: false };
   }
 
+  private getJoinAddress(port: number): string {
+    const db = getDatabase();
+    const sid = getActiveServerId();
+
+    // 1. Playit tunnel
+    if (sid) {
+      const playitKey = `playitAddress_${sid}`;
+      const row = db.prepare("SELECT value FROM server_config WHERE key = ?").get(playitKey) as any;
+      if (row?.value) {
+        return `\`${row.value}\``;
+      }
+    }
+
+    // 2. Public IP (fetch via ipify)
+    try {
+      const publicIp = require('child_process').execSync(
+        `node -e "const h=require('https');h.get('https://api.ipify.org?format=json',r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.stdout.write(JSON.parse(d).ip||''))}).on('error',()=>{})"`,
+        { timeout: 3000, stdio: 'pipe', windowsHide: true }
+      ).toString().trim();
+      if (publicIp) return `\`${publicIp}:${port}\``;
+    } catch {}
+
+    // 3. LAN addresses
+    const nets = os.networkInterfaces();
+    for (const name of Object.keys(nets)) {
+      for (const net of nets[name] || []) {
+        if (net.family === 'IPv4' && !net.internal) {
+          return `\`${net.address}:${port}\``;
+        }
+      }
+    }
+
+    // 4. Fallback to localhost
+    return `\`localhost:${port}\``;
+  }
+
   async notifyServerStarted() {
     if (!this.shouldNotify('notify_server_start')) return;
     const server = this.getServerInfo();
@@ -473,10 +524,16 @@ class DiscordService {
       : db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online'").get() as any;
     const online = players?.c || 0;
 
+    const port = server.port || 25565;
+    const joinAddress = this.getJoinAddress(port);
+
     let voiceLine = '';
     if (this._voiceChannelId && this._voiceChannelName) {
       voiceLine = `\n🎙️ Voice Channel: **${this._voiceChannelName}**`;
     }
+
+    const isPlayitOrPublic = joinAddress.includes('.') && !joinAddress.includes('localhost');
+    const connectionType = isPlayitOrPublic ? 'Public' : 'Local';
 
     await this.sendEmbed({
       title: '✅ Server Started',
@@ -485,9 +542,9 @@ class DiscordService {
         { name: 'Server', value: server.name || 'MineControl OS', inline: true },
         { name: 'Software', value: server.version_source || 'Minecraft', inline: true },
         { name: 'Version', value: server.version || 'Unknown', inline: true },
-        { name: 'Join Address', value: `\`localhost:${server.port || 25565}\``, inline: true },
+        { name: 'Join Address', value: joinAddress, inline: true },
         { name: 'Players Online', value: `${online}`, inline: true },
-        { name: 'Connection', value: `Local${this._voiceChannelName ? ` + Voice` : ''}`, inline: true },
+        { name: 'Connection', value: `${connectionType}${this._voiceChannelName ? ` + Voice` : ''}`, inline: true },
       ],
       footer: `MineControl OS · ${new Date().toLocaleString()}`,
     });
@@ -767,14 +824,46 @@ class DiscordService {
   }
 
   private persistStatus(status: string) {
-    const db = getDatabase();
-    const serverId = getActiveServerId();
-    if (!serverId) return;
+    try {
+      const db = getDatabase();
+      const serverId = getActiveServerId();
+      if (!serverId) return;
 
-    db.prepare(`
-      UPDATE discord_config SET bot_status = ?, last_error = ?, updated_at = datetime('now')
-      WHERE server_id = ?
-    `).run(status, this._lastError, serverId);
+      const existing = db.prepare('SELECT id FROM discord_config WHERE server_id = ?').get(serverId);
+      if (existing) {
+        db.prepare(`
+          UPDATE discord_config SET bot_status = ?, last_error = ?, updated_at = datetime('now')
+          WHERE server_id = ?
+        `).run(status, this._lastError, serverId);
+      } else {
+        db.prepare(`
+          INSERT INTO discord_config (server_id, bot_status, last_error, created_at, updated_at)
+          VALUES (?, ?, ?, datetime('now'), datetime('now'))
+        `).run(serverId, status, this._lastError || '');
+      }
+    } catch (e: any) {
+      // Auto-repair if column is missing
+      if (e.message?.includes('no such column')) {
+        try {
+          const db = getDatabase();
+          db.exec("ALTER TABLE discord_config ADD COLUMN updated_at TEXT DEFAULT ''");
+        } catch {}
+      }
+      // Retry once after repair
+      try {
+        const db = getDatabase();
+        const serverId = getActiveServerId();
+        if (!serverId) return;
+        const existing = db.prepare('SELECT id FROM discord_config WHERE server_id = ?').get(serverId);
+        if (existing) {
+          db.prepare('UPDATE discord_config SET bot_status = ?, last_error = ? WHERE server_id = ?')
+            .run(status, this._lastError, serverId);
+        } else {
+          db.prepare('INSERT INTO discord_config (server_id, bot_status, last_error, created_at) VALUES (?, ?, ?, datetime(\'now\'))')
+            .run(serverId, status, this._lastError || '');
+        }
+      } catch {}
+    }
   }
 
   private shouldNotify(key: string): boolean {

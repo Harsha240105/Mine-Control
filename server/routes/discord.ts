@@ -71,6 +71,8 @@ router.post('/', authMiddleware, requirePermission('settings.edit'), async (req:
   for (const f of fields) {
     const val = req.body[f];
     if (val !== undefined) {
+      // Skip masked placeholder token to avoid overwriting the real token
+      if (f === 'bot_token' && val === '••••••••' && existing) continue;
       updateFields.push(`${f} = ?`);
       values.push(typeof val === 'boolean' ? (val ? 1 : 0) : val);
     }
@@ -89,22 +91,25 @@ router.post('/', authMiddleware, requirePermission('settings.edit'), async (req:
   }
 
   // Reconnect if token/channel changed
-  const token = req.body.bot_token !== undefined ? req.body.bot_token :
+  const reqToken = req.body.bot_token;
+  const token = reqToken !== undefined && reqToken !== '••••••••' ? reqToken :
     (db.prepare('SELECT bot_token FROM discord_config WHERE server_id = ?').get(activeId) as any)?.bot_token || '';
   const textChan = req.body.text_channel_id !== undefined ? req.body.text_channel_id :
     (db.prepare('SELECT text_channel_id FROM discord_config WHERE server_id = ?').get(activeId) as any)?.text_channel_id || '';
   const voiceChan = req.body.voice_channel_id !== undefined ? req.body.voice_channel_id :
     (db.prepare('SELECT voice_channel_id FROM discord_config WHERE server_id = ?').get(activeId) as any)?.voice_channel_id || '';
 
+  let connectResult = true;
   if (req.body.bot_token !== undefined || req.body.text_channel_id !== undefined || req.body.voice_channel_id !== undefined) {
     if (token && textChan) {
-      await discordService.connect(token, textChan, voiceChan);
+      connectResult = await discordService.connect(token, textChan, voiceChan);
     } else {
       await discordService.disconnect();
     }
   }
 
-  res.json({ success: true });
+  const status = discordService.getStatus();
+  res.json({ success: true, connected: connectResult, lastError: status.lastError || '' });
 });
 
 // Connect Discord bot
@@ -136,10 +141,16 @@ router.post('/reconnect', authMiddleware, requirePermission('settings.edit'), as
 // Test connection (without saving)
 router.post('/test', authMiddleware, async (req: AuthRequest, res) => {
   const { botToken, textChannelId } = req.body;
-  if (!botToken || !textChannelId) {
-    return res.status(400).json({ success: false, message: 'Bot token and channel ID required' });
+  if (!textChannelId) {
+    return res.status(400).json({ success: false, message: 'Channel ID required' });
   }
-  const result = await discordService.testConnection(botToken, textChannelId);
+  // If frontend sends the masked placeholder, read the real token from DB
+  const token = botToken && botToken !== '••••••••' ? botToken :
+    (() => { const row = getDatabase().prepare('SELECT bot_token FROM discord_config WHERE server_id = ?').get(getActiveServerId()) as any; return row?.bot_token || ''; })();
+  if (!token) {
+    return res.status(400).json({ success: false, message: 'No bot token configured. Enter a token first.' });
+  }
+  const result = await discordService.testConnection(token, textChannelId);
   res.json(result);
 });
 

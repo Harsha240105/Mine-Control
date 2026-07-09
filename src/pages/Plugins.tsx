@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { Puzzle, Plus, Trash2, Power, PowerOff, Download, ExternalLink, Search, Star, Shield, Wifi, Globe, BookOpen, Loader2, Server } from 'lucide-react';
+import { Puzzle, Plus, Trash2, Power, PowerOff, Download, ExternalLink, Search, Star, Shield, Wifi, Globe, BookOpen, Server } from 'lucide-react';
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 import { useActiveServer } from '../hooks/useActiveServer';
+import { Button } from '../components/ui/stateful-button';
 
 interface Plugin {
   name: string;
@@ -188,10 +189,10 @@ export default function Plugins() {
           <h2 className="text-xl font-bold text-gray-100">Plugin Manager</h2>
           <p className="text-sm text-gray-500 mt-0.5">{plugins.length} plugin{plugins.length !== 1 ? 's' : ''} installed</p>
         </div>
-        <button onClick={() => setShowInstall(!showInstall)} className="btn-primary flex items-center gap-2">
+        <Button onClick={() => setShowInstall(!showInstall)} variant="primary">
           <Plus size={16} />
           Install Plugin
-        </button>
+        </Button>
       </div>
 
       {/* Safe Sources Info */}
@@ -211,18 +212,20 @@ export default function Plugins() {
       </div>
 
       <div className="flex border-b border-gray-700 mb-6">
-        <button
+        <Button
+          variant="none"
           className={`py-2 px-4 border-b-2 font-medium text-sm ${activeTab === 'installed' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-gray-400 hover:text-gray-300'}`}
           onClick={() => setActiveTab('installed')}
         >
           Installed Plugins
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="none"
           className={`py-2 px-4 border-b-2 font-medium text-sm ${activeTab === 'marketplace' ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-gray-400 hover:text-gray-300'}`}
           onClick={() => setActiveTab('marketplace')}
         >
           Modrinth Marketplace
-        </button>
+        </Button>
       </div>
 
       {activeTab === 'installed' && (
@@ -243,8 +246,8 @@ export default function Plugins() {
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <button type="button" onClick={() => setShowInstall(false)} className="btn-secondary">Cancel</button>
-              <button type="submit" className="btn-primary">Install</button>
+              <Button type="button" variant="secondary" onClick={() => setShowInstall(false)}>Cancel</Button>
+              <Button type="submit" variant="primary">Install</Button>
             </div>
           </form>
         </div>
@@ -258,20 +261,22 @@ export default function Plugins() {
         </div>
 
         <div className="flex flex-wrap gap-2 mb-4">
-          <button
+          <Button
+            variant="none"
             onClick={() => setSelectedCategory('')}
             className={`text-xs px-2.5 py-1 rounded-full transition-colors ${!selectedCategory ? 'bg-minecraft-600/20 text-minecraft-400 border border-minecraft-500/20' : 'bg-surface-800 text-gray-400 border border-surface-700 hover:border-surface-600'}`}
           >
             All
-          </button>
+          </Button>
           {categories.map(cat => (
-            <button
+            <Button
               key={cat}
+              variant="none"
               onClick={() => setSelectedCategory(cat === selectedCategory ? '' : cat)}
               className={`text-xs px-2.5 py-1 rounded-full transition-colors ${cat === selectedCategory ? 'bg-minecraft-600/20 text-minecraft-400 border border-minecraft-500/20' : 'bg-surface-800 text-gray-400 border border-surface-700 hover:border-surface-600'}`}
             >
               {cat}
-            </button>
+            </Button>
           ))}
         </div>
 
@@ -290,28 +295,26 @@ export default function Plugins() {
           {filteredPopular.map(p => {
             const installing = installingPlugins.has(p.name);
             return (
-            <button
+            <Button
               key={p.name}
+              variant="none"
               onClick={() => handleQuickInstall(p)}
               disabled={installing}
-              className={`flex items-center gap-3 p-2.5 rounded-lg border transition-all text-left group ${
+              loading={installing}
+              className={`gap-3 p-2.5 rounded-lg border transition-all text-left group ${
                 installing ? 'bg-minecraft-500/10 border-minecraft-500/30 opacity-70 cursor-wait' :
                 'bg-surface-800/30 border-surface-700/30 hover:border-surface-600 hover:bg-surface-800/50'
               }`}
             >
               <div className="w-8 h-8 rounded-lg bg-minecraft-600/20 flex items-center justify-center shrink-0">
-                {installing ? (
-                  <Loader2 size={14} className="text-minecraft-400 animate-spin" />
-                ) : (
-                  <Download size={14} className="text-minecraft-400" />
-                )}
+                <Download size={14} className="text-minecraft-400" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-medium text-gray-200 truncate">{p.name}</p>
                 <p className="text-[10px] text-gray-500 truncate">{installing ? 'Downloading...' : p.desc}</p>
               </div>
               <span className="text-[10px] text-gray-600 bg-surface-800 px-1.5 py-0.5 rounded">{installing ? '...' : p.source}</span>
-            </button>
+            </Button>
             );
           })}
         </div>
@@ -336,7 +339,8 @@ export default function Plugins() {
                   <p className="text-xs text-gray-500">v{plugin.version}</p>
                 </div>
               </div>
-              <button
+              <Button
+                variant="none"
                 onClick={() => handleToggle(plugin.name)}
                 className={`p-2 rounded-lg transition-colors ${
                   plugin.enabled
@@ -346,18 +350,19 @@ export default function Plugins() {
                 title={plugin.enabled ? 'Disable' : 'Enable'}
               >
                 {plugin.enabled ? <Power size={16} /> : <PowerOff size={16} />}
-              </button>
+              </Button>
             </div>
             <p className="text-xs text-gray-400 line-clamp-2 mb-3">{plugin.description || 'No description'}</p>
             <div className="flex items-center justify-between text-xs">
               <span className="text-gray-500">by {plugin.author || 'Unknown'}</span>
-              <button
+              <Button
+                variant="none"
                 onClick={() => handleRemove(plugin.name)}
                 className="p-1 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors"
                 title="Remove"
               >
                 <Trash2 size={12} />
-              </button>
+              </Button>
             </div>
           </div>
         ))}
@@ -384,9 +389,9 @@ export default function Plugins() {
               placeholder="Search Modrinth..."
               className="input flex-1"
             />
-            <button onClick={searchModrinth} className="btn-primary flex items-center gap-2">
+            <Button variant="primary" onClick={searchModrinth}>
               <Search size={16} /> Search
-            </button>
+            </Button>
           </div>
 
           {loadingModrinth ? (
@@ -407,7 +412,8 @@ export default function Plugins() {
                     </div>
                   </div>
                   <p className="text-xs text-gray-400 line-clamp-2 mb-3 h-8">{mod.description}</p>
-                  <button
+                  <Button
+                    variant="secondary"
                     onClick={async () => {
                       if (installingPlugins.has(mod.title)) return;
                       setInstallingPlugins(prev => new Set(prev).add(mod.title));
@@ -424,15 +430,12 @@ export default function Plugins() {
                         });
                       }
                     }}
+                    loading={installingPlugins.has(mod.title)}
                     disabled={installingPlugins.has(mod.title)}
-                    className="w-full btn-secondary py-1 text-xs flex items-center justify-center gap-2"
+                    className="w-full py-1 text-xs justify-center"
                   >
-                    {installingPlugins.has(mod.title) ? (
-                      <><Loader2 size={12} className="animate-spin" /> Downloading...</>
-                    ) : (
-                      <>Download & Install</>
-                    )}
-                  </button>
+                    {installingPlugins.has(mod.title) ? 'Downloading...' : 'Download & Install'}
+                  </Button>
                 </div>
               ))}
               {modrinthResults.length === 0 && marketplaceSearch && (

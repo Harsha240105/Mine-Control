@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { ActiveServerProvider } from './hooks/useActiveServer';
 import Layout from './components/Layout';
+import { ContainerTextFlip } from './components/ui/container-text-flip';
 import { api } from './lib/api';
 import Login from './pages/Login';
 import Wizard from './pages/Wizard';
@@ -48,8 +49,11 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-surface-950">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-2 border-minecraft-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-gray-400 text-sm">Loading MineControl OS...</span>
+          <div className="w-8 h-8 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
+          <div className="text-green-400 text-sm font-semibold flex items-center gap-1.5">
+            Loading OXK Pixel, it's 
+            <ContainerTextFlip words={["better", "modern", "Tyler Durden", "awesome", "fast", "beautiful"]} />
+          </div>
         </div>
       </div>
     );

@@ -5,6 +5,7 @@ import {
   Eye, EyeOff, Globe, Users, Wifi, Download, CheckCircle, AlertCircle,
   ChevronDown, ChevronRight, Search, Cpu, Trash2, Loader2, Github
 } from 'lucide-react';
+import { Button } from '../components/ui/stateful-button';
 import pkg from '../../package.json';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
@@ -21,6 +22,9 @@ export default function Settings() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [newUsername, setNewUsername] = useState('');
+  const [usernamePassword, setUsernamePassword] = useState('');
+  const [showUsernamePassword, setShowUsernamePassword] = useState(false);
 
   // Version state
   const [versions, setVersions] = useState<any[]>([]);
@@ -120,6 +124,28 @@ export default function Settings() {
     }
   };
 
+  const handleChangeUsername = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const result = await api.changeUsername(newUsername, usernamePassword);
+      toast.success(`Username changed to ${result.username}`);
+      setNewUsername(''); setUsernamePassword('');
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleChangeBoth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await api.changeBoth(newUsername, currentPassword, newPassword);
+      toast.success('Username and password changed successfully');
+      setNewUsername(''); setCurrentPassword(''); setNewPassword('');
+    } catch (err: any) {
+      toast.error(err.message);
+    }
+  };
+
   const handleSwitchVersion = async (version: string, source: string) => {
     if (switchingVersion) return;
     setSwitchingVersion(version);
@@ -167,6 +193,29 @@ export default function Settings() {
       }
     } catch (err: any) {
       toast.error(err.message || 'Failed to uninstall');
+    }
+  };
+
+  const [developerMode, setDeveloperMode] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const val = await api.get('/server/developer-mode');
+        setDeveloperMode(val?.enabled === true);
+      } catch {}
+    })();
+  }, []);
+
+  const toggleDeveloperMode = async () => {
+    const newVal = !developerMode;
+    setDeveloperMode(newVal);
+    try {
+      await api.post('/server/developer-mode', { enabled: newVal });
+      toast.success(newVal ? 'Developer mode enabled' : 'Developer mode disabled');
+    } catch (err: any) {
+      setDeveloperMode(!newVal);
+      toast.error(err.message);
     }
   };
 
@@ -440,19 +489,59 @@ export default function Settings() {
         </div>
 
         <div className="mt-6 flex justify-end">
-          <button onClick={handleSave} className="btn-primary flex items-center gap-2">
+          <Button variant="primary" onClick={handleSave}>
             <Save size={16} />
             Save Settings
-          </button>
+          </Button>
         </div>
       </div>
+      {/* Account Settings */}
       <div className="card">
         <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
           <Shield size={16} className="text-minecraft-500" />
-          Security
+          Account
         </h3>
 
-        <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
+        {/* Change Username */}
+        <form onSubmit={handleChangeUsername} className="space-y-3 max-w-md mb-6 pb-6 border-b border-surface-700">
+          <h4 className="text-xs font-medium text-gray-400">Change Username</h4>
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">New Username</label>
+            <input
+              type="text"
+              value={newUsername}
+              onChange={(e) => setNewUsername(e.target.value)}
+              className="input"
+              required
+              minLength={3}
+              pattern="[a-zA-Z0-9_]+"
+              title="Letters, numbers, and underscores only"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Current Password</label>
+            <div className="relative">
+              <input
+                type={showUsernamePassword ? 'text' : 'password'}
+                value={usernamePassword}
+                onChange={(e) => setUsernamePassword(e.target.value)}
+                className="input pr-10"
+                required
+              />
+              <Button type="button" variant="ghost" onClick={() => setShowUsernamePassword(!showUsernamePassword)} className="absolute right-3 top-1/2 -translate-y-1/2">
+                {showUsernamePassword ? <EyeOff size={14} /> : <Eye size={14} />}
+              </Button>
+            </div>
+          </div>
+          <Button type="submit" variant="primary" className="text-sm">
+            <Key size={14} />
+            Change Username
+          </Button>
+        </form>
+
+        {/* Change Password */}
+        <form onSubmit={handleChangePassword} className="space-y-3 max-w-md mb-6 pb-6 border-b border-surface-700">
+          <h4 className="text-xs font-medium text-gray-400">Change Password</h4>
           <div>
             <label className="block text-xs font-medium text-gray-400 mb-1">Current Password</label>
             <div className="relative">
@@ -463,9 +552,9 @@ export default function Settings() {
                 className="input pr-10"
                 required
               />
-              <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200">
+              <Button type="button" variant="ghost" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2">
                 {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-              </button>
+              </Button>
             </div>
           </div>
           <div>
@@ -479,10 +568,52 @@ export default function Settings() {
               minLength={6}
             />
           </div>
-          <button type="submit" className="btn-primary flex items-center gap-2">
-            <Key size={16} />
+          <Button type="submit" variant="primary" className="text-sm">
+            <Key size={14} />
             Change Password
-          </button>
+          </Button>
+        </form>
+
+        {/* Change Both */}
+        <form onSubmit={handleChangeBoth} className="space-y-3 max-w-md">
+          <h4 className="text-xs font-medium text-gray-400">Change Both</h4>
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">New Username</label>
+            <input
+              type="text"
+              value={newUsername}
+              onChange={(e) => setNewUsername(e.target.value)}
+              className="input"
+              required
+              minLength={3}
+              pattern="[a-zA-Z0-9_]+"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">Current Password</label>
+            <input
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              className="input"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-400 mb-1">New Password</label>
+            <input
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              className="input"
+              required
+              minLength={6}
+            />
+          </div>
+          <Button type="submit" variant="primary" className="text-sm">
+            <Key size={14} />
+            Change Username & Password
+          </Button>
         </form>
       </div>
 
@@ -497,23 +628,45 @@ export default function Settings() {
         </div>
       )}
 
-        {/* GitHub Configuration Link */}
+        {/* GitHub Configuration Link (hidden unless Developer Mode is on) */}
+        {developerMode && (
+          <div className="card">
+            <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
+              <Github size={16} className="text-minecraft-500" />
+              GitHub Integration
+            </h3>
+            <p className="text-xs text-gray-400 mb-4">
+              Configure your GitHub repository for Feedback issue synchronization. Connect to
+              automatically sync bug reports, feature requests, and other feedback to GitHub Issues.
+            </p>
+            <a
+              href="/settings/github"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-minecraft-500/20 hover:bg-minecraft-500/30 text-minecraft-400 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Github size={16} />
+              Open GitHub Configuration
+            </a>
+          </div>
+        )}
+
+        {/* Developer Mode Toggle */}
         <div className="card">
           <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
-            <Github size={16} className="text-minecraft-500" />
-            GitHub Integration
+            <Cpu size={16} className="text-minecraft-500" />
+            Advanced
           </h3>
-          <p className="text-xs text-gray-400 mb-4">
-            Configure your GitHub repository for Feedback issue synchronization. Connect to
-            automatically sync bug reports, feature requests, and other feedback to GitHub Issues.
-          </p>
-          <a
-            href="/settings/github"
-            className="inline-flex items-center gap-2 px-4 py-2 bg-minecraft-500/20 hover:bg-minecraft-500/30 text-minecraft-400 rounded-lg text-sm font-medium transition-colors"
-          >
-            <Github size={16} />
-            Open GitHub Configuration
-          </a>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={developerMode}
+              onChange={toggleDeveloperMode}
+              className="rounded bg-surface-800 border-surface-600 text-minecraft-500 focus:ring-minecraft-500"
+            />
+            <div>
+              <span className="text-sm text-gray-200">Developer Mode</span>
+              <p className="text-xs text-gray-500">Show advanced configuration options (GitHub, API tokens)</p>
+            </div>
+          </label>
         </div>
 
         {/* Update Preferences */}
@@ -601,16 +754,16 @@ export default function Settings() {
             <h4 className="text-sm font-medium text-gray-200">Delete Server</h4>
             <p className="text-xs text-gray-500 mt-1">Permanently delete this server and all its files.</p>
           </div>
-          <button
+          <Button variant="danger"
             onClick={() => {
               setDeleteConfirmName('');
               setShowDeleteModal(true);
             }}
-            className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors border border-red-500/20 flex items-center gap-2"
+            className="px-4 py-2 text-sm"
           >
             <Trash2 size={16} />
             Delete Server
-          </button>
+          </Button>
         </div>
         {window.electronAPI && (
           <>
@@ -620,26 +773,26 @@ export default function Settings() {
                 <h4 className="text-sm font-medium text-gray-200">Uninstall App</h4>
                 <p className="text-xs text-gray-500 mt-1">Remove application binaries only. Your servers, worlds, and data will remain.</p>
               </div>
-              <button
+              <Button variant="none"
                 onClick={handleUninstallApp}
-                className="px-4 py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-lg text-sm transition-colors border border-orange-500/20 flex items-center gap-2"
+                className="px-4 py-2 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-lg text-sm border border-orange-500/20"
               >
                 <Trash2 size={16} />
                 Uninstall App
-              </button>
+              </Button>
             </div>
             <div className="flex items-center justify-between">
               <div>
                 <h4 className="text-sm font-medium text-gray-200">Complete Removal</h4>
                 <p className="text-xs text-gray-500 mt-1">Delete ALL MineControl OS data including servers, worlds, and backups. Cannot be undone.</p>
               </div>
-              <button
+              <Button variant="danger"
                 onClick={handleCompleteRemoval}
-                className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm transition-colors border border-red-500/20 flex items-center gap-2"
+                className="px-4 py-2 text-sm"
               >
                 <Trash2 size={16} />
                 Remove All Data
-              </button>
+              </Button>
             </div>
           </>
         )}
@@ -683,19 +836,19 @@ export default function Settings() {
               />
             </div>
             <div className="flex justify-end gap-3">
-              <button
+              <Button variant="ghost"
                 onClick={() => setShowDeleteModal(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-300 hover:text-white transition-colors"
+                className="px-4 py-2 text-sm"
               >
                 Cancel
-              </button>
-              <button
+              </Button>
+              <Button variant="danger"
                 onClick={handleDeleteServer}
                 disabled={deleteConfirmName !== serverName}
-                className="px-4 py-2 bg-red-600 hover:bg-red-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+                className="px-4 py-2 text-sm"
               >
                 Yes, Delete Server
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -765,10 +918,10 @@ function IssueTrackerConfigForm({ serverId }: { serverId: string }) {
           Auto-sync tickets
         </label>
       </div>
-      <button onClick={handleSave} disabled={saving} className="btn-primary text-xs flex items-center gap-1">
+      <Button variant="primary" onClick={handleSave} disabled={saving} className="text-xs">
         {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
         {saving ? 'Saving...' : 'Save Tracker Config'}
-      </button>
+      </Button>
     </div>
   );
 }
@@ -826,10 +979,10 @@ function SecurityHealthCard({ serverId: _serverId }: { serverId?: string }) {
             </div>
           )}
         </div>
-        <button
+        <Button variant="none"
           onClick={runCheck}
           disabled={running}
-          className="px-3 py-1.5 bg-minecraft-500/20 hover:bg-minecraft-500/30 text-minecraft-400 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 disabled:opacity-50"
+          className="px-3 py-1.5 bg-minecraft-500/20 hover:bg-minecraft-500/30 text-minecraft-400 rounded-lg text-xs font-medium disabled:opacity-50"
         >
           {running ? (
             <>
@@ -842,7 +995,7 @@ function SecurityHealthCard({ serverId: _serverId }: { serverId?: string }) {
               Run Check
             </>
           )}
-        </button>
+        </Button>
       </div>
 
       {health?.warnings?.length > 0 && (
@@ -873,15 +1026,15 @@ function SecurityHealthCard({ serverId: _serverId }: { serverId?: string }) {
         <div className="bg-surface-800/50 rounded-lg p-3">
           <p className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Quick Actions</p>
           <div className="space-y-1.5">
-            <button onClick={() => api.clearPrivacyLogs().then(() => toast.success('Logs cleared')).catch(() => toast.error('Failed'))} className="w-full text-left text-[11px] text-gray-400 hover:text-gray-200 transition-colors">
+            <Button variant="ghost" onClick={() => api.clearPrivacyLogs().then(() => toast.success('Logs cleared')).catch(() => toast.error('Failed'))} className="w-full text-left text-[11px]">
               Clear All Logs
-            </button>
-            <button onClick={() => api.clearPrivacyCache().then(() => toast.success('Cache cleared')).catch(() => toast.error('Failed'))} className="w-full text-left text-[11px] text-gray-400 hover:text-gray-200 transition-colors">
+            </Button>
+            <Button variant="ghost" onClick={() => api.clearPrivacyCache().then(() => toast.success('Cache cleared')).catch(() => toast.error('Failed'))} className="w-full text-left text-[11px]">
               Clear Cache
-            </button>
-            <button onClick={() => api.clearPrivacyFeedback().then(() => toast.success('Feedback queue cleared')).catch(() => toast.error('Failed'))} className="w-full text-left text-[11px] text-gray-400 hover:text-gray-200 transition-colors">
+            </Button>
+            <Button variant="ghost" onClick={() => api.clearPrivacyFeedback().then(() => toast.success('Feedback queue cleared')).catch(() => toast.error('Failed'))} className="w-full text-left text-[11px]">
               Clear Feedback Queue
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -975,23 +1128,17 @@ function VersionRow({ version, currentVersion, switchingVersion, onSwitch }: {
           <span className="text-xs text-gray-500">{version.type}</span>
         </div>
       </div>
-      <button
+      <Button variant="none"
         onClick={() => onSwitch(version.version, version.source)}
         disabled={isCurrent || isSwitching}
-        className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+        loading={isSwitching}
+        className={`shrink-0 px-3 py-1.5 rounded-lg text-xs font-medium ${
           isCurrent
-            ? 'bg-green-500/10 text-green-400/50 cursor-default'
-            : isSwitching
-              ? 'bg-minecraft-500/20 text-minecraft-400 cursor-wait'
-              : 'bg-minecraft-500/20 text-minecraft-400 hover:bg-minecraft-500/30 active:bg-minecraft-500/40'
+            ? 'bg-green-500/10 text-green-400/50'
+            : 'bg-minecraft-500/20 text-minecraft-400 hover:bg-minecraft-500/30 active:bg-minecraft-500/40'
         }`}
       >
-        {isSwitching ? (
-          <span className="flex items-center gap-1.5">
-            <div className="w-3 h-3 border-2 border-minecraft-400 border-t-transparent rounded-full animate-spin" />
-            Downloading...
-          </span>
-        ) : isCurrent ? (
+        {isCurrent ? (
           <span className="flex items-center gap-1.5">
             <CheckCircle size={13} />
             Active
@@ -1002,7 +1149,7 @@ function VersionRow({ version, currentVersion, switchingVersion, onSwitch }: {
             {isDownloaded ? 'Switch' : 'Download'}
           </span>
         )}
-      </button>
+      </Button>
     </div>
   );
 }

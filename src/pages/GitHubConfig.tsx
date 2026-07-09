@@ -1,13 +1,28 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Github, Save, CheckCircle, XCircle, Loader2, Eye, EyeOff, ArrowLeft
+  Github, Save, CheckCircle, XCircle, Loader2, Eye, EyeOff, ArrowLeft, Lock
 } from 'lucide-react';
 import { api } from '../lib/api';
+import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
 
 export default function GitHubConfig() {
+  const { isOwner } = useAuth();
   const navigate = useNavigate();
+
+  if (!isOwner) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <Lock className="w-12 h-12 mx-auto text-gray-600" />
+          <p className="text-gray-400 text-sm font-medium">Access Restricted</p>
+          <p className="text-gray-500 text-xs">Only the application owner can access GitHub features.</p>
+        </div>
+      </div>
+    );
+  }
+
   const [owner, setOwner] = useState('');
   const [repo, setRepo] = useState('');
   const [token, setToken] = useState('');

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Zap, Cpu, Save, FileCode, RotateCw, CheckCircle, XCircle } from 'lucide-react';
+import { Button } from '../components/ui/stateful-button';
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { useActiveServer } from '../hooks/useActiveServer';
@@ -195,10 +196,10 @@ export default function PerformanceSettings() {
               Current: <span className="text-gray-500">{tune.current.currentFlags.length} flags</span>
             </div>
           )}
-          <button onClick={saveJvmFlags} className="btn-primary flex items-center gap-2">
+          <Button variant="primary" onClick={saveJvmFlags}>
             <Save size={16} />
             Save Flags
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -208,10 +209,10 @@ export default function PerformanceSettings() {
           Generate Optimized Config Files
         </h3>
         <p className="text-xs text-gray-500 mb-3">Generates paper.yml, bukkit.yml, spigot.yml, pufferfish.yml, purpur.yml with optimized settings for your server.</p>
-        <button onClick={generateYml} className="btn-primary flex items-center gap-2">
+        <Button variant="primary" onClick={generateYml}>
           <FileCode size={16} />
           Generate YML Files
-        </button>
+        </Button>
         {ymlGenerated.length > 0 && (
           <div className="mt-3 space-y-1">
             {ymlGenerated.map(f => (

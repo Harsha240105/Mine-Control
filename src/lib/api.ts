@@ -149,6 +149,18 @@ export const api = {
       body: JSON.stringify({ currentPassword, newPassword }),
     }),
 
+  changeUsername: (newUsername: string, password: string) =>
+    request<{ success: boolean; username: string }>('/auth/change-username', {
+      method: 'POST',
+      body: JSON.stringify({ newUsername, password }),
+    }),
+
+  changeBoth: (newUsername: string, currentPassword: string, newPassword: string) =>
+    request<{ success: boolean; username: string }>('/auth/change-both', {
+      method: 'POST',
+      body: JSON.stringify({ newUsername, currentPassword, newPassword }),
+    }),
+
   // Server
   getServerStatus: () => request<any>('/server/status'),
   startServer: () =>

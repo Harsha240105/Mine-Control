@@ -16,6 +16,7 @@ import {
 import { api } from '../lib/api';
 import toast from 'react-hot-toast';
 import { useActiveServer } from '../hooks/useActiveServer';
+import { Button } from '../components/ui/stateful-button';
 
 interface DiagnosticCheck {
   name: string;
@@ -123,21 +124,17 @@ export default function Diagnostics() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={loadDiagnostics} className="btn-ghost p-2" title="Refresh">
+          <Button variant="ghost" onClick={loadDiagnostics} className="p-2" title="Refresh">
             <RefreshCw size={16} />
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
             onClick={runHealthCheck}
-            disabled={runningHealthCheck}
-            className="btn-primary flex items-center gap-2"
+            loading={runningHealthCheck}
           >
-            {runningHealthCheck ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            ) : (
-              <Activity size={16} />
-            )}
+            <Activity size={16} />
             Run Health Check
-          </button>
+          </Button>
         </div>
       </div>
 

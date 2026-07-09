@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { api, ApiError } from '../lib/api';
+import { useAuth } from '../hooks/useAuth';
 import toast from 'react-hot-toast';
 import {
   Github, CheckCircle, XCircle, AlertTriangle, RefreshCw,
-  Server, Clock, List, ExternalLink, Loader2, Activity,
+  Server, Clock, List, ExternalLink, Loader2, Activity, Lock,
 } from 'lucide-react';
 
 interface CheckItem {
@@ -20,12 +21,25 @@ interface SyncStats {
 }
 
 export default function GitHubDiagnostics() {
+  const { isOwner } = useAuth();
   const [checks, setChecks] = useState<CheckItem[]>([]);
   const [sync, setSync] = useState<SyncStats | null>(null);
   const [overall, setOverall] = useState<string>('pending');
   const [loading, setLoading] = useState(true);
   const [testing, setTesting] = useState(false);
   const [retrying, setRetrying] = useState(false);
+
+  if (!isOwner) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center space-y-3">
+          <Lock className="w-12 h-12 mx-auto text-gray-600" />
+          <p className="text-gray-400 text-sm font-medium">Access Restricted</p>
+          <p className="text-gray-500 text-xs">Only the application owner can access GitHub features.</p>
+        </div>
+      </div>
+    );
+  }
 
   const fetchDiagnostics = async () => {
     setLoading(true);

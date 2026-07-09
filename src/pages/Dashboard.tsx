@@ -41,6 +41,7 @@ import { useActiveServer } from '../hooks/useActiveServer';
 import toast from 'react-hot-toast';
 import PlayerDetails from '../components/PlayerDetails';
 import RepairFlow from '../components/RepairFlow';
+import { Button } from '../components/ui/stateful-button';
 
 interface StatusData {
   serverId: string;
@@ -453,12 +454,13 @@ export default function Dashboard() {
             <p className="text-gray-300 text-sm font-medium">Backend Unavailable</p>
             <p className="text-gray-500 text-xs mt-1">Cannot reach the server API. Make sure the backend is running on port 3001.</p>
           </div>
-          <button
+          <Button
+            variant="primary"
             onClick={() => { setConnecting(true); fetchStatus(); }}
-            className="btn-primary text-xs"
+            className="text-xs"
           >
             Retry Connection
-          </button>
+          </Button>
         </div>
       </div>
     );

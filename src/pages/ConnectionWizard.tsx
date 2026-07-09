@@ -2,13 +2,14 @@ import { useEffect, useState, useCallback } from 'react';
 import { api } from '../lib/api';
 import {
   Monitor, Network, Globe, Wifi, Copy, Check, Shield, ShieldOff,
-  ExternalLink, Play, RefreshCw, Loader, Server, ArrowRight,
+  ExternalLink, Play, RefreshCw, Server, ArrowRight,
   CheckCircle, XCircle, HelpCircle, Radio, Zap, Users, Clock,
-  Activity, History, Settings, ChevronDown, ChevronUp,
+  Activity, History, Settings, ChevronDown, ChevronUp, Loader2
 } from 'lucide-react';
 import { useActiveServer } from '../hooks/useActiveServer';
 import { useSocket } from '../hooks/useSocket';
 import toast from 'react-hot-toast';
+import { Button } from '../components/ui/stateful-button';
 
 interface ConnectionWizardData {
   localAddress: string;
@@ -177,7 +178,7 @@ export default function ConnectionWizard() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="flex flex-col items-center gap-3">
-          <Loader size={24} className="text-minecraft-500 animate-spin" />
+          <Loader2 size={24} className="text-minecraft-500 animate-spin" />
           <span className="text-sm text-gray-400">Detecting connection methods...</span>
         </div>
       </div>
@@ -205,10 +206,10 @@ export default function ConnectionWizard() {
             Automatically detected the best way for your friends to connect
           </p>
         </div>
-        <button onClick={handleRefresh} disabled={refreshing} className="btn-secondary flex items-center gap-2 text-sm">
+        <Button variant="secondary" onClick={handleRefresh} loading={refreshing} className="text-sm">
           <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-          {refreshing ? 'Refreshing...' : 'Refresh'}
-        </button>
+          Refresh
+        </Button>
       </div>
 
       {/* Recommended Method Banner */}
@@ -232,7 +233,8 @@ export default function ConnectionWizard() {
                    method === 'playit' ? data?.allMethods.playit.address :
                    data?.allMethods.public.address || 'N/A'}
                 </code>
-                <button
+                <Button
+                  variant="none"
                   onClick={() => handleCopy(
                     method === 'localhost' ? data?.allMethods.localhost.address || '' :
                     method === 'lan' ? data?.allMethods.lan.address || '' :
@@ -242,7 +244,7 @@ export default function ConnectionWizard() {
                   className="p-2 rounded-lg bg-surface-800 text-gray-400 hover:text-gray-200 transition-colors"
                 >
                   {copied === 'Recommended' ? <Check size={16} className="text-green-400" /> : <Copy size={16} />}
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -267,12 +269,13 @@ export default function ConnectionWizard() {
             {data?.allMethods.localhost.address || 'N/A'}
           </code>
           <div className="flex gap-2">
-            <button
+            <Button
+              variant="none"
               onClick={() => handleCopy(data?.allMethods.localhost.address || '', 'Localhost')}
               className="flex-1 text-xs bg-surface-800 hover:bg-surface-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors"
             >
               {copied === 'Localhost' ? 'Copied!' : 'Copy Address'}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -299,20 +302,23 @@ export default function ConnectionWizard() {
           )}
           <div className="flex gap-2 flex-wrap">
             {data?.lanAddress && (
-              <button
+              <Button
+                variant="none"
                 onClick={() => handleCopy(data.lanAddress, 'LAN')}
                 className="flex-1 text-xs bg-surface-800 hover:bg-surface-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors"
               >
                 {copied === 'LAN' ? 'Copied!' : 'Copy Address'}
-              </button>
+              </Button>
             )}
             {!data?.firewallActive && data?.serverRunning && (
-              <button
+              <Button
+                variant="none"
                 onClick={() => handleFirewallAction('add', () => api.addFirewallRule(), 'Add Firewall Rule')}
+                loading={firewallBusy === 'add'}
                 className="text-xs bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 px-3 py-1.5 rounded-lg transition-colors"
               >
-                {firewallBusy === 'add' ? 'Adding...' : 'Open Firewall'}
-              </button>
+                Open Firewall
+              </Button>
             )}
           </div>
         </div>
@@ -338,12 +344,13 @@ export default function ConnectionWizard() {
           )}
           <div className="flex gap-2 flex-wrap">
             {data?.playitAddress && (
-              <button
+              <Button
+                variant="none"
                 onClick={() => handleCopy(data.playitAddress, 'Playit')}
                 className="flex-1 text-xs bg-surface-800 hover:bg-surface-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors"
               >
                 {copied === 'Playit' ? 'Copied!' : 'Copy Address'}
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -357,14 +364,16 @@ export default function ConnectionWizard() {
             <Zap size={16} className="text-minecraft-500" />
             Connection Test
           </h3>
-          <button
+          <Button
+            variant="primary"
             onClick={handleTestConnection}
             disabled={testingConnection || !data?.serverRunning}
-            className="btn-primary flex items-center gap-2 text-sm mb-3"
+            loading={testingConnection}
+            className="text-sm mb-3"
           >
-            {testingConnection ? <Loader size={14} className="animate-spin" /> : <Play size={14} />}
-            {testingConnection ? 'Testing...' : 'Test Join'}
-          </button>
+            <Play size={14} />
+            Test Join
+          </Button>
 
           {pingResult && (
             <div className="space-y-2 text-sm">
@@ -429,50 +438,59 @@ export default function ConnectionWizard() {
           </div>
           <div className="flex flex-wrap gap-2">
             {!firewallStatus?.exists && (
-              <button
+              <Button
+                variant="primary"
                 onClick={() => handleFirewallAction('add', () => api.addFirewallRule(), 'Add Firewall Rule')}
                 disabled={firewallBusy !== null}
-                className="btn-primary flex items-center gap-1 text-xs"
+                loading={firewallBusy === 'add'}
+                className="text-xs"
               >
-                {firewallBusy === 'add' ? <Loader size={12} className="animate-spin" /> : <Shield size={12} />}
-                {firewallBusy === 'add' ? 'Adding...' : 'Add Rule'}
-              </button>
+                <Shield size={12} />
+                Add Rule
+              </Button>
             )}
             {firewallStatus?.exists && (
               <>
-                <button
+                <Button
+                  variant="none"
                   onClick={() => handleFirewallAction('remove', () => api.removeFirewallRule(), 'Remove Firewall Rule')}
                   disabled={firewallBusy !== null}
-                  className="text-xs bg-red-600/20 hover:bg-red-600/30 text-red-400 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                  loading={firewallBusy === 'remove'}
+                  className="text-xs bg-red-600/20 hover:bg-red-600/30 text-red-400 px-3 py-1.5 rounded-lg transition-colors"
                 >
-                  {firewallBusy === 'remove' ? <Loader size={12} className="animate-spin" /> : <ShieldOff size={12} />}
-                  {firewallBusy === 'remove' ? 'Removing...' : 'Remove'}
-                </button>
-                <button
+                  <ShieldOff size={12} />
+                  Remove
+                </Button>
+                <Button
+                  variant="none"
                   onClick={() => handleFirewallAction('repair', () => api.repairFirewallRule(), 'Repair Firewall Rule')}
                   disabled={firewallBusy !== null}
-                  className="text-xs bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                  loading={firewallBusy === 'repair'}
+                  className="text-xs bg-yellow-600/20 hover:bg-yellow-600/30 text-yellow-400 px-3 py-1.5 rounded-lg transition-colors"
                 >
-                  {firewallBusy === 'repair' ? <Loader size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-                  {firewallBusy === 'repair' ? 'Repairing...' : 'Repair'}
-                </button>
-                <button
+                  <RefreshCw size={12} />
+                  Repair
+                </Button>
+                <Button
+                  variant="none"
                   onClick={() => handleFirewallAction('verify', () => api.verifyFirewallPort(data?.port || 25565), 'Verify Firewall')}
                   disabled={firewallBusy !== null}
-                  className="text-xs bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+                  loading={firewallBusy === 'verify'}
+                  className="text-xs bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 px-3 py-1.5 rounded-lg transition-colors"
                 >
-                  {firewallBusy === 'verify' ? <Loader size={12} className="animate-spin" /> : <Check size={12} />}
+                  <Check size={12} />
                   Verify
-                </button>
+                </Button>
               </>
             )}
-            <button
+            <Button
+              variant="none"
               onClick={() => api.openFirewall().then(r => toast.success(r.message)).catch(() => toast.error('Failed to open firewall'))}
-              className="text-xs bg-surface-800 hover:bg-surface-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+              className="text-xs bg-surface-800 hover:bg-surface-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors"
             >
               <ExternalLink size={12} />
               Open Settings
-            </button>
+            </Button>
           </div>
           {!firewallStatus?.isAdmin && (
             <p className="text-[11px] text-yellow-500 mt-2">Run as Administrator to modify firewall rules</p>
@@ -488,14 +506,16 @@ export default function ConnectionWizard() {
             Server Validation
           </h3>
           {data?.serverRunning && (
-            <button
+            <Button
+              variant="none"
               onClick={handleValidate}
               disabled={validating}
-              className="text-xs bg-surface-800 hover:bg-surface-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors flex items-center gap-1"
+              loading={validating}
+              className="text-xs bg-surface-800 hover:bg-surface-700 text-gray-300 px-3 py-1.5 rounded-lg transition-colors"
             >
-              {validating ? <Loader size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-              {validating ? 'Validating...' : 'Run Checks'}
-            </button>
+              <RefreshCw size={12} />
+              Run Checks
+            </Button>
           )}
         </div>
 
@@ -568,8 +588,9 @@ export default function ConnectionWizard() {
           <div className="text-xs text-gray-500 mb-2">Preferred Connection Mode</div>
           <div className="grid grid-cols-2 gap-2 mb-4">
             {['auto', 'localhost', 'lan', 'playit', 'public'].map((mode) => (
-              <button
+              <Button
                 key={mode}
+                variant="none"
                 onClick={() => handleSetPreferredMode(mode)}
                 className={`text-xs px-3 py-2 rounded-lg transition-colors capitalize ${
                   preferredMode === mode
@@ -578,18 +599,19 @@ export default function ConnectionWizard() {
                 }`}
               >
                 {mode === 'auto' ? 'Auto Detect' : mode}
-              </button>
+              </Button>
             ))}
           </div>
 
-          <button
+          <Button
+            variant="none"
             onClick={() => setShowHistory(!showHistory)}
-            className="flex items-center gap-1 text-xs text-gray-400 hover:text-gray-200 transition-colors"
+            className="text-xs text-gray-400 hover:text-gray-200 transition-colors"
           >
             <History size={12} />
             Diagnostics History ({diagHistory.length})
             {showHistory ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-          </button>
+          </Button>
 
           {showHistory && (
             <div className="mt-2 space-y-1 max-h-48 overflow-y-auto custom-scrollbar">

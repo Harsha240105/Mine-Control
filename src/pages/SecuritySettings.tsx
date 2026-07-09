@@ -3,6 +3,7 @@ import { Shield, Key, Smartphone, Plus, Trash2, ToggleLeft, ToggleRight, CheckCi
 import { api } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 import { useActiveServer } from '../hooks/useActiveServer';
+import { Button } from '../components/ui/stateful-button';
 import toast from 'react-hot-toast';
 
 interface IPEntry {
@@ -146,9 +147,10 @@ export default function SecuritySettings() {
       </div>
 
       <div className="flex gap-1 overflow-x-auto pb-2 border-b border-surface-800">
-        <button
+        <Button
+          variant="none"
           onClick={() => setTab('2fa')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm whitespace-nowrap transition-colors ${
+          className={`px-4 py-2 rounded-lg text-sm whitespace-nowrap transition-colors ${
             tab === '2fa'
               ? 'bg-minecraft-500/10 text-minecraft-400 border border-minecraft-500/20'
               : 'text-gray-500 hover:text-gray-300 hover:bg-surface-800'
@@ -156,10 +158,11 @@ export default function SecuritySettings() {
         >
           <Smartphone size={16} />
           Two-Factor Auth
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="none"
           onClick={() => setTab('whitelist')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm whitespace-nowrap transition-colors ${
+          className={`px-4 py-2 rounded-lg text-sm whitespace-nowrap transition-colors ${
             tab === 'whitelist'
               ? 'bg-minecraft-500/10 text-minecraft-400 border border-minecraft-500/20'
               : 'text-gray-500 hover:text-gray-300 hover:bg-surface-800'
@@ -167,7 +170,7 @@ export default function SecuritySettings() {
         >
           <Shield size={16} />
           IP Whitelist
-        </button>
+        </Button>
       </div>
 
       {tab === '2fa' && (
@@ -194,10 +197,10 @@ export default function SecuritySettings() {
                       placeholder="Current password"
                       className="input flex-1"
                     />
-                    <button onClick={disableTFA} className="btn-danger flex items-center gap-2">
+                    <Button variant="danger" onClick={disableTFA}>
                       <XCircle size={16} />
                       Disable 2FA
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -216,10 +219,10 @@ export default function SecuritySettings() {
                 <label className="block text-xs text-gray-500 mb-1">Or enter this secret manually</label>
                 <div className="flex gap-2">
                   <input readOnly value={tfaSecret} className="input flex-1 font-mono text-xs" />
-                  <button onClick={() => { navigator.clipboard.writeText(tfaSecret); toast.success('Secret copied'); }} className="btn-secondary flex items-center gap-2">
+                  <Button variant="secondary" onClick={() => { navigator.clipboard.writeText(tfaSecret); toast.success('Secret copied'); }}>
                     <Copy size={14} />
                     Copy
-                  </button>
+                  </Button>
                 </div>
               </div>
 
@@ -231,10 +234,10 @@ export default function SecuritySettings() {
                       <div key={i}>{c}</div>
                     ))}
                   </div>
-                  <button onClick={copyRecoveryCodes} className="btn-secondary flex items-center gap-2 mt-2 text-xs">
+                  <Button variant="secondary" onClick={copyRecoveryCodes} className="mt-2 text-xs">
                     <Copy size={12} />
                     Copy Codes
-                  </button>
+                  </Button>
                 </div>
               )}
 
@@ -248,20 +251,20 @@ export default function SecuritySettings() {
                     maxLength={6}
                     className="input w-32 font-mono text-center text-lg"
                   />
-                  <button onClick={verifyTFA} className="btn-primary flex items-center gap-2">
+                  <Button variant="primary" onClick={verifyTFA}>
                     <CheckCircle size={16} />
                     Verify & Enable
-                  </button>
+                  </Button>
                 </div>
               </div>
             </div>
           ) : (
             <div>
               <p className="text-sm text-gray-500 mb-4">Add an extra layer of security by requiring a one-time code from your authenticator app when logging in.</p>
-              <button onClick={setupTFA} className="btn-primary flex items-center gap-2">
+              <Button variant="primary" onClick={setupTFA}>
                 <Smartphone size={16} />
                 Set Up 2FA
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -275,7 +278,7 @@ export default function SecuritySettings() {
                 <Shield size={16} className="text-minecraft-500" />
                 IP Whitelist
               </h3>
-              <button onClick={toggleWhitelist} className="flex items-center gap-2 text-sm">
+              <Button variant="none" onClick={toggleWhitelist} className="text-sm">
                 {whitelistEnabled ? (
                   <ToggleRight size={20} className="text-minecraft-400" />
                 ) : (
@@ -284,7 +287,7 @@ export default function SecuritySettings() {
                 <span className={whitelistEnabled ? 'text-minecraft-400' : 'text-gray-500'}>
                   {whitelistEnabled ? 'Enabled' : 'Disabled'}
                 </span>
-              </button>
+              </Button>
             </div>
             <p className="text-xs text-gray-500 mb-4">Only allow access from specified IP addresses. When enabled, all other IPs will be blocked from accessing this server.</p>
 
@@ -301,10 +304,10 @@ export default function SecuritySettings() {
                 placeholder="Description (optional)"
                 className="input w-48"
               />
-              <button onClick={addWhitelistEntry} disabled={!newIp} className="btn-primary flex items-center gap-2">
+              <Button variant="primary" onClick={addWhitelistEntry} disabled={!newIp}>
                 <Plus size={16} />
                 Add
-              </button>
+              </Button>
             </div>
 
             {whitelistEntries.length === 0 ? (
@@ -322,9 +325,9 @@ export default function SecuritySettings() {
                         Added by {entry.created_by || 'system'} on {new Date(entry.created_at).toLocaleDateString()}
                       </div>
                     </div>
-                    <button onClick={() => removeWhitelistEntry(entry.id)} className="text-gray-500 hover:text-red-400 transition-colors">
+                    <Button variant="none" onClick={() => removeWhitelistEntry(entry.id)} className="text-gray-500 hover:text-red-400 transition-colors">
                       <Trash2 size={16} />
-                    </button>
+                    </Button>
                   </div>
                 ))}
               </div>
