@@ -346,12 +346,12 @@ export default function Layout() {
         style={{ width: 350 }} 
       >
         <svg 
-          className="absolute inset-0 drop-shadow-[0_0_30px_rgba(59,130,246,0.1)] cursor-ns-resize" 
-          style={{ pointerEvents: 'visiblePainted' }}
+          className="absolute inset-0 drop-shadow-[0_0_30px_rgba(59,130,246,0.1)] cursor-ns-resize pointer-events-none" 
           width="350" 
           height={h}
         >
           <motion.path 
+            className="pointer-events-auto"
             d={svgPath}
             fill="#0E1422" 
             stroke="rgba(255,255,255,0.05)"
