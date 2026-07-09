@@ -59,7 +59,7 @@ function CarouselItem({ item, i, smoothScroll, isHovered, N, bulgeValue, handleI
     if (bulge <= 72) return 14; 
     const extraBulge = bulge - 72;
     const strength = Math.max(0, 1 - Math.pow(v / 4.5, 2)); 
-    return 14 + strength * (extraBulge - 50); 
+    return 14 + strength * (extraBulge * 0.1); 
   });
 
   const scale = useTransform(offset, [-4.5, -1.5, 0, 1.5, 4.5], [0.75, 0.95, 1.25, 0.95, 0.75]);
@@ -111,15 +111,14 @@ function CarouselItem({ item, i, smoothScroll, isHovered, N, bulgeValue, handleI
       <AnimatePresence>
         {isHovered && isCenter && (
           <motion.div
-            initial={{ opacity: 0, x: -10 }}
-            animate={{ opacity: 1, x: 16 }}
-            exit={{ opacity: 0, x: -10 }}
+            initial={{ opacity: 0, x: -5 }}
+            animate={{ opacity: 1, x: 4 }}
+            exit={{ opacity: 0, x: -5 }}
             transition={{ duration: 0.18, ease: "easeOut" }}
-            className="absolute left-[44px] whitespace-nowrap text-white font-medium drop-shadow-lg text-[15px] pointer-events-none"
+            className="absolute left-[36px] whitespace-nowrap text-white font-medium drop-shadow-lg text-[13px] pointer-events-none"
           >
-             <div className="flex items-center gap-3">
-                 <div className="w-12 h-[1.5px] bg-white/20" />
-                 {item.label}
+             <div className="flex items-center" title={item.label}>
+                 <span className="truncate max-w-[50px] block">{item.label}</span>
              </div>
           </motion.div>
         )}
@@ -164,7 +163,7 @@ export default function Layout() {
     let timeout: NodeJS.Timeout;
     if (isHovered) {
       timeout = setTimeout(() => {
-        bulgeValue.set(260);
+        bulgeValue.set(92);
       }, 40);
     } else {
       bulgeValue.set(72);
