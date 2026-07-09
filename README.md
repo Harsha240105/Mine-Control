@@ -18,7 +18,11 @@
 
 ## End-to-End Project Summary
 
-MineControl OS is a comprehensive, standalone desktop application designed to streamline and automate the entire lifecycle of a Minecraft server. From a single-click server creation process that handles downloading jars, accepting the EULA, and configuring ports, to advanced performance tuning with auto-calculated JVM flags based on system resources. It offers robust multi-server isolation, ensuring separate configurations, worlds, plugins, and mods for every server instance. Furthermore, the platform integrates seamlessly with Discord for real-time chat bridging and alerts, features a secure two-factor authentication system with role-based access, automated system backups with integrity checks, a complete plugin and mod management system via Modrinth and other sources, and a newly implemented modern interface with Apple-style floating docks and Evervault hover cards.
+MineControl OS has evolved into a robust, self-hosted Minecraft Server Management Platform. Recent updates include:
+- **UI Enhancements**: Fixed a critical Chrome-specific layout bug where the sidebar's invisible SVG bounding box intercepted clicks on the main page (e.g., Discord Save Configuration button) by restructuring `pointer-events-none` on the SVG wrapper and `pointer-events-auto` strictly on the painted SVG path. Truncated long sidebar labels and reduced expansion distance for better UX.
+- **Discord Integration**: Robust handling of bot tokens with masked frontend inputs preventing accidental overrides during partial updates, and automatic socket-based status reporting.
+- **Software Downloads**: Upgraded infrastructure using robust websocket progress tracking, PowerShell chunked extraction, and `Expand-Archive` support on Windows for Java/server downloads.
+- **System Stability**: Prevented false positives during GitHub feedback requests and properly isolated API rate-limiting endpoints.
 
 **Recent Updates:**
 - Improved Sidebar UI responsiveness by fixing SVG hit-boxes.
