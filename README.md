@@ -7,7 +7,7 @@
     <img src="https://img.shields.io/badge/Download%20for%20Windows-0078D6?style=for-the-badge&logo=windows&logoColor=white" alt="Download Windows Installer"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/releases">
-    <img src="https://img.shields.io/badge/v1.1.3-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
+    <img src="https://img.shields.io/badge/v1.1.4-32CD32?style=for-the-badge&logo=github&logoColor=white" alt="Latest Release"/>
   </a>
   <a href="https://github.com/Harsha240105/Mine-Control/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/license-MIT-blue?style=for-the-badge" alt="MIT License"/>
@@ -24,7 +24,8 @@ MineControl OS has evolved into a robust, self-hosted Minecraft Server Managemen
 - **Software Downloads**: Upgraded infrastructure using robust websocket progress tracking, PowerShell chunked extraction, and `Expand-Archive` support on Windows for Java/server downloads.
 - **System Stability**: Prevented false positives during GitHub feedback requests and properly isolated API rate-limiting endpoints.
 
-**Recent Updates:**
+**Recent Updates (v1.1.4):**
+- **E2E Testing:** Added comprehensive end-to-end testing with Playwright to ensure robust UI interactions.
 - Improved Sidebar UI responsiveness by fixing SVG hit-boxes.
 - Enhanced Java and Server Software Downloader with a real-time progress indicator directly in the UI and native PowerShell extraction on Windows to prevent file locking issues.
 - Fixed Discord Bot Token edge cases during configuration re-saves.
