@@ -24,7 +24,8 @@ MineControl OS has evolved into a robust, self-hosted Minecraft Server Managemen
 - **Software Downloads**: Upgraded infrastructure using robust websocket progress tracking, PowerShell chunked extraction, and `Expand-Archive` support on Windows for Java/server downloads.
 - **System Stability**: Prevented false positives during GitHub feedback requests and properly isolated API rate-limiting endpoints.
 
-**Recent Updates (v1.1.4):**
+**Recent Updates (v1.1.4 & v1.1.5):**
+- **Updater Fix:** Resolved an issue where a version mismatch in `package.json` prevented the GitHub Actions workflow from attaching installer assets to the release, fixing the "No updates available yet" error for users.
 - **E2E Testing:** Added comprehensive end-to-end testing with Playwright to ensure robust UI interactions.
 - Improved Sidebar UI responsiveness by fixing SVG hit-boxes.
 - Enhanced Java and Server Software Downloader with a real-time progress indicator directly in the UI and native PowerShell extraction on Windows to prevent file locking issues.
