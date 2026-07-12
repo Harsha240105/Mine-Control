@@ -1,22 +1,22 @@
-import { db } from './baseRepository';
+import { getDatabase } from '../../database';
 import type { ServerRow } from '../../core/types';
 import { v4 as uuidv4 } from 'uuid';
 
 export function getServerById(id: string): ServerRow | null {
-  return db().prepare('SELECT * FROM servers WHERE id = ?').get(id) as any || null;
+  return getDatabase().prepare('SELECT * FROM servers WHERE id = ?').get(id) as any || null;
 }
 
 export function getServerBySlug(slug: string): ServerRow | null {
-  return db().prepare('SELECT * FROM servers WHERE slug = ?').get(slug) as any || null;
+  return getDatabase().prepare('SELECT * FROM servers WHERE slug = ?').get(slug) as any || null;
 }
 
 export function getAllServers(): ServerRow[] {
-  return db().prepare('SELECT * FROM servers ORDER BY created_at ASC').all() as any[];
+  return getDatabase().prepare('SELECT * FROM servers ORDER BY created_at ASC').all() as any[];
 }
 
 export function createServer(data: Partial<ServerRow> & { name: string; slug: string; directory: string }): ServerRow {
   const id = data.id || uuidv4();
-  db().prepare(`
+  getDatabase().prepare(`
     INSERT INTO servers (id, name, slug, port, directory, version, version_source, javaPath, jarFile, minRam, maxRam, motd, difficulty, gamemode, status)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'stopped')
   `).run(
@@ -47,13 +47,13 @@ export function updateServer(id: string, data: Partial<ServerRow>): void {
   if (fields.length === 0) return;
   fields.push("updated_at = datetime('now')");
   values.push(id);
-  db().prepare(`UPDATE servers SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+  getDatabase().prepare(`UPDATE servers SET ${fields.join(', ')} WHERE id = ?`).run(...values);
 }
 
 export function deleteServer(id: string): void {
-  db().prepare('DELETE FROM servers WHERE id = ?').run(id);
+  getDatabase().prepare('DELETE FROM servers WHERE id = ?').run(id);
 }
 
 export function updateServerStatus(id: string, status: string): void {
-  db().prepare("UPDATE servers SET status = ?, updated_at = datetime('now') WHERE id = ?").run(status, id);
+  getDatabase().prepare("UPDATE servers SET status = ?, updated_at = datetime('now') WHERE id = ?").run(status, id);
 }

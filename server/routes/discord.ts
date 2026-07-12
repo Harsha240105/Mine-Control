@@ -6,7 +6,6 @@ import { discordService } from '../services/discord';
 
 const router = express.Router();
 
-// Get full Discord configuration + bot status
 router.get('/', authMiddleware, (req: AuthRequest, res) => {
   const activeId = getActiveServerId();
   if (!activeId) return res.json({ configured: false, error: 'No active server' });
@@ -42,12 +41,12 @@ router.get('/', authMiddleware, (req: AuthRequest, res) => {
     botStatus: row.bot_status || 'disconnected',
     lastConnectedAt: row.last_connected_at,
     lastError: row.last_error || '',
-  } : { configured: false };
+    isConfigured: true,
+  } : { configured: false, isConfigured: false };
 
   res.json({ ...config, ...discordService.getStatus() });
 });
 
-// Save Discord configuration
 router.post('/', authMiddleware, requirePermission('settings.edit'), async (req: AuthRequest, res) => {
   const db = getDatabase();
   const activeId = getActiveServerId();
@@ -71,7 +70,6 @@ router.post('/', authMiddleware, requirePermission('settings.edit'), async (req:
   for (const f of fields) {
     const val = req.body[f];
     if (val !== undefined) {
-      // Skip masked placeholder token and empty strings to avoid accidentally overwriting the real token
       if (f === 'bot_token' && (val === '••••••••' || val === '') && existing) continue;
       updateFields.push(`${f} = ?`);
       values.push(typeof val === 'boolean' ? (val ? 1 : 0) : val);
@@ -90,7 +88,6 @@ router.post('/', authMiddleware, requirePermission('settings.edit'), async (req:
     db.prepare(`INSERT INTO discord_config (server_id, ${colKeys.join(', ')}) VALUES (?, ${colKeys.map(() => '?').join(', ')})`).run(activeId, ...colVals);
   }
 
-  // Reconnect if token/channel changed
   const reqToken = req.body.bot_token;
   const token = reqToken !== undefined && reqToken !== '••••••••' ? reqToken :
     (db.prepare('SELECT bot_token FROM discord_config WHERE server_id = ?').get(activeId) as any)?.bot_token || '';
@@ -100,19 +97,23 @@ router.post('/', authMiddleware, requirePermission('settings.edit'), async (req:
     (db.prepare('SELECT voice_channel_id FROM discord_config WHERE server_id = ?').get(activeId) as any)?.voice_channel_id || '';
 
   let connectResult = true;
-  if (req.body.bot_token !== undefined || req.body.text_channel_id !== undefined || req.body.voice_channel_id !== undefined) {
+  const tokenChanged = req.body.bot_token !== undefined && req.body.bot_token !== '••••••••';
+  const channelChanged = req.body.text_channel_id !== undefined;
+
+  if (tokenChanged || channelChanged) {
     if (token && textChan) {
       connectResult = await discordService.connect(token, textChan, voiceChan);
     } else {
       await discordService.disconnect();
     }
+  } else if (req.body.auto_reconnect !== undefined && req.body.auto_reconnect && !discordService.connected && token && textChan) {
+    connectResult = await discordService.connect(token, textChan, voiceChan);
   }
 
   const status = discordService.getStatus();
   res.json({ success: true, connected: connectResult, lastError: status.lastError || '' });
 });
 
-// Connect Discord bot
 router.post('/connect', authMiddleware, requirePermission('settings.edit'), async (req: AuthRequest, res) => {
   const activeId = getActiveServerId();
   if (!activeId) return res.status(400).json({ error: 'No active server' });
@@ -126,25 +127,21 @@ router.post('/connect', authMiddleware, requirePermission('settings.edit'), asyn
   res.json({ success: ok, status: discordService.getStatus() });
 });
 
-// Disconnect Discord bot
 router.post('/disconnect', authMiddleware, requirePermission('settings.edit'), async (_req: AuthRequest, res) => {
   await discordService.disconnect();
   res.json({ success: true, status: discordService.getStatus() });
 });
 
-// Reconnect Discord bot
 router.post('/reconnect', authMiddleware, requirePermission('settings.edit'), async (_req: AuthRequest, res) => {
   const ok = await discordService.reconnect();
   res.json({ success: ok, status: discordService.getStatus() });
 });
 
-// Test connection (without saving)
 router.post('/test', authMiddleware, async (req: AuthRequest, res) => {
   const { botToken, textChannelId } = req.body;
   if (!textChannelId) {
     return res.status(400).json({ success: false, message: 'Channel ID required' });
   }
-  // If frontend sends the masked placeholder, read the real token from DB
   const token = botToken && botToken !== '••••••••' ? botToken :
     (() => { const row = getDatabase().prepare('SELECT bot_token FROM discord_config WHERE server_id = ?').get(getActiveServerId()) as any; return row?.bot_token || ''; })();
   if (!token) {
@@ -154,37 +151,48 @@ router.post('/test', authMiddleware, async (req: AuthRequest, res) => {
   res.json(result);
 });
 
-// Get bot status
 router.get('/status', authMiddleware, async (_req: AuthRequest, res) => {
   res.json(discordService.getStatus());
 });
 
-// Check permissions
 router.get('/permissions', authMiddleware, async (_req: AuthRequest, res) => {
   const perms = await discordService.checkPermissions();
   res.json(perms);
 });
 
-// Get notification history
 router.get('/history', authMiddleware, (req: AuthRequest, res) => {
   const activeId = getActiveServerId();
   if (!activeId) return res.json([]);
 
-  const limit = parseInt(req.query.limit as string) || 20;
+  const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
   const history = getDatabase().prepare('SELECT * FROM discord_notifications WHERE server_id = ? ORDER BY sent_at DESC LIMIT ?').all(activeId, limit);
   res.json(history);
 });
 
-// Send a test message
+router.delete('/history', authMiddleware, requirePermission('settings.edit'), (_req: AuthRequest, res) => {
+  const activeId = getActiveServerId();
+  if (!activeId) return res.json({ success: true });
+
+  getDatabase().prepare('DELETE FROM discord_notifications WHERE server_id = ?').run(activeId);
+  res.json({ success: true });
+});
+
 router.post('/test-message', authMiddleware, async (_req: AuthRequest, res) => {
+  const now = new Date().toLocaleString();
+  const serverId = getActiveServerId();
+  const serverName = serverId
+    ? (getDatabase().prepare('SELECT name FROM servers WHERE id = ?').get(serverId) as any)?.name || 'MineControl OS'
+    : 'MineControl OS';
+
   const ok = await discordService.sendEmbed({
-    title: '🧪 Test Notification',
-    color: 0x5865f2,
+    title: 'MineControl Test',
+    color: 0x22c55e,
     fields: [
-      { name: 'Status', value: 'This is a test message from MineControl OS', inline: false },
-      { name: 'Time', value: new Date().toLocaleString(), inline: true },
+      { name: 'Status', value: 'This is a test notification from MineControl OS', inline: false },
+      { name: 'Time', value: now, inline: true },
+      { name: 'Server', value: serverName, inline: true },
     ],
-    footer: 'MineControl OS · Test',
+    footer: 'MineControl OS Test',
   });
   res.json({ success: ok });
 });

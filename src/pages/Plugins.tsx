@@ -77,6 +77,7 @@ export default function Plugins() {
   const [modrinthResults, setModrinthResults] = useState<any[]>([]);
   const [loadingModrinth, setLoadingModrinth] = useState(false);
   const [installingPlugins, setInstallingPlugins] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchPlugins();
@@ -99,7 +100,9 @@ export default function Plugins() {
     try {
       const data = await api.getPlugins();
       setPlugins(data);
-    } catch {}
+    } catch {} finally {
+      setLoading(false);
+    }
   };
 
   const handleInstall = async (e?: React.FormEvent) => {
@@ -178,6 +181,14 @@ export default function Plugins() {
           <p className="text-gray-400 text-sm font-medium">No server selected</p>
           <p className="text-gray-600 text-xs">Select a server from the Server Library to manage this page.</p>
         </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }

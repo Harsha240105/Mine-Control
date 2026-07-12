@@ -1,5 +1,4 @@
-import { Client, GatewayIntentBits, TextChannel, VoiceChannel, ChannelType, Message } from 'discord.js';
-import https from 'https';
+import { Client, GatewayIntentBits, TextChannel, ChannelType, Message } from 'discord.js';
 import os from 'os';
 import { minecraftServer } from './minecraftServer';
 import { getDatabase } from '../database';
@@ -7,12 +6,32 @@ import { getActiveServerId } from '../db/repository/serverConfigRepository';
 import { activeServer } from '../activeServer';
 import { eventBus } from './eventBus';
 import { emitToAll } from '../socketManager';
-import { resolveMinecraftDir } from '../paths';
 
 const MAX_CRASH_LINES = 20;
+const MAX_NOTIFICATION_HISTORY = 100;
+
+interface DiscordConfig {
+  botToken: string;
+  textChannelId: string;
+  voiceChannelId: string;
+  autoReconnect: boolean;
+  chatBridgeEnabled: boolean;
+  bridgeForwardDiscordToMinecraft: boolean;
+  commandPrefix: string;
+  allowedRoleIds: string;
+}
+
+interface TestConnectionResult {
+  success: boolean;
+  message: string;
+  botTag?: string;
+  guildName?: string;
+  channelName?: string;
+  permissions?: string[];
+}
 
 class DiscordService {
-  private client: Client;
+  private client!: Client;
   private _connected = false;
   private _connecting = false;
   private _botName = '';
@@ -26,54 +45,68 @@ class DiscordService {
   private _lastNotificationAt: string | null = null;
   private _notificationCount = 0;
   private _ready = false;
+  private _reconnecting = false;
+  private _connectionId = 0;
   private boundHandlers: Array<{ event: string; handler: (...args: any[]) => void }> = [];
+  private activityInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor() {
-    this.client = new Client({
+    this.initClient();
+  }
+
+  private createClient(): Client {
+    const client = new Client({
       intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
       ],
     });
+    return client;
+  }
 
-    this.client.on('ready', () => {
-      try {
-        this._connected = true;
-        this._connecting = false;
-        this._botName = this.client.user?.tag || '';
-        this._guildId = '';
-        this._guildName = '';
-        this._textChannelName = '';
-        this._voiceChannelName = '';
+  private initClient() {
+    this.client = this.createClient();
+    this.attachClientListeners(this.client);
+  }
 
-        // Resolve guild/channel names - prefer configured guild
-        const configuredGuildId = this._guildId;
-        for (const g of this.client.guilds.cache.values()) {
-          if (configuredGuildId && g.id !== configuredGuildId) continue;
-          this._guildId = g.id;
-          this._guildName = g.name;
-          if (this._textChannelId && g.channels.cache.has(this._textChannelId)) {
-            const ch = g.channels.cache.get(this._textChannelId);
-            this._textChannelName = ch?.name || '';
-          }
-          if (this._voiceChannelId && g.channels.cache.has(this._voiceChannelId)) {
-            const ch = g.channels.cache.get(this._voiceChannelId);
-            this._voiceChannelName = ch?.name || '';
-          }
-          if (!configuredGuildId) break;
+  private attachClientListeners(client: Client) {
+    client.on('ready', () => {
+      if (client !== this.client) return;
+      this._connected = true;
+      this._connecting = false;
+      this._reconnecting = false;
+      this._botName = client.user?.tag || '';
+      this._guildId = '';
+      this._guildName = '';
+      this._textChannelName = '';
+      this._voiceChannelName = '';
+
+      for (const g of client.guilds.cache.values()) {
+        this._guildId = g.id;
+        this._guildName = g.name;
+        if (this._textChannelId && g.channels.cache.has(this._textChannelId)) {
+          const ch = g.channels.cache.get(this._textChannelId);
+          this._textChannelName = ch?.name || '';
         }
+        if (this._voiceChannelId && g.channels.cache.has(this._voiceChannelId)) {
+          const ch = g.channels.cache.get(this._voiceChannelId);
+          this._voiceChannelName = ch?.name || '';
+        }
+        break;
+      }
 
-        this._lastError = '';
-        this.persistStatus('connected');
-      } catch {}
+      this._lastError = '';
+      this.persistStatus('connected');
+      this.updateLastConnectedAt();
       this.emitStatus();
       this.setupHooks();
+      this.startActivityUpdater();
       this._ready = true;
     });
 
-    // Message listener for chat bridge and commands
-    this.client.on('messageCreate', async (message: Message) => {
+    client.on('messageCreate', async (message: Message) => {
+      if (client !== this.client) return;
       if (message.author.bot) return;
       if (message.channel.id !== this._textChannelId) return;
       if (!this._ready) return;
@@ -81,58 +114,45 @@ class DiscordService {
       const cfg = this.loadConfig();
       const prefix = cfg.commandPrefix || '!';
 
-      // Check if message starts with prefix (command)
       if (message.content.startsWith(prefix)) {
         await this.handleCommand(message, prefix, cfg);
         return;
       }
 
-      // Forward Discord messages to Minecraft if bridge enabled
       if (cfg.bridgeForwardDiscordToMinecraft && minecraftServer.isRunning) {
         const sender = message.author.displayName || message.author.username;
         minecraftServer.sendCommand(`tellraw @a {"text":"[Discord] ${sender}: ${message.content}","color":"blue"}`).catch(() => {});
       }
     });
 
-    this.client.on('disconnect', () => {
+    client.on('disconnect', () => {
+      if (client !== this.client) return;
       this._connected = false;
       this._connecting = false;
+      this._reconnecting = false;
       this._ready = false;
       this.removeHooks();
+      this.stopActivityUpdater();
       this.persistStatus('disconnected');
       this.emitStatus();
     });
 
-    this.client.on('error', (err) => {
+    client.on('error', (err) => {
+      if (client !== this.client) return;
       this._connected = false;
       this._connecting = false;
+      this._reconnecting = false;
       this._lastError = err.message;
       this.persistStatus('error');
       this.emitStatus();
     });
 
-    // Reconnect when active server changes
     minecraftServer.on('server:started', () => {
       const cfg = this.loadConfig();
       if (cfg.autoReconnect && !this._connected && !this._connecting) {
         this.reconnect();
       }
     });
-    
-    // Periodically update Discord Activity Status with player count
-    setInterval(() => {
-      if (this._connected && this.client.user) {
-        try {
-          const db = require('../database').getDatabase();
-          const sid = getActiveServerId();
-        const p = sid
-          ? db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online' AND (server_id = ? OR server_id IS NULL)").get(sid)
-          : db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online'").get();
-          const online = p ? p.c : 0;
-          this.client.user.setActivity(`with ${online} players`, { type: 0 }); // 0 = Playing
-        } catch {}
-      }
-    }, 15000);
 
     activeServer.on('changed', () => {
       if (this._connected) {
@@ -141,8 +161,33 @@ class DiscordService {
     });
   }
 
+  private startActivityUpdater() {
+    this.stopActivityUpdater();
+    this.activityInterval = setInterval(() => {
+      if (this._connected && this.client.user) {
+        try {
+          const db = getDatabase();
+          const sid = getActiveServerId();
+          const p = sid
+            ? db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online' AND (server_id = ? OR server_id IS NULL)").get(sid)
+            : db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online'").get();
+          const online = p ? (p as any).c : 0;
+          this.client.user.setActivity(`with ${online} players`, { type: 0 });
+        } catch {}
+      }
+    }, 15000);
+  }
+
+  private stopActivityUpdater() {
+    if (this.activityInterval) {
+      clearInterval(this.activityInterval);
+      this.activityInterval = null;
+    }
+  }
+
   get connected() { return this._connected; }
   get connecting() { return this._connecting; }
+  get reconnecting() { return this._reconnecting; }
   get botName() { return this._botName; }
   get guildName() { return this._guildName; }
   get guildId() { return this._guildId; }
@@ -154,47 +199,91 @@ class DiscordService {
 
   async initialize() {
     const cfg = this.loadConfig();
-    if (!cfg.botToken || !cfg.textChannelId) {
-      return;
-    }
+    if (!cfg.botToken || !cfg.textChannelId) return;
     await this.connect(cfg.botToken, cfg.textChannelId, cfg.voiceChannelId);
   }
 
-  async connect(token: string, textChannelId: string, voiceChannelId?: string): Promise<boolean> {
+  async connect(token: string, textChannelId: string, voiceChannelId?: string, retries = 3): Promise<boolean> {
     if (this._connecting) return false;
-    // Always destroy any prior connection before starting fresh
+
+    const connId = ++this._connectionId;
+
     try { await this.client.destroy(); } catch {}
+
     this._connected = false;
     this._connecting = true;
+    this._reconnecting = false;
     this._textChannelId = textChannelId;
     this._voiceChannelId = voiceChannelId || '';
     this.persistStatus('connecting');
     this.emitStatus();
 
-    try {
-      const loginPromise = this.client.login(token);
-      const timeout = new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new Error('Connection timed out after 15s')), 15000)
-      );
-      await Promise.race([loginPromise, timeout]);
-      this._connecting = false;
-      return true;
-    } catch (err: any) {
-      try { await this.client.destroy(); } catch {}
-      this._connected = false;
-      this._connecting = false;
-      this._lastError = err.message || 'Failed to connect';
-      this.persistStatus('error');
-      this.emitStatus();
-      return false;
+    let lastError: any = null;
+
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      if (connId !== this._connectionId) return false;
+
+      const newClient = this.createClient();
+      this.attachClientListeners(newClient);
+      this.client = newClient;
+
+      try {
+        const loginPromise = newClient.login(token);
+        const timeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('Connection timed out after 20s')), 20000)
+        );
+        await Promise.race([loginPromise, timeout]);
+        if (connId !== this._connectionId) return false;
+        this._connecting = false;
+        return true;
+      } catch (err: any) {
+        lastError = err;
+        try { await newClient.destroy(); } catch {}
+
+        if (connId !== this._connectionId) return false;
+
+        const isRetryable = err.message?.includes('ECONNREFUSED') ||
+          err.message?.includes('ENOTFOUND') ||
+          err.message?.includes('ETIMEDOUT') ||
+          err.message?.includes('timed out') ||
+          err.message?.includes('NETWORK');
+
+        if (attempt < retries && isRetryable) {
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
+          console.log(`[Discord] Connection attempt ${attempt}/${retries} failed, retrying in ${delay}ms: ${err.message}`);
+          this._lastError = `Attempt ${attempt}/${retries} failed, retrying...`;
+          this.emitStatus();
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+
+        this._connected = false;
+        this._connecting = false;
+        this._reconnecting = false;
+        this._lastError = err.message || 'Failed to connect';
+        this.persistStatus('error');
+        this.emitStatus();
+        return false;
+      }
     }
+
+    this._connected = false;
+    this._connecting = false;
+    this._reconnecting = false;
+    this._lastError = lastError?.message || 'Failed to connect after retries';
+    this.persistStatus('error');
+    this.emitStatus();
+    return false;
   }
 
   async disconnect(): Promise<void> {
     this.removeHooks();
+    this.stopActivityUpdater();
+    const connId = ++this._connectionId;
     try { await this.client.destroy(); } catch {}
     this._connected = false;
     this._connecting = false;
+    this._reconnecting = false;
     this._ready = false;
     this._botName = '';
     this._guildName = '';
@@ -207,42 +296,87 @@ class DiscordService {
 
   async reconnect(): Promise<boolean> {
     const cfg = this.loadConfig();
-    if (!cfg.botToken || !cfg.textChannelId) return false;
-    return await this.connect(cfg.botToken, cfg.textChannelId, cfg.voiceChannelId);
+    if (!cfg.botToken || !cfg.textChannelId) {
+      this._reconnecting = false;
+      this.emitStatus();
+      return false;
+    }
+    console.log(`[Discord] reconnect() called - setting _reconnecting = true`);
+    this._reconnecting = true;
+    this.emitStatus();
+    const result = await this.connect(cfg.botToken, cfg.textChannelId, cfg.voiceChannelId);
+    console.log(`[Discord] reconnect() connect result: ${result}, _reconnecting now: ${this._reconnecting}`);
+    if (!result) {
+      this._reconnecting = false;
+      this.emitStatus();
+    }
+    return result;
   }
 
-  async testConnection(token: string, textChannelId: string): Promise<{ success: boolean; message: string }> {
-    const testClient = new Client({
-      intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
-    });
+  async testConnection(token: string, textChannelId: string): Promise<TestConnectionResult> {
+    const testClient = this.createClient();
 
     try {
-      await testClient.login(token);
-      // Try to fetch the channel
-      const channel = await testClient.channels.fetch(textChannelId).catch(() => null);
+      const loginPromise = testClient.login(token);
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Connection timed out after 20s')), 20000)
+      );
+      await Promise.race([loginPromise, timeout]);
+
+      const channel = await Promise.race([
+        testClient.channels.fetch(textChannelId),
+        new Promise<null>((_, reject) => setTimeout(() => reject(new Error('Channel fetch timed out')), 10000)),
+      ]).catch(() => null);
+
       if (!channel) {
-        testClient.destroy();
-        return { success: false, message: 'Could not find channel. Check the channel ID.' };
+        await testClient.destroy();
+        return { success: false, message: 'Channel not found. Check the channel ID.' };
       }
-      if (channel && (channel as TextChannel).isTextBased && !(channel as TextChannel).isTextBased()) {
-        testClient.destroy();
+
+      if (!channel.isTextBased()) {
+        await testClient.destroy();
         return { success: false, message: 'Channel is not a text channel.' };
       }
-      // Check permissions
+
       const me = testClient.user;
-      if (channel && 'permissionsFor' in channel) {
-        const perms = (channel as TextChannel).permissionsFor(me!.id);
-        if (perms && !perms.has('SendMessages')) {
-          testClient.destroy();
-          return { success: false, message: 'Bot does not have Send Messages permission in this channel.' };
+      let perms: string[] = [];
+      if ('permissionsFor' in channel && me) {
+        const channelPerms = (channel as TextChannel).permissionsFor(me.id);
+        if (channelPerms && !channelPerms.has('SendMessages')) {
+          await testClient.destroy();
+          return { success: false, message: 'Missing Send Messages permission in this channel.' };
+        }
+        if (channelPerms) {
+          if (channelPerms.has('SendMessages')) perms.push('Send Messages');
+          if (channelPerms.has('EmbedLinks')) perms.push('Embed Links');
+          if (channelPerms.has('AttachFiles')) perms.push('Attach Files');
+          if (channelPerms.has('ReadMessageHistory')) perms.push('Read History');
         }
       }
-      testClient.destroy();
-      return { success: true, message: `Connected as ${testClient.user?.tag}. Channel found. Permission OK.` };
+
+      const guildName = testClient.guilds.cache.first()?.name || 'Unknown';
+      const botTag = testClient.user?.tag || 'Unknown';
+      const channelName = ('name' in channel) ? (channel as any).name : 'Unknown';
+
+      await testClient.destroy();
+      return {
+        success: true,
+        message: `Connected as ${botTag}. Guild: ${guildName}. Channel: #${channelName}`,
+        botTag,
+        guildName,
+        channelName,
+        permissions: perms,
+      };
     } catch (err: any) {
-      if (testClient) try { testClient.destroy(); } catch {}
-      if (err.message?.includes('token') || err.message?.includes('401')) {
+      try { await testClient.destroy(); } catch {}
+      if (err.message?.includes('token') || err.message?.includes('401') || err.message?.includes('TOKEN_INVALID')) {
         return { success: false, message: 'Invalid bot token.' };
+      }
+      if (err.message?.includes('NETWORK') || err.message?.includes('ECONNREFUSED')) {
+        return { success: false, message: 'Network error. Check your internet connection.' };
+      }
+      if (err.message?.includes('timed out')) {
+        return { success: false, message: 'Connection timed out. Discord gateway may be unreachable — try again in a moment.' };
       }
       return { success: false, message: err.message || 'Connection test failed.' };
     }
@@ -334,6 +468,7 @@ class DiscordService {
     return {
       connected: this._connected,
       connecting: this._connecting,
+      reconnecting: this._reconnecting,
       botName: this._botName,
       guildId: this._guildId,
       guildName: this._guildName,
@@ -347,21 +482,47 @@ class DiscordService {
     };
   }
 
+  // --- Notification History ---
+
+  private logNotification(eventType: string, title: string, content: string, success: boolean, error?: string) {
+    try {
+      const db = getDatabase();
+      const serverId = getActiveServerId();
+      if (!serverId) return;
+
+      db.prepare(
+        'INSERT INTO discord_notifications (server_id, event_type, title, content, sent_at, success, error) VALUES (?, ?, ?, ?, datetime(\'now\'), ?, ?)'
+      ).run(serverId, eventType, title, content, success ? 1 : 0, error || '');
+
+      const count = (db.prepare('SELECT COUNT(*) as c FROM discord_notifications WHERE server_id = ?').get(serverId) as any)?.c || 0;
+      if (count > MAX_NOTIFICATION_HISTORY) {
+        const deleteCount = count - MAX_NOTIFICATION_HISTORY;
+        db.prepare(
+          'DELETE FROM discord_notifications WHERE id IN (SELECT id FROM discord_notifications WHERE server_id = ? ORDER BY sent_at ASC LIMIT ?)'
+        ).run(serverId, deleteCount);
+      }
+    } catch {}
+  }
+
+  async sendTrackedEmbed(eventType: string, data: Parameters<DiscordService['sendEmbed']>[0]): Promise<boolean> {
+    const result = await this.sendEmbed(data);
+    this.logNotification(eventType, data.title, data.description || data.fields?.map(f => `${f.name}: ${f.value}`).join('\n') || '', result, result ? undefined : this._lastError);
+    return result;
+  }
+
   // --- Command Handling ---
 
-  private async handleCommand(message: Message, prefix: string, cfg: any) {
+  private async handleCommand(message: Message, prefix: string, cfg: DiscordConfig) {
     const args = message.content.slice(prefix.length).trim().split(/ +/);
     const command = args.shift()?.toLowerCase();
-
     if (!command) return;
 
-    // Role check
     if (cfg.allowedRoleIds) {
       const allowedIds = cfg.allowedRoleIds.split(',').map((s: string) => s.trim()).filter(Boolean);
       if (allowedIds.length > 0 && message.member) {
         const hasRole = message.member.roles.cache.some((r: any) => allowedIds.includes(r.id));
         if (!hasRole) {
-          await message.reply('❌ You do not have permission to use bot commands.');
+          await message.reply('You do not have permission to use bot commands.');
           return;
         }
       }
@@ -395,13 +556,12 @@ class DiscordService {
     const serverId = getActiveServerId();
     if (!serverId) { await message.reply('No server selected.'); return; }
     const players = db.prepare("SELECT username, playtime FROM players WHERE server_id = ? AND status = 'online' ORDER BY playtime DESC").all(serverId) as any[];
-    const count = players.length;
-    if (count === 0) {
-      await message.reply('📭 No players online.');
+    if (players.length === 0) {
+      await message.reply('No players online.');
       return;
     }
     const list = players.map((p: any, i: number) => `${i + 1}. **${p.username}** (${Math.round(p.playtime / 60)}min)`).join('\n');
-    await message.reply(`👥 **${count} player(s) online:**\n${list}`);
+    await message.reply(`**${players.length} player(s) online:**\n${list}`);
   }
 
   private async handleStatusCommand(message: Message) {
@@ -421,7 +581,7 @@ class DiscordService {
     const serverRow = serverId ? db.prepare('SELECT name, version, version_source FROM servers WHERE id = ?').get(serverId) as any : null;
     await message.reply(
       `**${serverRow?.name || 'Minecraft Server'}**\n` +
-      `State: ${running ? '🟢 Running' : '🔴 Stopped'} | Port: ${port}\n` +
+      `State: ${running ? 'Running' : 'Stopped'} | Port: ${port}\n` +
       `TPS: ${running ? tps.toFixed(1) : 'N/A'} | Players: ${online}\n` +
       `Uptime: ${d}d ${h}h ${m}m\n` +
       `Version: ${serverRow?.version_source || ''} ${serverRow?.version || ''}`
@@ -431,8 +591,7 @@ class DiscordService {
   private async handleTpsCommand(message: Message) {
     if (!minecraftServer.isRunning) { await message.reply('Server is not running.'); return; }
     const tps = minecraftServer.currentTps;
-    const color = tps >= 19 ? '🟢' : tps >= 15 ? '🟡' : '🔴';
-    await message.reply(`${color} Current TPS: **${tps.toFixed(1)}**`);
+    await message.reply(`Current TPS: **${tps.toFixed(1)}**`);
   }
 
   private async handleConsoleCommand(message: Message, args: string[]) {
@@ -440,28 +599,28 @@ class DiscordService {
     const cmd = args.join(' ');
     if (!cmd) { await message.reply('Usage: `!command <console command>`'); return; }
     await minecraftServer.sendCommand(cmd);
-    await message.reply(`✅ Sent command: \`/${cmd}\``);
+    await message.reply(`Sent command: \`/${cmd}\``);
   }
 
   private async handleHelpCommand(message: Message, prefix: string) {
     await message.reply(
       `**Bot Commands:**\n` +
-      `\`${prefix}players\` — List online players\n` +
-      `\`${prefix}status\` — Server status\n` +
-      `\`${prefix}tps\` — Current TPS\n` +
-      `\`${prefix}command <cmd>\` — Run console command\n` +
-      `\`${prefix}help\` — This message`
+      `\`${prefix}players\` - List online players\n` +
+      `\`${prefix}status\` - Server status\n` +
+      `\`${prefix}tps\` - Current TPS\n` +
+      `\`${prefix}command <cmd>\` - Run console command\n` +
+      `\`${prefix}help\` - This message`
     );
   }
 
-  // --- Chat Bridge (forward Minecraft chat to Discord) ---
+  // --- Chat Bridge ---
 
   async sendChatMessage(username: string, message: string) {
     if (!this._connected || !this._textChannelId) return;
     const cfg = this.loadConfig();
     if (!cfg.chatBridgeEnabled) return;
     await this.sendEmbed({
-      title: `💬 ${username}`,
+      title: `${username}`,
       description: message,
       color: 0x5865f2,
       footer: 'Minecraft Chat',
@@ -478,29 +637,47 @@ class DiscordService {
     return db.prepare('SELECT * FROM servers WHERE id = ?').get(serverId) || { name: 'MineControl OS', port: 25565, version: '', version_source: 'Minecraft', autoRestart: false };
   }
 
-  private getJoinAddress(port: number): string {
+  private _cachedPublicIp: string | null = null;
+
+  private async fetchPublicIp(): Promise<string | null> {
+    if (this._cachedPublicIp) return this._cachedPublicIp;
+    return new Promise((resolve) => {
+      const https = require('https');
+      const req = https.get('https://api.ipify.org?format=json', { timeout: 5000 }, (res: any) => {
+        let data = '';
+        res.on('data', (c: string) => data += c);
+        res.on('end', () => {
+          try {
+            const ip = JSON.parse(data).ip;
+            if (ip) {
+              this._cachedPublicIp = ip;
+              resolve(ip);
+            } else {
+              resolve(null);
+            }
+          } catch {
+            resolve(null);
+          }
+        });
+      });
+      req.on('error', () => resolve(null));
+      req.on('timeout', () => { req.destroy(); resolve(null); });
+    });
+  }
+
+  private async getJoinAddress(port: number): Promise<string> {
     const db = getDatabase();
     const sid = getActiveServerId();
 
-    // 1. Playit tunnel
     if (sid) {
       const playitKey = `playitAddress_${sid}`;
       const row = db.prepare("SELECT value FROM server_config WHERE key = ?").get(playitKey) as any;
-      if (row?.value) {
-        return `\`${row.value}\``;
-      }
+      if (row?.value) return `\`${row.value}\``;
     }
 
-    // 2. Public IP (fetch via ipify)
-    try {
-      const publicIp = require('child_process').execSync(
-        `node -e "const h=require('https');h.get('https://api.ipify.org?format=json',r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.stdout.write(JSON.parse(d).ip||''))}).on('error',()=>{})"`,
-        { timeout: 3000, stdio: 'pipe', windowsHide: true }
-      ).toString().trim();
-      if (publicIp) return `\`${publicIp}:${port}\``;
-    } catch {}
+    const publicIp = await this.fetchPublicIp();
+    if (publicIp) return `\`${publicIp}:${port}\``;
 
-    // 3. LAN addresses
     const nets = os.networkInterfaces();
     for (const name of Object.keys(nets)) {
       for (const net of nets[name] || []) {
@@ -510,7 +687,6 @@ class DiscordService {
       }
     }
 
-    // 4. Fallback to localhost
     return `\`localhost:${port}\``;
   }
 
@@ -523,20 +699,13 @@ class DiscordService {
       ? db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online' AND (server_id = ? OR server_id IS NULL)").get(sid)
       : db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online'").get() as any;
     const online = players?.c || 0;
-
     const port = server.port || 25565;
-    const joinAddress = this.getJoinAddress(port);
-
-    let voiceLine = '';
-    if (this._voiceChannelId && this._voiceChannelName) {
-      voiceLine = `\n🎙️ Voice Channel: **${this._voiceChannelName}**`;
-    }
-
+    const joinAddress = await this.getJoinAddress(port);
     const isPlayitOrPublic = joinAddress.includes('.') && !joinAddress.includes('localhost');
     const connectionType = isPlayitOrPublic ? 'Public' : 'Local';
 
-    await this.sendEmbed({
-      title: '✅ Server Started',
+    await this.sendTrackedEmbed('server_started', {
+      title: 'Server Started',
       color: 0x22c55e,
       fields: [
         { name: 'Server', value: server.name || 'MineControl OS', inline: true },
@@ -544,44 +713,45 @@ class DiscordService {
         { name: 'Version', value: server.version || 'Unknown', inline: true },
         { name: 'Join Address', value: joinAddress, inline: true },
         { name: 'Players Online', value: `${online}`, inline: true },
-        { name: 'Connection', value: `${connectionType}${this._voiceChannelName ? ` + Voice` : ''}`, inline: true },
+        { name: 'Connection', value: connectionType, inline: true },
       ],
-      footer: `MineControl OS · ${new Date().toLocaleString()}`,
+      footer: `MineControl OS`,
     });
   }
 
   async notifyServerStopped(code?: number | null) {
+    if (!this.shouldNotify('notify_server_stop')) return;
+    const server = this.getServerInfo();
+
+    await this.sendTrackedEmbed('server_stopped', {
+      title: 'Server Stopped',
+      color: 0xef4444,
+      fields: [
+        { name: 'Server', value: server.name || 'MineControl OS', inline: true },
+        { name: 'Exit Code', value: code !== null && code !== undefined ? `${code}` : 'N/A', inline: true },
+      ],
+      footer: `MineControl OS`,
+    });
+
     setTimeout(() => {
       if (this._connected) {
         this.client.user?.setStatus('invisible');
         this.disconnect();
       }
     }, 2000);
-    if (!this.shouldNotify('notify_server_stop')) return;
-    const server = this.getServerInfo();
-
-    await this.sendEmbed({
-      title: '🛑 Server Stopped',
-      color: 0xef4444,
-      fields: [
-        { name: 'Server', value: server.name || 'MineControl OS', inline: true },
-        { name: 'Exit Code', value: code !== null && code !== undefined ? `${code}` : 'N/A', inline: true },
-      ],
-      footer: `MineControl OS · ${new Date().toLocaleString()}`,
-    });
   }
 
   async notifyServerRestarted() {
     if (!this.shouldNotify('notify_server_restart')) return;
     const server = this.getServerInfo();
 
-    await this.sendEmbed({
-      title: '🔄 Server Restarted',
+    await this.sendTrackedEmbed('server_restarted', {
+      title: 'Server Restarted',
       color: 0xf59e0b,
       fields: [
         { name: 'Server', value: server.name || 'MineControl OS', inline: true },
       ],
-      footer: `MineControl OS · ${new Date().toLocaleString()}`,
+      footer: `MineControl OS`,
     });
   }
 
@@ -595,38 +765,37 @@ class DiscordService {
     const count = (db.prepare("SELECT COUNT(*) as c FROM audit_log WHERE action = 'crash' AND timestamp > datetime('now', '-1 day')").get() as any)?.c || 0;
     const autoRestart = server.autoRestart;
 
-    await this.sendEmbed({
-      title: '❌ Server Crashed',
+    await this.sendTrackedEmbed('server_crashed', {
+      title: 'Server Crashed',
       color: 0xdc2626,
       fields: [
         { name: 'Server', value: server.name || 'MineControl OS', inline: true },
         { name: 'Crash Count (24h)', value: `${count}`, inline: true },
-        { name: 'Auto Restart', value: autoRestart ? '✅ Enabled' : '❌ Disabled', inline: true },
-        { name: 'Last Console Lines', value: `\`\`\`${crashLines}\`\`\`${truncated ? '\n*(truncated)*' : ''}` },
+        { name: 'Auto Restart', value: autoRestart ? 'Enabled' : 'Disabled', inline: true },
+        { name: 'Last Console Lines', value: `\`\`\`${crashLines}\`\`\`${truncated ? '\n(truncated)' : ''}` },
       ],
-      footer: `MineControl OS · ${new Date().toLocaleString()}`,
+      footer: `MineControl OS`,
     });
   }
 
   async notifyPlayerJoined(username: string) {
     if (!this.shouldNotify('notify_player_join')) return;
     const db = getDatabase();
-    const now = new Date().toISOString();
     const sid = getActiveServerId();
     const players = sid
       ? db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online' AND (server_id = ? OR server_id IS NULL)").get(sid)
       : db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online'").get() as any;
     const online = players?.c || 0;
 
-    await this.sendEmbed({
-      title: '📥 Player Joined',
+    await this.sendTrackedEmbed('player_joined', {
+      title: 'Player Joined',
       color: 0x22c55e,
       fields: [
         { name: 'Player', value: username, inline: true },
         { name: 'Time', value: new Date().toLocaleTimeString(), inline: true },
         { name: 'Online Now', value: `${online}`, inline: true },
       ],
-      footer: `MineControl OS · ${new Date().toLocaleString()}`,
+      footer: `MineControl OS`,
     });
   }
 
@@ -639,75 +808,75 @@ class DiscordService {
       : db.prepare("SELECT COUNT(*) as c FROM players WHERE status = 'online'").get() as any;
     const online = players?.c || 0;
 
-    await this.sendEmbed({
-      title: '📤 Player Left',
+    await this.sendTrackedEmbed('player_left', {
+      title: 'Player Left',
       color: 0xf59e0b,
       fields: [
         { name: 'Player', value: username, inline: true },
         { name: 'Time', value: new Date().toLocaleTimeString(), inline: true },
         { name: 'Online Now', value: `${online}`, inline: true },
       ],
-      footer: `MineControl OS · ${new Date().toLocaleString()}`,
+      footer: `MineControl OS`,
     });
   }
 
   async notifyPlayerKicked(username: string) {
     if (!this.shouldNotify('notify_player_kicked')) return;
-    await this.sendEmbed({
-      title: '👢 Player Kicked',
+    await this.sendTrackedEmbed('player_kicked', {
+      title: 'Player Kicked',
       color: 0xf97316,
       fields: [
         { name: 'Player', value: username, inline: true },
         { name: 'Time', value: new Date().toLocaleTimeString(), inline: true },
       ],
-      footer: `MineControl OS · ${new Date().toLocaleString()}`,
+      footer: `MineControl OS`,
     });
   }
 
   async notifyPlayerBanned(username: string) {
     if (!this.shouldNotify('notify_player_banned')) return;
-    await this.sendEmbed({
-      title: '🔨 Player Banned',
+    await this.sendTrackedEmbed('player_banned', {
+      title: 'Player Banned',
       color: 0xdc2626,
       fields: [
         { name: 'Player', value: username, inline: true },
         { name: 'Time', value: new Date().toLocaleTimeString(), inline: true },
       ],
-      footer: `MineControl OS · ${new Date().toLocaleString()}`,
+      footer: `MineControl OS`,
     });
   }
 
   async notifyPlayerUnbanned(username: string) {
     if (!this.shouldNotify('notify_player_unbanned')) return;
-    await this.sendEmbed({
-      title: '🔓 Player Unbanned',
+    await this.sendTrackedEmbed('player_unbanned', {
+      title: 'Player Unbanned',
       color: 0x22c55e,
       fields: [
         { name: 'Player', value: username, inline: true },
         { name: 'Time', value: new Date().toLocaleTimeString(), inline: true },
       ],
-      footer: `MineControl OS · ${new Date().toLocaleString()}`,
+      footer: `MineControl OS`,
     });
   }
 
   async notifyPlayerApproved(username: string) {
     if (!this.shouldNotify('notify_player_approved')) return;
-    await this.sendEmbed({
-      title: '✅ Player Approved',
+    await this.sendTrackedEmbed('player_approved', {
+      title: 'Player Approved',
       color: 0x22c55e,
       fields: [
         { name: 'Player', value: username, inline: true },
         { name: 'Time', value: new Date().toLocaleTimeString(), inline: true },
       ],
-      footer: `MineControl OS · ${new Date().toLocaleString()}`,
+      footer: `MineControl OS`,
     });
   }
 
   async notifyBackupCreated(data: { name: string; size: string; reason?: string; type?: string }) {
     if (!this.shouldNotify('notify_backup_created')) return;
-    const typeLabel = data.type === 'auto' ? '🔄 Automatic' : data.type === 'scheduled' ? '📅 Scheduled' : '👤 Manual';
+    const typeLabel = data.type === 'auto' ? 'Automatic' : data.type === 'scheduled' ? 'Scheduled' : 'Manual';
 
-    await this.sendEmbed({
+    await this.sendTrackedEmbed('backup_created', {
       title: `${typeLabel} Backup Created`,
       color: 0x8b5cf6,
       fields: [
@@ -715,101 +884,106 @@ class DiscordService {
         { name: 'Size', value: data.size, inline: true },
         { name: 'Reason', value: data.reason || 'N/A', inline: true },
       ],
-      footer: `MineControl OS · ${new Date().toLocaleString()}`,
+      footer: `MineControl OS`,
     });
   }
 
   async notifyBackupRestored(data: { name: string; size?: string; reason?: string }) {
     if (!this.shouldNotify('notify_backup_restored')) return;
-    await this.sendEmbed({
-      title: '📦 Backup Restored',
+    await this.sendTrackedEmbed('backup_restored', {
+      title: 'Backup Restored',
       color: 0x8b5cf6,
       fields: [
         { name: 'Backup', value: data.name, inline: true },
         { name: 'Reason', value: data.reason || 'Manual restore', inline: true },
         { name: 'Time', value: new Date().toLocaleString(), inline: true },
       ],
-      footer: `MineControl OS · ${new Date().toLocaleString()}`,
+      footer: `MineControl OS`,
     });
   }
 
   async notifyBackupFailed(data: { name: string; error: string; type?: string }) {
     if (!this.shouldNotify('notify_backup_failed')) return;
-    await this.sendEmbed({
-      title: '❌ Backup Failed',
+    await this.sendTrackedEmbed('backup_failed', {
+      title: 'Backup Failed',
       color: 0xdc2626,
       fields: [
         { name: 'Name', value: data.name, inline: true },
         { name: 'Error', value: data.error },
         { name: 'Time', value: new Date().toLocaleString(), inline: true },
       ],
-      footer: `MineControl OS · ${new Date().toLocaleString()}`,
+      footer: `MineControl OS`,
     });
   }
 
   async notifyWhitelistUpdated() {
     if (!this.shouldNotify('notify_whitelist_updated')) return;
-    await this.sendEmbed({
-      title: '📋 Whitelist Updated',
+    await this.sendTrackedEmbed('whitelist_updated', {
+      title: 'Whitelist Updated',
       color: 0x3b82f6,
       fields: [
         { name: 'Time', value: new Date().toLocaleString(), inline: true },
       ],
-      footer: `MineControl OS · ${new Date().toLocaleString()}`,
+      footer: `MineControl OS`,
     });
   }
 
   async notifySoftwareChanged(software: string) {
     if (!this.shouldNotify('notify_software_changed')) return;
     const server = this.getServerInfo();
-    await this.sendEmbed({
-      title: '🔄 Software Changed',
+    await this.sendTrackedEmbed('software_changed', {
+      title: 'Software Changed',
       color: 0x3b82f6,
       fields: [
         { name: 'Software', value: software, inline: true },
         { name: 'Server', value: server.name || 'MineControl OS', inline: true },
       ],
-      footer: `MineControl OS · ${new Date().toLocaleString()}`,
+      footer: `MineControl OS`,
     });
   }
 
   async notifyVersionChanged(version: string) {
     if (!this.shouldNotify('notify_version_changed')) return;
     const server = this.getServerInfo();
-    await this.sendEmbed({
-      title: '📦 Minecraft Version Changed',
+    await this.sendTrackedEmbed('version_changed', {
+      title: 'Minecraft Version Changed',
       color: 0x3b82f6,
       fields: [
         { name: 'Version', value: version, inline: true },
         { name: 'Software', value: server.version_source || 'Minecraft', inline: true },
         { name: 'Server', value: server.name || 'MineControl OS', inline: true },
       ],
-      footer: `MineControl OS · ${new Date().toLocaleString()}`,
+      footer: `MineControl OS`,
     });
   }
 
   async notifyUpdateAvailable(type: 'server' | 'application') {
     if (!this.shouldNotify('notify_update_available')) return;
-    await this.sendEmbed({
-      title: type === 'server' ? '📥 Server Update Available' : '📥 Application Update Available',
+    await this.sendTrackedEmbed('update_available', {
+      title: type === 'server' ? 'Server Update Available' : 'Application Update Available',
       color: 0x3b82f6,
       fields: [
         { name: 'Type', value: type === 'server' ? 'Minecraft Server' : 'MineControl OS', inline: true },
         { name: 'Time', value: new Date().toLocaleString(), inline: true },
       ],
-      footer: `MineControl OS · ${new Date().toLocaleString()}`,
+      footer: `MineControl OS`,
     });
   }
 
   // --- Internal ---
 
-  private loadConfig() {
+  private loadConfig(): DiscordConfig {
     const db = getDatabase();
     const serverId = getActiveServerId();
-    if (!serverId) return { botToken: '', textChannelId: '', voiceChannelId: '', autoReconnect: true, chatBridgeEnabled: false, bridgeForwardDiscordToMinecraft: false, commandPrefix: '!', allowedRoleIds: '' };
+    const defaults: DiscordConfig = {
+      botToken: '', textChannelId: '', voiceChannelId: '', autoReconnect: true,
+      chatBridgeEnabled: false, bridgeForwardDiscordToMinecraft: false,
+      commandPrefix: '!', allowedRoleIds: '',
+    };
+    if (!serverId) return defaults;
 
     const row = db.prepare('SELECT * FROM discord_config WHERE server_id = ?').get(serverId) as any;
-    if (!row) return { botToken: '', textChannelId: '', voiceChannelId: '', autoReconnect: true, chatBridgeEnabled: false, bridgeForwardDiscordToMinecraft: false, commandPrefix: '!', allowedRoleIds: '' };
+    if (!row) return defaults;
 
     return {
       botToken: row.bot_token || '',
@@ -842,28 +1016,35 @@ class DiscordService {
         `).run(serverId, status, this._lastError || '');
       }
     } catch (e: any) {
-      // Auto-repair if column is missing
       if (e.message?.includes('no such column')) {
         try {
           const db = getDatabase();
           db.exec("ALTER TABLE discord_config ADD COLUMN updated_at TEXT DEFAULT ''");
         } catch {}
+        try {
+          const db = getDatabase();
+          const serverId = getActiveServerId();
+          if (!serverId) return;
+          const existing = db.prepare('SELECT id FROM discord_config WHERE server_id = ?').get(serverId);
+          if (existing) {
+            db.prepare('UPDATE discord_config SET bot_status = ?, last_error = ? WHERE server_id = ?')
+              .run(status, this._lastError, serverId);
+          } else {
+            db.prepare("INSERT INTO discord_config (server_id, bot_status, last_error, created_at) VALUES (?, ?, ?, datetime('now'))")
+              .run(serverId, status, this._lastError || '');
+          }
+        } catch {}
       }
-      // Retry once after repair
-      try {
-        const db = getDatabase();
-        const serverId = getActiveServerId();
-        if (!serverId) return;
-        const existing = db.prepare('SELECT id FROM discord_config WHERE server_id = ?').get(serverId);
-        if (existing) {
-          db.prepare('UPDATE discord_config SET bot_status = ?, last_error = ? WHERE server_id = ?')
-            .run(status, this._lastError, serverId);
-        } else {
-          db.prepare('INSERT INTO discord_config (server_id, bot_status, last_error, created_at) VALUES (?, ?, ?, datetime(\'now\'))')
-            .run(serverId, status, this._lastError || '');
-        }
-      } catch {}
     }
+  }
+
+  private updateLastConnectedAt() {
+    try {
+      const db = getDatabase();
+      const serverId = getActiveServerId();
+      if (!serverId) return;
+      db.prepare("UPDATE discord_config SET last_connected_at = datetime('now') WHERE server_id = ?").run(serverId);
+    } catch {}
   }
 
   private shouldNotify(key: string): boolean {
@@ -876,16 +1057,18 @@ class DiscordService {
 
   private emitStatus() {
     try {
-      emitToAll('discord:update', this.getStatus());
+      const s = this.getStatus();
+      console.log(`[Discord] emitStatus: connected=${s.connected} connecting=${s.connecting} reconnecting=${s.reconnecting} lastError=${s.lastError}`);
+      emitToAll('discord:update', s);
     } catch {}
   }
 
   private removeHooks() {
     for (const { event, handler } of this.boundHandlers) {
+      if (event.startsWith('backup:') || event.startsWith('player:') || event.startsWith('server:')) {
+        eventBus.off(event, handler);
+      }
       minecraftServer.off(event as any, handler);
-    }
-    for (const { event, handler } of this.boundHandlers) {
-      if (event.startsWith('backup:')) eventBus.off(event, handler);
     }
     this.boundHandlers = [];
   }
@@ -893,20 +1076,24 @@ class DiscordService {
   private setupHooks() {
     if (this.boundHandlers.length > 0) return;
 
-    // Server events
-    this.hook('server:started', () => this.notifyServerStarted());
-    this.hook('server:stopped', (code: number | null) => this.notifyServerStopped(code));
-    this.hook('server:crashed', (err: string) => this.notifyServerCrashed(err));
-    this.hook('player:join', (username: string) => this.notifyPlayerJoined(username));
-    this.hook('player:leave', (username: string) => this.notifyPlayerLeft(username));
-
-    // Chat bridge: forward Minecraft chat to Discord
-    this.hook('player:chat', (username: string, message: string) => this.sendChatMessage(username, message));
-
-    // Backup events via event bus
+    this.hookBus('server:started', () => this.notifyServerStarted());
+    this.hookBus('server:stopped', (code: number | null) => this.notifyServerStopped(code));
+    this.hookBus('server:crashed', (err: string) => this.notifyServerCrashed(err));
+    this.hookBus('server:restarted', () => this.notifyServerRestarted());
+    this.hookBus('player:join', (username: string) => this.notifyPlayerJoined(username));
+    this.hookBus('player:leave', (username: string) => this.notifyPlayerLeft(username));
+    this.hookBus('player:kicked', (username: string) => this.notifyPlayerKicked(username));
+    this.hookBus('player:banned', (username: string) => this.notifyPlayerBanned(username));
+    this.hookBus('player:unbanned', (username: string) => this.notifyPlayerUnbanned(username));
+    this.hookBus('player:approved', (username: string) => this.notifyPlayerApproved(username));
     this.hookBus('backup:created', (data: any) => this.notifyBackupCreated(data));
     this.hookBus('backup:restored', (data: any) => this.notifyBackupRestored(data));
     this.hookBus('backup:failed', (data: any) => this.notifyBackupFailed(data));
+    this.hookBus('whitelist:updated', () => this.notifyWhitelistUpdated());
+    this.hookBus('software:changed', (sw: string) => this.notifySoftwareChanged(sw));
+    this.hookBus('version:changed', (v: string) => this.notifyVersionChanged(v));
+    this.hookBus('update:available', (type: 'server' | 'application') => this.notifyUpdateAvailable(type));
+    this.hookBus('player:chat', (username: string, message: string) => this.sendChatMessage(username, message));
   }
 
   private hookBus(event: string, handler: (...args: any[]) => void) {
@@ -914,17 +1101,14 @@ class DiscordService {
     this.boundHandlers.push({ event, handler });
   }
 
-  private hook(event: string, handler: (...args: any[]) => void) {
-    minecraftServer.on(event as any, handler);
-    this.boundHandlers.push({ event, handler });
-  }
-
   destroy() {
     this.removeHooks();
+    this.stopActivityUpdater();
     this._ready = false;
     try { this.client.destroy(); } catch {}
     this._connected = false;
     this._connecting = false;
+    this._reconnecting = false;
     this.persistStatus('disconnected');
   }
 }

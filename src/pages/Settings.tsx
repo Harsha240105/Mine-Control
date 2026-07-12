@@ -1,30 +1,22 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Settings as SettingsIcon, Save, Key, Shield, Server, RefreshCw,
-  Eye, EyeOff, Globe, Users, Wifi, Download, CheckCircle, AlertCircle,
-  ChevronDown, ChevronRight, Search, Cpu, Trash2, Loader2, Github
+  Settings as SettingsIcon, Save, Server, RefreshCw,
+  Globe, Wifi, Download, CheckCircle, AlertCircle,
+  ChevronDown, ChevronRight, Search, Cpu, Loader2, Github, Shield, Trash2
 } from 'lucide-react';
 import { Button } from '../components/ui/stateful-button';
 import pkg from '../../package.json';
 import { api } from '../lib/api';
-import { useAuth } from '../hooks/useAuth';
 import { useActiveServer } from '../hooks/useActiveServer';
 import toast from 'react-hot-toast';
 
 export default function Settings() {
-  const { user, isOwner } = useAuth();
   const { server: activeServer } = useActiveServer();
   const navigate = useNavigate();
   const [config, setConfig] = useState<any>({});
   const [props, setProps] = useState<any>({});
   const [loading, setLoading] = useState(true);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [newUsername, setNewUsername] = useState('');
-  const [usernamePassword, setUsernamePassword] = useState('');
-  const [showUsernamePassword, setShowUsernamePassword] = useState(false);
 
   // Version state
   const [versions, setVersions] = useState<any[]>([]);
@@ -108,39 +100,6 @@ export default function Settings() {
         }
       }
       toast.success('Saved. Restart server for changes to take effect.');
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await api.changePassword(currentPassword, newPassword);
-      toast.success('Password changed successfully');
-      setCurrentPassword(''); setNewPassword('');
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleChangeUsername = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const result = await api.changeUsername(newUsername, usernamePassword);
-      toast.success(`Username changed to ${result.username}`);
-      setNewUsername(''); setUsernamePassword('');
-    } catch (err: any) {
-      toast.error(err.message);
-    }
-  };
-
-  const handleChangeBoth = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await api.changeBoth(newUsername, currentPassword, newPassword);
-      toast.success('Username and password changed successfully');
-      setNewUsername(''); setCurrentPassword(''); setNewPassword('');
     } catch (err: any) {
       toast.error(err.message);
     }
@@ -496,127 +455,6 @@ export default function Settings() {
         </div>
       </div>
       {/* Account Settings */}
-      <div className="card">
-        <h3 className="text-sm font-medium text-gray-200 mb-4 flex items-center gap-2">
-          <Shield size={16} className="text-minecraft-500" />
-          Account
-        </h3>
-
-        {/* Change Username */}
-        <form onSubmit={handleChangeUsername} className="space-y-3 max-w-md mb-6 pb-6 border-b border-surface-700">
-          <h4 className="text-xs font-medium text-gray-400">Change Username</h4>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">New Username</label>
-            <input
-              type="text"
-              value={newUsername}
-              onChange={(e) => setNewUsername(e.target.value)}
-              className="input"
-              required
-              minLength={3}
-              pattern="[a-zA-Z0-9_]+"
-              title="Letters, numbers, and underscores only"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Current Password</label>
-            <div className="relative">
-              <input
-                type={showUsernamePassword ? 'text' : 'password'}
-                value={usernamePassword}
-                onChange={(e) => setUsernamePassword(e.target.value)}
-                className="input pr-10"
-                required
-              />
-              <Button type="button" variant="ghost" onClick={() => setShowUsernamePassword(!showUsernamePassword)} className="absolute right-3 top-1/2 -translate-y-1/2">
-                {showUsernamePassword ? <EyeOff size={14} /> : <Eye size={14} />}
-              </Button>
-            </div>
-          </div>
-          <Button type="submit" variant="primary" className="text-sm">
-            <Key size={14} />
-            Change Username
-          </Button>
-        </form>
-
-        {/* Change Password */}
-        <form onSubmit={handleChangePassword} className="space-y-3 max-w-md mb-6 pb-6 border-b border-surface-700">
-          <h4 className="text-xs font-medium text-gray-400">Change Password</h4>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Current Password</label>
-            <div className="relative">
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                className="input pr-10"
-                required
-              />
-              <Button type="button" variant="ghost" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2">
-                {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-              </Button>
-            </div>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">New Password</label>
-            <input
-              type={showPassword ? 'text' : 'password'}
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="input"
-              required
-              minLength={6}
-            />
-          </div>
-          <Button type="submit" variant="primary" className="text-sm">
-            <Key size={14} />
-            Change Password
-          </Button>
-        </form>
-
-        {/* Change Both */}
-        <form onSubmit={handleChangeBoth} className="space-y-3 max-w-md">
-          <h4 className="text-xs font-medium text-gray-400">Change Both</h4>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">New Username</label>
-            <input
-              type="text"
-              value={newUsername}
-              onChange={(e) => setNewUsername(e.target.value)}
-              className="input"
-              required
-              minLength={3}
-              pattern="[a-zA-Z0-9_]+"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">Current Password</label>
-            <input
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              className="input"
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-400 mb-1">New Password</label>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="input"
-              required
-              minLength={6}
-            />
-          </div>
-          <Button type="submit" variant="primary" className="text-sm">
-            <Key size={14} />
-            Change Username & Password
-          </Button>
-        </form>
-      </div>
-
       {/* Issue Tracker Config */}
       {activeServer?.id && (
         <div className="card">
@@ -719,10 +557,6 @@ export default function Settings() {
           <div>
             <span className="text-gray-500">Version:</span>
             <span className="ml-2 text-gray-300">MineControl OS v{pkg.version}</span>
-          </div>
-          <div>
-            <span className="text-gray-500">User:</span>
-            <span className="ml-2 text-gray-300">{user?.username} ({user?.role})</span>
           </div>
           <div>
             <span className="text-gray-500">Data Directory:</span>

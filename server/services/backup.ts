@@ -89,16 +89,35 @@ export class BackupService {
     includes?: { worlds?: boolean; players?: boolean; plugins?: boolean; mods?: boolean; config?: boolean; resourcepacks?: boolean };
     createdBy?: string;
   } = {}): Promise<any> {
-    const dir = BACKUP_DIR();
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const baseDir = BACKUP_DIR();
+    if (!fs.existsSync(baseDir)) fs.mkdirSync(baseDir, { recursive: true });
 
     const serverId = getActiveServerId();
     const meta = getServerMeta();
-    const timestamp = Date.now();
-    const name = options.name || `Backup-${new Date().toISOString().slice(0, 10)}-${timestamp}`;
-    const safeName = name.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const fileName = `${safeName}-${timestamp}.zip`;
+
+    // Get server name for directory and filename
+    let serverName = 'Unknown';
+    if (serverId) {
+      try {
+        const db = getDatabase();
+        const srv = db.prepare('SELECT name FROM servers WHERE id = ?').get(serverId) as any;
+        if (srv?.name) serverName = srv.name;
+      } catch {}
+    }
+    const safeServerName = serverName.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+    // Create server-specific backup directory: Backups/ServerName/
+    const dir = path.join(baseDir, safeServerName);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+    // Format: ServerName_YYYY-MM-DD_HH-MM-SS.zip
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const timeStr = `${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+    const fileName = `${safeServerName}_${dateStr}_${timeStr}.zip`;
     const filePath = path.join(dir, fileName);
+    const name = options.name || `${safeServerName}-${dateStr}-${timeStr}`;
     const reason = options.reason || (options.type === 'auto' ? 'Automatic backup' : 'Manual backup');
     const inc = { worlds: true, players: true, plugins: true, mods: true, config: true, resourcepacks: true, ...options.includes };
 

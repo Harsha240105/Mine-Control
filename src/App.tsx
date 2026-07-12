@@ -6,7 +6,8 @@ import { ActiveServerProvider } from './hooks/useActiveServer';
 import Layout from './components/Layout';
 import { ContainerTextFlip } from './components/ui/container-text-flip';
 import { api } from './lib/api';
-import Login from './pages/Login';
+import Welcome from './pages/Welcome';
+import AppLockScreen from './components/AppLockScreen';
 import Wizard from './pages/Wizard';
 import Software from './pages/Software';
 import Dashboard from './pages/Dashboard';
@@ -39,11 +40,10 @@ import Updates from './pages/Updates';
 import Uninstall from './pages/Uninstall';
 import PerformanceSettings from './pages/PerformanceSettings';
 import SecuritySettings from './pages/SecuritySettings';
-import AdminUsers from './pages/AdminUsers';
 import AutoUpdater from './components/AutoUpdater';
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const { user, loading } = useAuth();
+function LockGuard({ children }: { children: React.ReactNode }) {
+  const { locked, loading } = useAuth();
 
   if (loading) {
     return (
@@ -51,15 +51,15 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
         <div className="flex flex-col items-center gap-3">
           <div className="w-8 h-8 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
           <div className="text-green-400 text-sm font-semibold flex items-center gap-1.5">
-            Loading OXK Pixel, it's 
-            <ContainerTextFlip words={["better", "modern", "Tyler Durden", "awesome", "fast", "beautiful"]} />
+            Loading MineControl OS
+            <ContainerTextFlip words={["better", "modern", "awesome", "fast", "beautiful"]} />
           </div>
         </div>
       </div>
     );
   }
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (locked) return <AppLockScreen onUnlocked={() => {}} />;
   return <>{children}</>;
 }
 
@@ -81,30 +81,30 @@ export default function App() {
         <AutoUpdater />
         <ActiveServerProvider>
         <Routes>
-          <Route path="/login" element={<Login />} />
+          <Route path="/welcome" element={<Welcome />} />
           <Route
             path="/wizard"
             element={
-              <ProtectedRoute>
+              <LockGuard>
                 <Wizard />
-              </ProtectedRoute>
+              </LockGuard>
             }
           />
           <Route
             path="/import"
             element={
-              <ProtectedRoute>
+              <LockGuard>
                 <Import />
-              </ProtectedRoute>
+              </LockGuard>
             }
           />
           <Route
             path="/"
             element={
-              <ProtectedRoute>
+              <LockGuard>
                 <PageTracker />
                 <Layout />
-              </ProtectedRoute>
+              </LockGuard>
             }
           >
             <Route index element={<Servers />} />
@@ -136,7 +136,6 @@ export default function App() {
             <Route path="settings/github" element={<GitHubConfig />} />
             <Route path="settings/performance" element={<PerformanceSettings />} />
             <Route path="settings/security" element={<SecuritySettings />} />
-            <Route path="admin/users" element={<AdminUsers />} />
             <Route path="github/diagnostics" element={<GitHubDiagnostics />} />
           </Route>
         </Routes>
@@ -152,7 +151,7 @@ function PageTracker() {
 
   useEffect(() => {
     const path = location.pathname;
-    if (path === '/' || path === '/login' || path === '/wizard' || path === '/import') return;
+    if (path === '/' || path === '/welcome' || path === '/wizard' || path === '/import') return;
     localStorage.setItem('mc_last_page', path);
 
     if (saveTimer.current) clearTimeout(saveTimer.current);
@@ -167,6 +166,3 @@ function PageTracker() {
 
   return null;
 }
-
-
-

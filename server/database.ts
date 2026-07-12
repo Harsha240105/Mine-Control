@@ -1600,6 +1600,22 @@ function initializeSchema() {
     }
   }
 
+  if (currentVersion < 24) {
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS app_lock (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        totp_secret TEXT DEFAULT '',
+        totp_enabled INTEGER DEFAULT 0,
+        totp_recovery_codes TEXT DEFAULT ''
+      )`);
+      db.prepare('INSERT INTO schema_version (version) VALUES (24)').run();
+      console.log('[DB] Migration v24: Created app_lock table for optional TOTP app lock');
+    } catch (err) {
+      console.error('[DB] Migration v24 failed:', (err as Error).message);
+      try { db.prepare('INSERT OR IGNORE INTO schema_version (version) VALUES (24)').run(); } catch {}
+    }
+  }
+
   // CRITICAL: Validate all required tables exist. Create any missing ones.
   // This is a safety net for fresh installs where migrations may have failed.
   ensureAllTablesExist();
@@ -1640,16 +1656,6 @@ function initializeSchema() {
       playerdata_size: "TEXT DEFAULT '0 B'",
       stats_size: "TEXT DEFAULT '0 B'",
       loaded_chunks: 'INTEGER DEFAULT 0',
-    },
-
-    // v23: 2FA columns on users
-    users: {
-      totp_secret: "TEXT DEFAULT ''",
-      totp_enabled: 'INTEGER DEFAULT 0',
-      totp_recovery_codes: "TEXT DEFAULT ''",
-      failed_login_attempts: 'INTEGER DEFAULT 0',
-      locked_until: 'TEXT',
-      updated_at: "TEXT DEFAULT ''",
     },
 
     // v21: Discord bridge columns
@@ -1705,7 +1711,7 @@ function initializeSchema() {
   if (repairCount > 0) {
     console.log(`[DB] Schema repair complete: ${repairCount} missing column(s) added`);
     // Fill updated_at for rows that got the column added with empty default
-    for (const tbl of ['users', 'discord_config', 'servers']) {
+    for (const tbl of ['discord_config', 'servers']) {
       try {
         const tCols = db.prepare(`PRAGMA table_info('${tbl}')`).all().map((r: any) => r.name);
         if (tCols.includes('updated_at')) {
@@ -1724,12 +1730,13 @@ function printDatabaseDiagnostics() {
     const version = (db.prepare('SELECT MAX(version) as v FROM schema_version').get() as any)?.v || 0;
     const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as any[]).map((r: any) => r.name);
     const tableCount = tables.length;
-    const userCount = (db.prepare('SELECT COUNT(*) as c FROM users').get() as any)?.c || 0;
     const serverCount = (db.prepare('SELECT COUNT(*) as c FROM servers').get() as any)?.c || 0;
+    const lockRow = db.prepare('SELECT totp_enabled FROM app_lock WHERE id = 1').get() as any;
+    const lockEnabled = lockRow?.totp_enabled ? 'ON' : 'OFF';
     const healthIssues: string[] = [];
 
     // Check for tables that exist in schema but have known issues
-    for (const tbl of ['worlds', 'users', 'servers', 'discord_config']) {
+    for (const tbl of ['worlds', 'servers', 'app_lock']) {
       if (!tables.includes(tbl)) {
         healthIssues.push(`Missing table: ${tbl}`);
       }
@@ -1737,7 +1744,7 @@ function printDatabaseDiagnostics() {
 
     console.log('[DB] ═══════════════════════════════════════');
     console.log(`[DB]  Database:  ${DB_PATH}`);
-    console.log(`[DB]  Schema v${version}  |  Tables: ${tableCount}  |  Users: ${userCount}  |  Servers: ${serverCount}`);
+    console.log(`[DB]  Schema v${version}  |  Tables: ${tableCount}  |  Servers: ${serverCount}  |  Lock: ${lockEnabled}`);
     console.log(`[DB]  Health:    ${healthIssues.length === 0 ? 'OK' : healthIssues.join('; ')}`);
     console.log('[DB] ═══════════════════════════════════════');
   } catch (e) {
@@ -1747,14 +1754,10 @@ function printDatabaseDiagnostics() {
 
 function ensureAllTablesExist() {
   const requiredTables: Record<string, string> = {
-    users: `CREATE TABLE IF NOT EXISTS users (
-      id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
-      role TEXT NOT NULL DEFAULT 'owner', created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      last_login TEXT, session_token TEXT,
+    app_lock: `CREATE TABLE IF NOT EXISTS app_lock (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
       totp_secret TEXT DEFAULT '', totp_enabled INTEGER DEFAULT 0,
-      totp_recovery_codes TEXT DEFAULT '',
-      failed_login_attempts INTEGER DEFAULT 0, locked_until TEXT,
-      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      totp_recovery_codes TEXT DEFAULT ''
     )`,
     players: `CREATE TABLE IF NOT EXISTS players (
       id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, uuid TEXT UNIQUE NOT NULL,
@@ -1770,10 +1773,6 @@ function ensureAllTablesExist() {
       statistics TEXT DEFAULT '{}', approval_status TEXT NOT NULL DEFAULT 'approved',
       trusted INTEGER NOT NULL DEFAULT 1, last_ip TEXT DEFAULT '', ops INTEGER NOT NULL DEFAULT 0,
       server_id TEXT
-    )`,
-    roles: `CREATE TABLE IF NOT EXISTS roles (
-      name TEXT PRIMARY KEY, level INTEGER NOT NULL DEFAULT 0,
-      color TEXT NOT NULL DEFAULT '#aaaaaa', permissions TEXT NOT NULL DEFAULT '[]'
     )`,
     whitelist: `CREATE TABLE IF NOT EXISTS whitelist (
       id TEXT PRIMARY KEY, username TEXT UNIQUE NOT NULL, uuid TEXT,
@@ -1820,11 +1819,6 @@ function ensureAllTablesExist() {
     system_stats: `CREATE TABLE IF NOT EXISTS system_stats (
       id INTEGER PRIMARY KEY AUTOINCREMENT, cpu REAL NOT NULL, ram REAL NOT NULL,
       tps REAL NOT NULL, players INTEGER NOT NULL, timestamp INTEGER NOT NULL, server_id TEXT
-    )`,
-    sessions: `CREATE TABLE IF NOT EXISTS sessions (
-      id TEXT PRIMARY KEY, user_id TEXT NOT NULL, token TEXT UNIQUE NOT NULL,
-      ip TEXT, user_agent TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')),
-      expires_at TEXT NOT NULL
     )`,
     chat_log: `CREATE TABLE IF NOT EXISTS chat_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT, server_id TEXT, username TEXT NOT NULL,

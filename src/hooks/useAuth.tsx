@@ -1,102 +1,100 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 
-interface User {
-  id: string;
-  username: string;
-  role: string;
-}
-
 interface AuthContextType {
-  user: User | null;
+  lockEnabled: boolean;
+  locked: boolean;
   loading: boolean;
-  login: (username: string, password: string, totpToken?: string) => Promise<{ require2FA?: boolean; userId?: string } | void>;
-  logout: () => void;
-  isOwner: boolean;
-  hasPermission: (permission: string) => boolean;
+  verifyLock: (code: string) => Promise<void>;
+  verifyRecovery: (code: string) => Promise<void>;
+  setupLock: () => Promise<{ secret: string; qrCodeDataUrl: string; recoveryCodes: string[] }>;
+  enableLock: (token: string) => Promise<void>;
+  disableLock: (token: string) => Promise<void>;
+  getRecoveryCodes: () => Promise<string[]>;
+  refreshLockStatus: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [lockEnabled, setLockEnabled] = useState(false);
+  const [locked, setLocked] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  const refreshLockStatus = useCallback(async () => {
+    try {
+      const status = await api.getLockStatus();
+      setLockEnabled(status.enabled);
+      if (status.enabled) {
+        const token = localStorage.getItem('mc_lock_token');
+        if (token) {
+          try {
+            await api.verifyAppLock(token);
+            setLocked(false);
+          } catch {
+            localStorage.removeItem('mc_lock_token');
+            setLocked(true);
+          }
+        } else {
+          setLocked(true);
+        }
+      } else {
+        setLocked(false);
+        localStorage.removeItem('mc_lock_token');
+      }
+    } catch {
+      setLocked(false);
+    }
+  }, []);
+
   useEffect(() => {
-    const token = localStorage.getItem('mc_token');
-    if (token) {
-      api.me()
-        .then((data) => setUser(data))
-        .catch(() => {
-          localStorage.removeItem('mc_token');
-        })
-        .finally(() => setLoading(false));
-    } else {
-      setLoading(false);
-    }
+    refreshLockStatus().finally(() => setLoading(false));
+  }, [refreshLockStatus]);
+
+  const verifyLock = useCallback(async (code: string) => {
+    await api.verifyAppLock(code);
+    localStorage.setItem('mc_lock_token', code);
+    setLocked(false);
   }, []);
 
-  const login = useCallback(async (username: string, password: string, totpToken?: string) => {
-    const result = await api.login(username, password);
-    if ((result as any).require2FA) {
-      return { require2FA: true, userId: (result as any).userId };
-    }
-    localStorage.setItem('mc_token', result.token);
-    setUser(result.user);
+  const verifyRecovery = useCallback(async (code: string) => {
+    await api.verifyRecoveryCode(code);
+    setLocked(false);
   }, []);
 
-  const logout = useCallback(() => {
-    api.logout().catch(() => {});
-    localStorage.removeItem('mc_token');
-    setUser(null);
+  const setupLock = useCallback(async () => {
+    return await api.setupAppLock();
   }, []);
 
-  const isOwner = user?.role === 'Owner';
+  const enableLock = useCallback(async (token: string) => {
+    await api.enableAppLock(token);
+    setLockEnabled(true);
+  }, []);
 
-  const hasPermission = useCallback(
-    (permission: string) => {
-      if (!user) return false;
-      if (user.role === 'Owner') return true;
+  const disableLock = useCallback(async (token: string) => {
+    await api.disableAppLock(token);
+    setLockEnabled(false);
+    localStorage.removeItem('mc_lock_token');
+  }, []);
 
-      const roleHierarchy: Record<string, number> = {
-        'Owner': 4,
-        'Admin': 3,
-        'Moderator': 2,
-        'Member': 1,
-        'Guest': 0,
-      };
-
-      const permissionLevels: Record<string, number> = {
-        'server.start': 2,
-        'server.stop': 2,
-        'server.restart': 2,
-        'server.manage': 3,
-        'server.delete': 4,
-        'console.send': 2,
-        'console.read': 1,
-        'backup.create': 2,
-        'backup.restore': 3,
-        'backup.delete': 3,
-        'world.manage': 2,
-        'player.kick': 2,
-        'player.ban': 3,
-        'player.op': 3,
-        'permissions.manage': 4,
-        'whitelist.manage': 2,
-        'plugin.install': 2,
-        'mod.install': 2,
-        'settings.change': 2,
-      };
-
-      const userLevel = roleHierarchy[user.role] ?? 0;
-      const requiredLevel = permissionLevels[permission] ?? 1;
-      return userLevel >= requiredLevel;
-    },
-    [user]
-  );
+  const getRecoveryCodes = useCallback(async () => {
+    const result = await api.getRecoveryCodes();
+    return result.codes;
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, isOwner, hasPermission }}>
+    <AuthContext.Provider value={{
+      lockEnabled,
+      locked,
+      loading,
+      verifyLock,
+      verifyRecovery,
+      setupLock,
+      enableLock,
+      disableLock,
+      getRecoveryCodes,
+      refreshLockStatus,
+    }}>
       {children}
     </AuthContext.Provider>
   );

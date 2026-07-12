@@ -24,7 +24,7 @@ async function request<T>(
   options: RequestInit = {},
   timeout?: number
 ): Promise<T> {
-  const token = localStorage.getItem('mc_token');
+  const lockToken = localStorage.getItem('mc_lock_token');
 
   const isFormData = options.body instanceof FormData;
 
@@ -36,8 +36,8 @@ async function request<T>(
     headers['Content-Type'] = 'application/json';
   }
 
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  if (lockToken) {
+    headers['Authorization'] = `Bearer ${lockToken}`;
   }
 
   const controller = new AbortController();
@@ -131,35 +131,18 @@ export const api = {
   updateBannedIpsJson: (data: any[]) => request<any>('/server/banned-ips-json', { method: 'PUT', body: JSON.stringify(data) }),
   getUsercacheJson: () => request<any[]>('/server/usercache-json'),
 
-  // Auth
-  login: (username: string, password: string) =>
-    request<{ token: string; user: any }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password }),
-    }),
-
-  logout: () =>
-    request<{ success: boolean }>('/auth/logout', { method: 'POST' }),
-
-  me: () => request<any>('/auth/me'),
-
-  changePassword: (currentPassword: string, newPassword: string) =>
-    request<{ success: boolean }>('/auth/change-password', {
-      method: 'POST',
-      body: JSON.stringify({ currentPassword, newPassword }),
-    }),
-
-  changeUsername: (newUsername: string, password: string) =>
-    request<{ success: boolean; username: string }>('/auth/change-username', {
-      method: 'POST',
-      body: JSON.stringify({ newUsername, password }),
-    }),
-
-  changeBoth: (newUsername: string, currentPassword: string, newPassword: string) =>
-    request<{ success: boolean; username: string }>('/auth/change-both', {
-      method: 'POST',
-      body: JSON.stringify({ newUsername, currentPassword, newPassword }),
-    }),
+  // App Lock
+  getLockStatus: () => request<{ enabled: boolean }>('/auth/lock-status'),
+  setupAppLock: () => request<{ secret: string; qrCodeDataUrl: string; recoveryCodes: string[] }>('/auth/lock/setup', { method: 'POST' }),
+  verifyAppLock: (token: string) =>
+    request<{ success: boolean }>('/auth/lock/verify', { method: 'POST', body: JSON.stringify({ token }) }),
+  enableAppLock: (token: string) =>
+    request<{ success: boolean }>('/auth/lock/enable', { method: 'POST', body: JSON.stringify({ token }) }),
+  disableAppLock: (token: string) =>
+    request<{ success: boolean }>('/auth/lock/disable', { method: 'POST', body: JSON.stringify({ token }) }),
+  verifyRecoveryCode: (code: string) =>
+    request<{ success: boolean }>('/auth/lock/verify-recovery', { method: 'POST', body: JSON.stringify({ code }) }),
+  getRecoveryCodes: () => request<{ codes: string[] }>('/auth/lock/recovery-codes'),
 
   // Server
   getServerStatus: () => request<any>('/server/status'),
@@ -711,6 +694,8 @@ export const api = {
     request<any[]>(`/discord/history${limit ? `?limit=${limit}` : ''}`),
   sendDiscordTestMessage: () =>
     request<any>('/discord/test-message', { method: 'POST' }),
+  clearDiscordHistory: () =>
+    request<any>('/discord/history', { method: 'DELETE' }),
 
   // Performance Tuning
   getPerformancePresets: () => request<any>('/performance/presets'),
@@ -722,31 +707,6 @@ export const api = {
     request<any>('/performance/flags', { method: 'POST', body: JSON.stringify({ server_id: serverId, jvmFlags }) }),
   generateYmlOptimizations: (serverId: string) =>
     request<any>('/performance/yml', { method: 'POST', body: JSON.stringify({ server_id: serverId }) }),
-
-  // 2FA
-  setup2FA: () => request<any>('/auth/setup-2fa', { method: 'POST' }),
-  verify2FA: (token: string) =>
-    request<any>('/auth/verify-2fa', { method: 'POST', body: JSON.stringify({ token }) }),
-  disable2FA: (password: string) =>
-    request<any>('/auth/disable-2fa', { method: 'POST', body: JSON.stringify({ password }) }),
-  get2FAStatus: () => request<any>('/auth/2fa-status'),
-  loginWith2FA: (username: string, password: string, totpToken: string) =>
-    request<{ token: string; user: any }>('/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password, totpToken }),
-    }),
-  getAuthSessions: () => request<any>('/auth/sessions'),
-  revokeAuthSession: (id: string) =>
-    request<any>(`/auth/sessions/${id}/revoke`, { method: 'POST' }),
-
-  // Users (admin)
-  getUsers: () => request<any[]>('/users'),
-  createUser: (data: { username: string; password: string; role?: string }) =>
-    request<any>('/users', { method: 'POST', body: JSON.stringify(data) }),
-  updateUser: (id: string, data: { role?: string }) =>
-    request<any>(`/users/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteUser: (id: string) =>
-    request<{ success: boolean }>(`/users/${id}`, { method: 'DELETE' }),
 
   // IP Whitelist
   getIpWhitelist: (serverId?: string) =>

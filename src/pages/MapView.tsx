@@ -20,9 +20,10 @@ export default function MapView() {
   const [config, setConfig] = useState<any>({});
   const [checking, setChecking] = useState(false);
   const [status, setStatus] = useState<'unknown' | 'online' | 'offline'>('unknown');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchConfig();
+    fetchConfig().finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -72,6 +73,14 @@ export default function MapView() {
           <p className="text-gray-400 text-sm font-medium">No server selected</p>
           <p className="text-gray-600 text-xs">Select a server from the Server Library to manage this page.</p>
         </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }

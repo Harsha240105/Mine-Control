@@ -9,7 +9,7 @@ import morgan from 'morgan';
 import path from 'path';
 import fs from 'fs';
 import cron from 'node-cron';
-import { rateLimiter, verifyToken } from './middleware/auth';
+import { rateLimiter } from './middleware/auth';
 import { getDatabase, closeDatabase } from './database';
 import { activeServer } from './activeServer';
 import { setIO } from './socketManager';
@@ -236,16 +236,6 @@ io.on('connection', (socket) => {
   emitServerUpdate();
   emitWorldsUpdate();
   connManager.emitConnectionUpdate().catch(() => {});
-
-  socket.on('authenticate', (token: string) => {
-    try {
-      const user = verifyToken(token);
-      socket.data.user = user;
-      socket.emit('authenticated', { success: true });
-    } catch {
-      socket.emit('authenticated', { success: false });
-    }
-  });
 
   socket.on('disconnect', (reason) => {
     console.log(`[Socket] Client disconnected: ${socket.id} (${reason})`);

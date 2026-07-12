@@ -30,7 +30,11 @@ nsis:
   createDesktopShortcut: true
   createStartMenuShortcut: true
   shortcutName: MineControl OS
+  # User data (servers, account, worlds) is stored in AppData and is NEVER deleted
+  # automatically on uninstall. The custom script below adds an opt-in checkbox
+  # so the user can choose to delete their data. Default = keep data.
   deleteAppDataOnUninstall: false
+  include: nsis-scripts/uninstall-data.nsh
 mac:
   target:
     - target: dmg

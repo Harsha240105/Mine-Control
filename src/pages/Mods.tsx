@@ -30,10 +30,11 @@ export default function Mods() {
   const [modName, setModName] = useState('');
   const [modUrl, setModUrl] = useState('');
   const [installing, setInstalling] = useState<Set<string>>(new Set());
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchMods();
-  }, []);
+  }, [activeServer?.id]);
 
   useEffect(() => {
     if (!socket) return;
@@ -51,7 +52,9 @@ export default function Mods() {
     try {
       const data = await api.getMods();
       setMods(data);
-    } catch {}
+    } catch {} finally {
+      setLoading(false);
+    }
   };
 
   const handleInstall = async (e?: React.FormEvent) => {
@@ -102,6 +105,14 @@ export default function Mods() {
           <p className="text-gray-400 text-sm font-medium">No server selected</p>
           <p className="text-gray-600 text-xs">Select a server from the Server Library to manage mods.</p>
         </div>
+      </div>
+    );
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="w-6 h-6 border-2 border-green-400 border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }

@@ -208,15 +208,33 @@ export class JavaManager {
     }
   }
 
-  private static async downloadFile(url: string, dest: string, onProgress?: (pct: number) => void): Promise<void> {
+  private static async downloadFile(url: string, dest: string, onProgress?: (pct: number) => void, retries = 3): Promise<void> {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        await this.downloadOnce(url, dest, onProgress);
+        return;
+      } catch (err: any) {
+        if (attempt < retries) {
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 8000);
+          console.log(`[Java] Download attempt ${attempt}/${retries} failed, retrying in ${delay}ms: ${err.message}`);
+          if (onProgress) onProgress(-1);
+          await new Promise(r => setTimeout(r, delay));
+          continue;
+        }
+        throw err;
+      }
+    }
+  }
+
+  private static async downloadOnce(url: string, dest: string, onProgress?: (pct: number) => void): Promise<void> {
     return new Promise((resolve, reject) => {
       const file = fs.createWriteStream(dest);
 
       const request = https.get(url, (response) => {
-        if (response.statusCode === 301 || response.statusCode === 302) {
+        if (response.statusCode === 301 || response.statusCode === 302 || response.statusCode === 307 || response.statusCode === 308) {
           file.close();
           try { fs.unlinkSync(dest); } catch {}
-          this.downloadFile(response.headers.location!, dest, onProgress).then(resolve).catch(reject);
+          this.downloadOnce(response.headers.location!, dest, onProgress).then(resolve).catch(reject);
           return;
         }
         if (response.statusCode !== 200) {

@@ -1,241 +1,163 @@
 import { Router } from 'express';
-import bcrypt from 'bcryptjs';
+import speakeasy from 'speakeasy';
+import QRCode from 'qrcode';
+import crypto from 'crypto';
 import { getDatabase } from '../database';
-import { authMiddleware, generateToken, AuthRequest, recordFailedLogin, clearFailedLogins, isAccountLocked } from '../middleware/auth';
-import { setupTOTPWithQR, verifyTOTP, enableTOTP, disableTOTP, isTOTPEnabled, verifyRecoveryCode } from '../services/twoFactorAuth';
 
 const router = Router();
 
-router.post('/login', (req, res, next) => {
+function generateRecoveryCodes(count = 8): string[] {
+  const codes: string[] = [];
+  for (let i = 0; i < count; i++) {
+    codes.push(crypto.randomBytes(4).toString('hex').toUpperCase().slice(0, 8));
+  }
+  return codes;
+}
+
+router.get('/lock-status', (_req, res) => {
+  const db = getDatabase();
+  const row = db.prepare('SELECT totp_enabled FROM app_lock WHERE id = 1').get() as any;
+  res.json({ enabled: !!row?.totp_enabled });
+});
+
+router.post('/lock/setup', async (_req, res) => {
   try {
-    const { username, password, totpToken } = req.body;
-
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password required' });
-    }
-
-    const db = getDatabase();
-    const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username) as any;
-
-    if (!user || !bcrypt.compareSync(password, user.password_hash)) {
-      if (user) {
-        const attempts = recordFailedLogin(user.id);
-        if (attempts >= 5) {
-          return res.status(423).json({
-            error: 'Account is temporarily locked due to too many failed login attempts. Try again in 15 minutes.',
-            code: 'ACCOUNT_LOCKED',
-            retryAfter: 900,
-          });
-        }
-      }
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    const lockStatus = isAccountLocked(user.id);
-    if (lockStatus.locked) {
-      return res.status(423).json({
-        error: 'Account is temporarily locked due to too many failed login attempts',
-        code: 'ACCOUNT_LOCKED',
-        retryAfter: Math.ceil(lockStatus.remainingMs / 1000),
-      });
-    }
-
-    // Check 2FA
-    if (user.totp_enabled) {
-      if (!totpToken) {
-        return res.status(200).json({
-          require2FA: true,
-          userId: user.id,
-          message: '2FA token required',
-        });
-      }
-
-      const validTOTP = verifyTOTP(user.id, totpToken);
-      const validRecovery = !validTOTP ? verifyRecoveryCode(user.id, totpToken) : false;
-      if (!validTOTP && !validRecovery) {
-        return res.status(401).json({ error: 'Invalid 2FA token' });
-      }
-    }
-
-    clearFailedLogins(user.id);
-
-    const token = generateToken({ id: user.id, username: user.username, role: user.role });
-
-    db.prepare('UPDATE users SET last_login = ?, session_token = ? WHERE id = ?')
-      .run(new Date().toISOString(), token, user.id);
-
-    // Clean up old sessions for this user (keep only current)
-    db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(user.id, token);
-
-    return res.json({
-      token,
-      user: {
-        id: user.id,
-        username: user.username,
-        role: user.role,
-      },
+    const secret = speakeasy.generateSecret({
+      name: 'MineControl OS',
+      issuer: 'MineControl OS',
     });
-  } catch (err) {
-    next(err);
-  }
-});
 
-router.post('/logout', authMiddleware, (req: AuthRequest, res) => {
-  const db = getDatabase();
-  db.prepare('UPDATE users SET session_token = NULL WHERE id = ?').run(req.user?.id);
-  return res.json({ success: true });
-});
+    const recoveryCodes = generateRecoveryCodes();
+    const db = getDatabase();
+    db.prepare('INSERT OR REPLACE INTO app_lock (id, totp_secret, totp_enabled, totp_recovery_codes) VALUES (1, ?, 0, ?)')
+      .run(secret.base32, JSON.stringify(recoveryCodes));
 
-router.get('/me', authMiddleware, (req: AuthRequest, res) => {
-  const db = getDatabase();
-  const user = db.prepare('SELECT id, username, role, totp_enabled, created_at, last_login FROM users WHERE id = ?').get(req.user?.id);
-  if (!user) {
-    return res.status(404).json({ error: 'User not found' });
-  }
-  return res.json(user);
-});
+    let qrCodeDataUrl = '';
+    try {
+      qrCodeDataUrl = await QRCode.toDataURL(secret.otpauth_url || '');
+    } catch {}
 
-router.post('/change-password', authMiddleware, (req: AuthRequest, res) => {
-  const { currentPassword, newPassword } = req.body;
-
-  if (!newPassword || newPassword.length < 6) {
-    return res.status(400).json({ error: 'New password must be at least 6 characters' });
-  }
-
-  const db = getDatabase();
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user?.id) as any;
-
-  if (!bcrypt.compareSync(currentPassword, user.password_hash)) {
-    const attempts = recordFailedLogin(user.id);
-    return res.status(400).json({ error: 'Current password is incorrect' });
-  }
-
-  const hash = bcrypt.hashSync(newPassword, 10);
-  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hash, req.user?.id);
-  return res.json({ success: true });
-});
-
-router.post('/change-username', authMiddleware, (req: AuthRequest, res) => {
-  const { newUsername, password } = req.body;
-
-  if (!newUsername || newUsername.length < 3) {
-    return res.status(400).json({ error: 'Username must be at least 3 characters' });
-  }
-  if (!/^[a-zA-Z0-9_]+$/.test(newUsername)) {
-    return res.status(400).json({ error: 'Username can only contain letters, numbers, and underscores' });
-  }
-
-  const db = getDatabase();
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user?.id) as any;
-  if (!user) return res.status(404).json({ error: 'User not found' });
-
-  if (!bcrypt.compareSync(password, user.password_hash)) {
-    return res.status(400).json({ error: 'Password is incorrect' });
-  }
-
-  const existing = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(newUsername, req.user?.id);
-  if (existing) {
-    return res.status(409).json({ error: 'Username already taken' });
-  }
-
-  db.prepare('UPDATE users SET username = ?, updated_at = datetime(\'now\') WHERE id = ?').run(newUsername, req.user?.id);
-  return res.json({ success: true, username: newUsername });
-});
-
-router.post('/change-both', authMiddleware, (req: AuthRequest, res) => {
-  const { newUsername, currentPassword, newPassword } = req.body;
-
-  if (!newUsername || newUsername.length < 3) {
-    return res.status(400).json({ error: 'Username must be at least 3 characters' });
-  }
-  if (!/^[a-zA-Z0-9_]+$/.test(newUsername)) {
-    return res.status(400).json({ error: 'Username can only contain letters, numbers, and underscores' });
-  }
-  if (!newPassword || newPassword.length < 6) {
-    return res.status(400).json({ error: 'New password must be at least 6 characters' });
-  }
-
-  const db = getDatabase();
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user?.id) as any;
-  if (!user) return res.status(404).json({ error: 'User not found' });
-
-  if (!bcrypt.compareSync(currentPassword, user.password_hash)) {
-    return res.status(400).json({ error: 'Current password is incorrect' });
-  }
-
-  const existing = db.prepare('SELECT id FROM users WHERE username = ? AND id != ?').get(newUsername, req.user?.id);
-  if (existing) {
-    return res.status(409).json({ error: 'Username already taken' });
-  }
-
-  const hash = bcrypt.hashSync(newPassword, 10);
-  db.prepare('UPDATE users SET username = ?, password_hash = ?, updated_at = datetime(\'now\') WHERE id = ?')
-    .run(newUsername, hash, req.user?.id);
-  return res.json({ success: true, username: newUsername });
-});
-
-// 2FA setup
-router.post('/setup-2fa', authMiddleware, async (req: AuthRequest, res) => {
-  try {
-    if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
-    const result = await setupTOTPWithQR(req.user.id, req.user.username);
-    res.json(result);
+    res.json({
+      secret: secret.base32,
+      qrCodeDataUrl,
+      recoveryCodes,
+    });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Verify and enable 2FA
-router.post('/verify-2fa', authMiddleware, (req: AuthRequest, res) => {
-  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
+router.post('/lock/verify', (req, res) => {
   const { token } = req.body;
   if (!token) return res.status(400).json({ error: 'Token required' });
 
-  if (verifyTOTP(req.user.id, token)) {
-    enableTOTP(req.user.id);
-    return res.json({ success: true });
-  }
-
-  res.status(400).json({ error: 'Invalid token' });
-});
-
-// Disable 2FA
-router.post('/disable-2fa', authMiddleware, (req: AuthRequest, res) => {
-  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
-  const { password } = req.body;
-
   const db = getDatabase();
-  const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id) as any;
-  if (!bcrypt.compareSync(password, user.password_hash)) {
-    return res.status(400).json({ error: 'Password is incorrect' });
+  const row = db.prepare('SELECT totp_secret, totp_enabled FROM app_lock WHERE id = 1').get() as any;
+
+  if (!row || !row.totp_enabled) {
+    return res.json({ success: true, message: 'App lock is not enabled' });
   }
 
-  disableTOTP(req.user.id);
+  const valid = speakeasy.totp.verify({
+    secret: row.totp_secret,
+    encoding: 'base32',
+    token,
+    window: 1,
+  });
+
+  if (!valid) {
+    return res.status(401).json({ error: 'Invalid TOTP code' });
+  }
+
   res.json({ success: true });
 });
 
-// Get 2FA status
-router.get('/2fa-status', authMiddleware, (req: AuthRequest, res) => {
-  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
-  res.json({ enabled: isTOTPEnabled(req.user.id) });
-});
+router.post('/lock/verify-recovery', (req, res) => {
+  const { code } = req.body;
+  if (!code) return res.status(400).json({ error: 'Recovery code required' });
 
-// List active sessions
-router.get('/sessions', authMiddleware, (req: AuthRequest, res) => {
-  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
   const db = getDatabase();
-  const sessions = db.prepare(
-    'SELECT id, ip, user_agent, created_at, expires_at FROM sessions WHERE user_id = ? ORDER BY created_at DESC'
-  ).all(req.user.id);
-  res.json(sessions);
-});
+  const row = db.prepare('SELECT totp_recovery_codes, totp_enabled FROM app_lock WHERE id = 1').get() as any;
 
-// Revoke a session
-router.post('/sessions/:id/revoke', authMiddleware, (req: AuthRequest, res) => {
-  if (!req.user) return res.status(401).json({ error: 'Not authenticated' });
-  const db = getDatabase();
-  db.prepare('DELETE FROM sessions WHERE id = ? AND user_id = ?').run(req.params.id, req.user.id);
+  if (!row || !row.totp_enabled) {
+    return res.json({ success: true, message: 'App lock is not enabled' });
+  }
+
+  const codes: string[] = JSON.parse(row.totp_recovery_codes || '[]');
+  const idx = codes.indexOf(code.toUpperCase());
+  if (idx === -1) {
+    return res.status(401).json({ error: 'Invalid recovery code' });
+  }
+
+  codes.splice(idx, 1);
+  db.prepare('UPDATE app_lock SET totp_recovery_codes = ? WHERE id = 1')
+    .run(JSON.stringify(codes));
+
   res.json({ success: true });
+});
+
+router.post('/lock/enable', (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'Token required' });
+
+  const db = getDatabase();
+  const row = db.prepare('SELECT totp_secret FROM app_lock WHERE id = 1').get() as any;
+
+  if (!row || !row.totp_secret) {
+    return res.status(400).json({ error: 'Run /api/auth/lock/setup first' });
+  }
+
+  const valid = speakeasy.totp.verify({
+    secret: row.totp_secret,
+    encoding: 'base32',
+    token,
+    window: 1,
+  });
+
+  if (!valid) {
+    return res.status(400).json({ error: 'Invalid TOTP code' });
+  }
+
+  db.prepare('UPDATE app_lock SET totp_enabled = 1 WHERE id = 1').run();
+  res.json({ success: true });
+});
+
+router.post('/lock/disable', (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'Token required' });
+
+  const db = getDatabase();
+  const row = db.prepare('SELECT totp_secret FROM app_lock WHERE id = 1').get() as any;
+
+  if (!row || !row.totp_secret) {
+    return res.status(400).json({ error: 'No app lock configured' });
+  }
+
+  const valid = speakeasy.totp.verify({
+    secret: row.totp_secret,
+    encoding: 'base32',
+    token,
+    window: 1,
+  });
+
+  if (!valid) {
+    return res.status(400).json({ error: 'Invalid TOTP code' });
+  }
+
+  db.prepare("UPDATE app_lock SET totp_enabled = 0, totp_secret = '', totp_recovery_codes = '' WHERE id = 1").run();
+  res.json({ success: true });
+});
+
+router.get('/lock/recovery-codes', (_req, res) => {
+  const db = getDatabase();
+  const row = db.prepare('SELECT totp_recovery_codes, totp_enabled FROM app_lock WHERE id = 1').get() as any;
+
+  if (!row || !row.totp_enabled) {
+    return res.json({ codes: [] });
+  }
+
+  const codes: string[] = JSON.parse(row.totp_recovery_codes || '[]');
+  res.json({ codes });
 });
 
 export default router;

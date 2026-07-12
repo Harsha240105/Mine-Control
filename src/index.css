@@ -9,6 +9,12 @@
     box-sizing: border-box;
   }
 
+  html, body, #root {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+
   body {
     @apply bg-surface-950 text-gray-100 font-sans antialiased;
   }
@@ -49,10 +55,6 @@
 
   .card-hover {
     @apply card transition-all duration-200 hover:border-surface-600 hover:shadow-lg hover:shadow-minecraft-500/5;
-  }
-
-  .card-glass {
-    @apply bg-surface-900/40 backdrop-blur-xl border border-surface-700/30 rounded-xl p-5;
   }
 
   .btn {
@@ -137,25 +139,10 @@
 }
 
 @layer utilities {
-  .text-gradient {
-    @apply bg-clip-text text-transparent bg-gradient-to-r from-minecraft-400 to-blue-400;
-  }
-
   .glow {
     box-shadow: 0 0 20px rgba(59, 130, 246, 0.1);
   }
 
-  .glow-sm {
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.08);
-  }
-
-  .glass {
-    @apply bg-surface-900/40 backdrop-blur-xl border border-surface-700/30;
-  }
-
-  .glass-strong {
-    @apply bg-surface-900/70 backdrop-blur-xl border border-surface-700/40;
-  }
 }
 
 /* Terminal/Console styles */
@@ -183,22 +170,6 @@
 }
 .animate-fade-in {
   animation: fade-in 0.2s ease-out;
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
-}
-.animate-float {
-  animation: float 3s ease-in-out infinite;
-}
-
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(59, 130, 246, 0.05); }
-  50% { box-shadow: 0 0 30px rgba(59, 130, 246, 0.15); }
-}
-.animate-pulse-glow {
-  animation: pulse-glow 3s ease-in-out infinite;
 }
 
 @keyframes scale-in {
@@ -237,4 +208,16 @@ input[type="range"]::-webkit-slider-thumb {
 }
 input[type="range"]::-webkit-slider-thumb:hover {
   box-shadow: 0 0 20px rgba(34, 197, 94, 0.5);
+}
+
+/* Ensure all cards don't overflow */
+.card {
+  overflow-wrap: break-word;
+  word-wrap: break-word;
+  min-width: 0;
+}
+
+/* Prevent horizontal scroll on any page content */
+main > div {
+  overflow-x: hidden;
 }

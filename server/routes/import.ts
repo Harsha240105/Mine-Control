@@ -7,6 +7,18 @@ import { getDatabase } from '../database';
 
 const router = Router();
 
+function isPathSafe(filePath: string): boolean {
+  const resolved = path.resolve(filePath);
+  const blocked = [
+    '/etc', '/proc', '/sys', '/dev',
+    'C:\\Windows', 'C:\\Program Files', 'C:\\Program Files (x86)',
+  ];
+  for (const b of blocked) {
+    if (resolved.startsWith(b)) return false;
+  }
+  return true;
+}
+
 function handleImportError(res: any, error: any, stage: string) {
   if (error instanceof Error && (error as any).stage) {
     return res.status(400).json({ error: (error as any).toJSON() });
@@ -47,6 +59,9 @@ router.post('/analyze', authMiddleware, async (req: AuthRequest, res) => {
     if (!filePath || !fs.existsSync(filePath)) {
       return res.status(400).json({ error: 'File or folder not found. Please check the path and try again.' });
     }
+    if (!isPathSafe(filePath)) {
+      return res.status(400).json({ error: 'Invalid file path.' });
+    }
 
     const result = await importService.analyze(filePath);
     res.json(result);
@@ -62,6 +77,9 @@ router.post('/analyze-players', authMiddleware, async (req: AuthRequest, res) =>
     if (!worldPath || !fs.existsSync(worldPath)) {
       return res.status(400).json({ error: 'World path not found.' });
     }
+    if (!isPathSafe(worldPath)) {
+      return res.status(400).json({ error: 'Invalid file path.' });
+    }
 
     const players = importService.analyzePlayers(worldPath);
     res.json({ players });
@@ -76,6 +94,9 @@ router.post('/validate', authMiddleware, async (req: AuthRequest, res) => {
     const { filePath } = req.body;
     if (!filePath || !fs.existsSync(filePath)) {
       return res.status(400).json({ error: { stage: 'validate', func: 'validate', file: 'server/routes/import.ts', message: 'File or folder not found.', cause: 'The specified path does not exist.', suggestedFix: 'Verify the file path and try again.' } });
+    }
+    if (!isPathSafe(filePath)) {
+      return res.status(400).json({ error: { stage: 'validate', func: 'validate', file: 'server/routes/import.ts', message: 'Invalid file path.', cause: 'Path blocked by security policy.', suggestedFix: 'Use a standard file path.' } });
     }
 
     const summary = await importService.getImportSummary(filePath);
@@ -95,6 +116,9 @@ router.post('/summary', authMiddleware, async (req: AuthRequest, res) => {
     const { filePath } = req.body;
     if (!filePath || !fs.existsSync(filePath)) {
       return res.status(400).json({ error: { stage: 'summary', func: 'getImportSummary', file: 'server/routes/import.ts', message: 'File or folder not found.', cause: 'The specified path does not exist.', suggestedFix: 'Verify the file path and try again.' } });
+    }
+    if (!isPathSafe(filePath)) {
+      return res.status(400).json({ error: { stage: 'summary', func: 'getImportSummary', file: 'server/routes/import.ts', message: 'Invalid file path.', cause: 'Path blocked by security policy.', suggestedFix: 'Use a standard file path.' } });
     }
 
     const summary = await importService.getImportSummary(filePath);
@@ -143,6 +167,9 @@ router.post('/execute', authMiddleware, requirePermission('server.start'), async
     }
     if (!fs.existsSync(filePath)) {
       return res.status(400).json({ error: { stage: 'execute-input', func: 'import', file: 'server/routes/import.ts', message: 'Import source not found.', cause: `File does not exist: ${filePath}`, suggestedFix: 'Verify the file path still exists and try again.' } });
+    }
+    if (!isPathSafe(filePath)) {
+      return res.status(400).json({ error: { stage: 'execute-input', func: 'import', file: 'server/routes/import.ts', message: 'Invalid file path.', cause: 'Path blocked by security policy.', suggestedFix: 'Use a standard file path.' } });
     }
     if (!config || !config.name) {
       return res.status(400).json({ error: { stage: 'execute-input', func: 'import', file: 'server/routes/import.ts', message: 'Server name is required for import.', cause: 'No name provided in import config.', suggestedFix: 'Enter a name for the imported server.' } });

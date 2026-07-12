@@ -4,8 +4,8 @@ import { motion, AnimatePresence, useMotionValue, useSpring, useTransform, anima
 import { useAuth } from '../hooks/useAuth';
 import {
   LayoutDashboard, Users, Terminal, Globe, Puzzle, Palette, Package, HardDrive, Settings, Server,
-  Power, PowerOff, RotateCcw, Cpu, Coffee, LogOut, ChevronDown, Wifi, Stethoscope, BookOpen,
-  Github, Home, Layers, CheckCircle, Clock, MessageSquare, MessageCircle, Shield, Radio, Trash2, Zap, Lock, RefreshCw
+  Power, PowerOff, RotateCcw, Cpu, Coffee, ChevronDown, Wifi, Stethoscope, BookOpen,
+  Github, Layers, CheckCircle, Clock, MessageSquare, MessageCircle, Shield, Radio, Trash2, Zap, Lock, RefreshCw
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { useSocket } from '../hooks/useSocket';
@@ -35,13 +35,12 @@ const navItems = [
 const bottomNavItems = [
   { path: '/java', label: 'Java', icon: Coffee },
   { path: '/settings/performance', label: 'Performance', icon: Zap },
-  { path: '/settings/security', label: 'Security', icon: Lock },
-  { path: '/github/diagnostics', label: 'GitHub Sync', icon: Github, ownerOnly: true },
+  { path: '/settings/security', label: 'App Lock', icon: Lock },
+  { path: '/github/diagnostics', label: 'GitHub Sync', icon: Github },
   { path: '/connection/wizard', label: 'Connect Wizard', icon: Radio },
   { path: '/diagnostics', label: 'Diagnostics', icon: Stethoscope },
   { path: '/guide', label: 'Guide', icon: BookOpen },
   { path: '/privacy', label: 'Privacy', icon: Shield },
-  { path: '/admin/users', label: 'Users', icon: Users, ownerOnly: true },
   { path: '/updates', label: 'Updates', icon: RefreshCw },
   { path: '/uninstall', label: 'Uninstall', icon: Trash2 },
 ];
@@ -128,7 +127,7 @@ function CarouselItem({ item, i, smoothScroll, isHovered, N, bulgeValue, handleI
 }
 
 export default function Layout() {
-  const { user, logout, isOwner } = useAuth();
+  const { } = useAuth();
   const { server: activeServer, servers: serverList, refresh: refreshServers } = useActiveServer();
   const navigate = useNavigate();
   const [serverRunning, setServerRunning] = useState(false);
@@ -140,11 +139,12 @@ export default function Layout() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [initialStatusLoaded, setInitialStatusLoaded] = useState(false);
   const [backendAlive, setBackendAlive] = useState(true);
+  const [isMobile, setIsMobile] = useState(false);
 
   const allItems = [
     { path: '/', label: 'Server Home', icon: Server },
     ...navItems,
-    ...bottomNavItems.filter((item) => !(item as any).ownerOnly || isOwner)
+    ...bottomNavItems
   ];
   const N = allItems.length;
 
@@ -158,6 +158,14 @@ export default function Layout() {
   const snapTimeout = useRef<NodeJS.Timeout | null>(null);
   const navTimeout = useRef<NodeJS.Timeout | null>(null);
   const sidebarRef = useRef<HTMLDivElement>(null);
+
+  // Mobile detection
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   useEffect(() => {
     let timeout: NodeJS.Timeout;
@@ -336,14 +344,24 @@ export default function Layout() {
     : 'status-dot-offline';
 
   return (
-    <div className="min-h-screen flex bg-[#0A0D14] font-inter">
+    <div className="min-h-screen flex bg-[#0A0D14] font-inter w-full max-w-full">
+      {/* Mobile sidebar toggle */}
+      {isMobile && (
+        <button
+          onClick={() => setIsHovered(!isHovered)}
+          className="fixed top-6 left-4 z-[60] w-10 h-10 flex items-center justify-center rounded-xl bg-[#0E1422] border border-white/10 text-gray-400 hover:text-white transition-colors"
+        >
+          <LayoutDashboard size={18} />
+        </button>
+      )}
+
       {/* Container for curved floating sidebar */}
       <motion.aside
         ref={sidebarRef}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        className="fixed left-4 top-4 bottom-4 z-50 pointer-events-none"
-        style={{ width: 350 }} 
+        onMouseEnter={() => !isMobile && setIsHovered(true)}
+        onMouseLeave={() => !isMobile && setIsHovered(false)}
+        className="fixed left-4 top-4 bottom-4 z-50 pointer-events-none hidden md:block"
+        style={{ width: 350 }}
       >
         <svg 
           className="absolute inset-0 drop-shadow-[0_0_30px_rgba(59,130,246,0.1)] cursor-ns-resize pointer-events-none" 
@@ -384,43 +402,71 @@ export default function Layout() {
           
           <div className="flex flex-col items-center gap-1.5 w-full cursor-default">
             <div className="w-[40px] h-[40px] rounded-full bg-blue-600/20 text-blue-400 flex items-center justify-center text-sm font-bold border border-blue-500/20 shadow-inner shrink-0">
-              {user?.username?.charAt(0).toUpperCase()}
+              M
             </div>
             <span className="text-[10px] font-medium text-gray-400 tracking-wide w-full text-center px-1 truncate">
-              {user?.username || 'vUnknown'}
+              MineControl
             </span>
-          </div>
-
-          <div className="w-10 h-[1px] bg-white/10 flex-shrink-0" />
-
-          <div className="relative w-full flex justify-center pb-2">
-            <button
-              onClick={logout}
-              className="w-[40px] h-[40px] rounded-full bg-[#0E1422] border-[1.5px] border-[rgba(59,130,246,0.5)] flex items-center justify-center text-red-400 hover:text-red-300 z-50 cursor-pointer shadow-[0_0_12px_rgba(59,130,246,0.2)] hover:shadow-[0_0_24px_rgba(96,165,250,0.5)] transition-all duration-300"
-            >
-              <PowerOff size={20} strokeWidth={2.5} />
-            </button>
           </div>
         </div>
       </motion.aside>
 
+      {/* Mobile sidebar drawer */}
+      {isMobile && (
+        <AnimatePresence>
+          {isHovered && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/60 z-50"
+                onClick={() => setIsHovered(false)}
+              />
+              <motion.div
+                initial={{ x: -80 }}
+                animate={{ x: 0 }}
+                exit={{ x: -80 }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className="fixed left-0 top-0 bottom-0 w-[72px] bg-[#0E1422] z-50 border-r border-white/5 flex flex-col items-center py-4 gap-3 overflow-y-auto"
+              >
+                {allItems.map((item, i) => (
+                  <button
+                    key={item.path}
+                    onClick={() => { navigate(item.path); setIsHovered(false); }}
+                    className={`w-10 h-10 flex items-center justify-center rounded-xl transition-colors ${
+                      window.location.pathname === item.path || (item.path !== '/' && window.location.pathname.startsWith(item.path))
+                        ? 'bg-blue-600/30 text-blue-400 border border-blue-500/30'
+                        : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'
+                    }`}
+                    title={item.label}
+                  >
+                    <item.icon size={18} />
+                  </button>
+                ))}
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+      )}
+
       {/* Main Content */}
-      <main className="flex-1 flex flex-col min-w-0 pl-[108px]">
+      <main className="flex-1 flex flex-col min-w-0 w-full max-w-full md:pl-[108px] pl-0">
         {/* Top Bar */}
-        <header className="h-16 border-b border-white/5 flex items-center justify-between px-8 bg-[#0A0D14]/80 backdrop-blur-md sticky top-0 z-40">
-          <div className="flex items-center gap-4">
-            <h1 className="text-[15px] font-semibold text-gray-200 tracking-wide">MineControl OS</h1>
+        <header className="h-14 md:h-16 border-b border-white/5 flex items-center justify-between px-4 md:px-8 bg-[#0A0D14]/80 backdrop-blur-md sticky top-0 z-40">
+          <div className="flex items-center gap-3 min-w-0 flex-1">
+            <h1 className="text-[15px] font-semibold text-gray-200 tracking-wide hidden sm:block shrink-0">MineControl OS</h1>
             
             {/* Server Status Controls */}
-            <div className="flex items-center gap-2 ml-4 bg-[#11141B] px-3 py-1.5 rounded-full border border-white/5 shadow-sm">
+            <div className="flex items-center gap-2 bg-[#11141B] px-2 md:px-3 py-1.5 rounded-full border border-white/5 shadow-sm min-w-0">
               <div className="relative" ref={dropdownRef}>
                 <button
                   onClick={() => setShowServerDropdown(!showServerDropdown)}
-                  className="flex items-center gap-2 text-xs font-medium text-gray-300 hover:text-white transition-colors"
+                  className="flex items-center gap-1.5 text-xs font-medium text-gray-300 hover:text-white transition-colors min-w-0"
                 >
-                  <Layers size={13} className="text-blue-400" />
-                  <span>{activeServer?.name || 'No Server'}</span>
-                  <ChevronDown size={12} className={`transition-transform ${showServerDropdown ? 'rotate-180' : ''}`} />
+                  <Layers size={13} className="text-blue-400 shrink-0" />
+                  <span className="truncate max-w-[100px] md:max-w-[160px]">{activeServer?.name || 'No Server'}</span>
+                  <ChevronDown size={12} className={`transition-transform shrink-0 ${showServerDropdown ? 'rotate-180' : ''}`} />
                 </button>
                 {showServerDropdown && (
                   <div className="absolute left-0 top-full mt-2 w-48 z-50 bg-[#1B1F2A] border border-white/10 rounded-xl shadow-2xl py-1.5">
@@ -442,12 +488,12 @@ export default function Layout() {
                   </div>
                 )}
               </div>
-              <div className="w-[1px] h-3 bg-white/10 mx-1" />
+              <div className="w-[1px] h-3 bg-white/10 mx-0.5 hidden sm:block" />
               <div className="flex items-center gap-1.5">
                 <span className={statusDotClass} />
-                <span className="text-xs text-gray-400">{serverStarting ? 'Starting' : serverRunning ? 'Online' : 'Offline'}</span>
+                <span className="text-xs text-gray-400 hidden sm:inline">{serverStarting ? 'Starting' : serverRunning ? 'Online' : 'Offline'}</span>
               </div>
-              <div className="flex items-center gap-1 ml-2">
+              <div className="flex items-center gap-0.5 ml-1">
                  <button onClick={() => handleServerAction('start')} disabled={serverRunning || serverStarting} className="p-1 text-green-400 hover:bg-green-500/20 rounded disabled:opacity-30"><Power size={12} /></button>
                  <button onClick={() => handleServerAction('stop')} disabled={!serverRunning || serverStarting} className="p-1 text-red-400 hover:bg-red-500/20 rounded disabled:opacity-30"><PowerOff size={12} /></button>
                  <button onClick={() => handleServerAction('restart')} disabled={!serverRunning || serverStarting} className="p-1 text-yellow-400 hover:bg-yellow-500/20 rounded disabled:opacity-30"><RotateCcw size={12} /></button>
@@ -455,19 +501,19 @@ export default function Layout() {
             </div>
 
             {!backendAlive && (
-              <span className="flex items-center gap-1.5 text-[11px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded-full border border-red-500/20 ml-2">
+              <span className="hidden lg:flex items-center gap-1.5 text-[11px] bg-red-500/10 text-red-400 px-2 py-0.5 rounded-full border border-red-500/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                 Backend Offline
               </span>
             )}
             {backendAlive && !socketConnected && (
-              <span className="flex items-center gap-1.5 text-[11px] bg-yellow-500/10 text-yellow-400 px-2 py-0.5 rounded-full border border-yellow-500/20 ml-2">
+              <span className="hidden lg:flex items-center gap-1.5 text-[11px] bg-yellow-500/10 text-yellow-400 px-2 py-0.5 rounded-full border border-yellow-500/20">
                 <span className="w-1.5 h-1.5 rounded-full bg-yellow-500 animate-pulse" />
-                Reconnecting...
+                Reconnecting
               </span>
             )}
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4 shrink-0">
             <UpdateBanner />
             <NotificationPanel />
             <button
@@ -477,14 +523,14 @@ export default function Layout() {
             >
               <BookOpen size={16} />
             </button>
-            <span className="text-xs text-gray-500 font-medium">
+            <span className="text-xs text-gray-500 font-medium hidden md:inline">
               v{appVersion}
             </span>
           </div>
         </header>
 
         {/* Page Content */}
-        <div className="flex-1 overflow-auto p-8">
+        <div className="flex-1 overflow-auto p-4 md:p-8 w-full max-w-full">
           <Outlet />
         </div>
       </main>
